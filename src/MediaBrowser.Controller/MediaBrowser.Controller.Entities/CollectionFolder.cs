@@ -291,7 +291,7 @@ public class CollectionFolder : Folder, ICollectionFolder, IHasCollectionType
 			return PhysicalFolderIds.Select((Guid i) => BaseItem.LibraryManager.GetItemById(i)).OfType<Folder>();
 		}
 		List<Folder> rootChildren = BaseItem.LibraryManager.RootFolder.Children.OfType<Folder>().ToList();
-		return LinqExtensions.DistinctBy<Folder, Guid>(PhysicalLocations.Where((string i) => !BaseItem.FileSystem.AreEqual(i, Path)).SelectMany((string i) => GetPhysicalParents(i, rootChildren)), (Func<Folder, Guid>)((Folder i) => i.Id));
+		return Enumerable.DistinctBy<Folder, Guid>(PhysicalLocations.Where((string i) => !BaseItem.FileSystem.AreEqual(i, Path)).SelectMany((string i) => GetPhysicalParents(i, rootChildren)), (Func<Folder, Guid>)((Folder i) => i.Id));
 	}
 
 	private IEnumerable<Folder> GetPhysicalParents(string path, List<Folder> rootChildren)

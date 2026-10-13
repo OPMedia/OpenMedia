@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MediaBrowser.Controller.Extensions;
 using MediaBrowser.Model.Extensions;
 
@@ -18,6 +19,6 @@ public static class NameExtensions
 
 	public static IEnumerable<string> DistinctNames(this IEnumerable<string> names)
 	{
-		return LinqExtensions.DistinctBy<string, string>(names, (Func<string, string>)RemoveDiacritics, (IEqualityComparer<string>)StringComparer.OrdinalIgnoreCase);
+		return Enumerable.DistinctBy<string, string>(names, (Func<string, string>)RemoveDiacritics, (IEqualityComparer<string>)StringComparer.OrdinalIgnoreCase);
 	}
 }

@@ -8,6 +8,7 @@ using MediaBrowser.Model.Diagnostics;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using System.Collections.Generic;
 using System.Threading;
 

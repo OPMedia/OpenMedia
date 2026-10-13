@@ -219,7 +219,7 @@ public class Series : Folder, IHasDisplayOrder, IHasLookupInfo<SeriesInfo>, IMet
 		}
 		List<BaseItem> itemList = BaseItem.LibraryManager.GetItemList(internalItemsQuery2);
 		List<Episode> allSeriesEpisodes = itemList.OfType<Episode>().ToList();
-		return LinqExtensions.DistinctBy<BaseItem, Guid>(itemList.OfType<Season>().SelectMany((Season i) => i.GetEpisodes(this, user, allSeriesEpisodes, options)).Reverse(), (Func<BaseItem, Guid>)((BaseItem i) => i.Id)).Reverse();
+		return Enumerable.DistinctBy<BaseItem, Guid>(itemList.OfType<Season>().SelectMany((Season i) => i.GetEpisodes(this, user, allSeriesEpisodes, options)).Reverse(), (Func<BaseItem, Guid>)((BaseItem i) => i.Id)).Reverse();
 	}
 
 	public async Task RefreshAllMetadata(MetadataRefreshOptions refreshOptions, IProgress<double> progress, CancellationToken cancellationToken)
