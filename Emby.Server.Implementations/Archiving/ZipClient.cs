@@ -45,7 +45,7 @@ namespace Emby.Server.Implementations.Archiving
         {
             using (var reader = ReaderFactory.Open(source))
             {
-                var options = new ExtractionOptions();
+                var options = new SharpCompress.Common.ExtractionOptions();
                 options.ExtractFullPath = true;
 
                 if (overwriteExistingFiles)
@@ -61,7 +61,7 @@ namespace Emby.Server.Implementations.Archiving
         {
             using (var reader = ZipReader.Open(source))
             {
-                var options = new ExtractionOptions();
+                var options = new SharpCompress.Common.ExtractionOptions();
                 options.ExtractFullPath = true;
 
                 if (overwriteExistingFiles)
@@ -77,7 +77,7 @@ namespace Emby.Server.Implementations.Archiving
         {
             using (var reader = GZipReader.Open(source))
             {
-                var options = new ExtractionOptions();
+                var options = new SharpCompress.Common.ExtractionOptions();
                 options.ExtractFullPath = true;
 
                 if (overwriteExistingFiles)
@@ -133,7 +133,7 @@ namespace Emby.Server.Implementations.Archiving
             {
                 using (var reader = archive.ExtractAllEntries())
                 {
-                    var options = new ExtractionOptions();
+                    var options = new SharpCompress.Common.ExtractionOptions();
                     options.ExtractFullPath = true;
 
                     if (overwriteExistingFiles)
@@ -173,7 +173,7 @@ namespace Emby.Server.Implementations.Archiving
             {
                 using (var reader = archive.ExtractAllEntries())
                 {
-                    var options = new ExtractionOptions();
+                    var options = new SharpCompress.Common.ExtractionOptions();
                     options.ExtractFullPath = true;
 
                     if (overwriteExistingFiles)

@@ -31,6 +31,7 @@ using MediaBrowser.Model.Reflection;
 using SQLitePCL.pretty;
 using MediaBrowser.Model.System;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Drawing;

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 
 namespace Emby.Server.Implementations.EntryPoints
 {

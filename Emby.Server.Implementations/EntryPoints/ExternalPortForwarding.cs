@@ -11,6 +11,7 @@ using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Events;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using Mono.Nat;
 using MediaBrowser.Model.Extensions;
 using System.Threading;

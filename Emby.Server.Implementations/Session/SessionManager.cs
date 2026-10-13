@@ -29,6 +29,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Controller.Authentication;
 

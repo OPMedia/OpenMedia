@@ -1,4 +1,4 @@
-﻿using Emby.Common.Implementations.Serialization;
+using Emby.Common.Implementations.Serialization;
 using Emby.Drawing;
 using Emby.Photos;
 using Emby.Dlna;
@@ -93,6 +93,7 @@ using MediaBrowser.Model.System;
 using MediaBrowser.Model.Tasks;
 using MediaBrowser.Model.Text;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using MediaBrowser.Model.Updates;
 using MediaBrowser.Model.Xml;
 using MediaBrowser.Providers.Chapters;
@@ -563,7 +564,7 @@ namespace Emby.Server.Implementations
         protected void RegisterSingleInstance<T>(T obj, bool manageLifetime = true)
             where T : class
         {
-            Container.RegisterSingleton(obj);
+            Container.RegisterInstance(obj);
 
             if (manageLifetime)
             {
@@ -584,7 +585,7 @@ namespace Emby.Server.Implementations
         protected void RegisterSingleInstance<T>(Func<T> func)
             where T : class
         {
-            Container.RegisterSingleton(func);
+            Container.RegisterInstance(func);
         }
 
         /// <summary>

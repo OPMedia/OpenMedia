@@ -18,6 +18,7 @@ using System.Xml;
 using MediaBrowser.Common.Progress;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 
 namespace Emby.Server.Implementations.News
 {

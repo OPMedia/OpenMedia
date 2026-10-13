@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 
 namespace Emby.Server.Implementations.Threading
 {
