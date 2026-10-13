@@ -6,6 +6,8 @@ public class WakeOnLanInfo
 
 	public int Port { get; set; }
 
+	public string BroadcastAddress { get; set; }
+
 	public WakeOnLanInfo()
 	{
 		Port = 9;

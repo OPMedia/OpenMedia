@@ -25,4 +25,6 @@ public class RemoteSubtitleInfo
 	public int? DownloadCount { get; set; }
 
 	public bool? IsHashMatch { get; set; }
+
+	public bool? IsForced { get; set; }
 }

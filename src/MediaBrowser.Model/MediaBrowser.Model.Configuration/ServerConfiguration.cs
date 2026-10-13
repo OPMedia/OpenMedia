@@ -37,6 +37,14 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public bool CollectionsUpgraded { get; set; }
 
+	public bool SubtitlePermissionsUpgraded { get; set; }
+
+	public bool CollapseVideoFolders { get; set; }
+
+	public bool EnableOriginalTrackTitles { get; set; }
+
+	public bool LogAllQueryTimes { get; set; }
+
 	public bool EnableCaseSensitiveItemIds { get; set; }
 
 	public bool DisableLiveTvChannelUserDataName { get; set; }

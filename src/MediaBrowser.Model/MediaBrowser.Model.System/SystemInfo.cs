@@ -52,6 +52,8 @@ public class SystemInfo : PublicSystemInfo
 
 	public Architecture SystemArchitecture { get; set; }
 
+	public bool HardwareAccelerationRequiresPremiere { get; set; }
+
 	public SystemInfo()
 	{
 		CompletedInstallations = new InstallationInfo[0];

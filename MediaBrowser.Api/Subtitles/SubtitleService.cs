@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
@@ -46,6 +46,9 @@ namespace MediaBrowser.Api.Subtitles
         public string Language { get; set; }
 
         public bool? IsPerfectMatch { get; set; }
+
+        [ApiMember(Name = "IsForced", Description = "Optional. Filter by forced subtitles.", IsRequired = false, DataType = "boolean", ParameterType = "query", Verb = "GET")]
+        public bool? IsForced { get; set; }
     }
 
     [Route("/Items/{Id}/RemoteSearch/Subtitles/{SubtitleId}", "POST")]

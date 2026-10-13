@@ -29,6 +29,12 @@ public class LiveStreamRequest
 
 	public bool EnableDirectStream { get; set; }
 
+	public bool? EnableTranscoding { get; set; }
+
+	public bool? AllowAudioStreamCopy { get; set; }
+
+	public bool? AllowVideoStreamCopy { get; set; }
+
 	public MediaProtocol[] DirectPlayProtocols { get; set; }
 
 	public LiveStreamRequest()

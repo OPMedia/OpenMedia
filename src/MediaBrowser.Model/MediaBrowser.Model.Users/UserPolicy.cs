@@ -73,6 +73,16 @@ public class UserPolicy
 
 	public string AuthenticationProviderId { get; set; }
 
+	public bool? DisablePremiumFeatures { get; set; }
+
+	public bool? EnableSubtitleDownloading { get; set; }
+
+	public bool? EnableSubtitleManagement { get; set; }
+
+	public string[] ExcludedSubFolders { get; set; }
+
+	public bool? IsHiddenRemotely { get; set; }
+
 	public UserPolicy()
 	{
 		EnableContentDeletion = true;
@@ -100,5 +110,6 @@ public class UserPolicy
 		EnableContentDownloading = true;
 		EnablePublicSharing = true;
 		EnableRemoteAccess = true;
+		ExcludedSubFolders = Array.Empty<string>();
 	}
 }

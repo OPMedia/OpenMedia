@@ -44,4 +44,6 @@ public class PlaybackProgressInfo
 	public string PlaySessionId { get; set; }
 
 	public RepeatMode RepeatMode { get; set; }
+
+	public long? RunTimeTicks { get; set; }
 }

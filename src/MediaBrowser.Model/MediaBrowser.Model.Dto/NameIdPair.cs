@@ -6,3 +6,10 @@ public class NameIdPair
 
 	public string Id { get; set; }
 }
+
+public class NameLongIdPair
+{
+	public string Name { get; set; }
+
+	public long Id { get; set; }
+}

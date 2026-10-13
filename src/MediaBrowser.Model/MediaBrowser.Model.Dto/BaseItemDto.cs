@@ -319,6 +319,12 @@ public class BaseItemDto : IHasProviderIds, IItemDto, IHasServerId
 
 	public string TimerId { get; set; }
 
+	public int? GameSystemId { get; set; }
+
+	public bool? IsNew { get; set; }
+
+	public bool? SupportsResume { get; set; }
+
 	public BaseItemDto CurrentProgram { get; set; }
 
 	public bool IsType(Type type)

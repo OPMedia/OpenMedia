@@ -41,6 +41,10 @@ public class ListingsProviderInfo
 
 	public string UserAgent { get; set; }
 
+	public string Name { get; set; }
+
+	public string SetupUrl { get; set; }
+
 	public ListingsProviderInfo()
 	{
 		NewsCategories = new string[4] { "news", "journalism", "documentary", "current affairs" };

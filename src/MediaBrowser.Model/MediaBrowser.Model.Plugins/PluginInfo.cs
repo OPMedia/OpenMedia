@@ -13,4 +13,6 @@ public class PluginInfo
 	public string Id { get; set; }
 
 	public string ImageUrl { get; set; }
+
+	public string ImageTag { get; set; }
 }

@@ -37,6 +37,10 @@ public class UserDto : IItemDto, IHasServerId
 
 	public double? PrimaryImageAspectRatio { get; set; }
 
+	public string ConnectLinkType { get; set; }
+
+	public string ConnectUserName { get; set; }
+
 	public UserDto()
 	{
 		Configuration = new UserConfiguration();

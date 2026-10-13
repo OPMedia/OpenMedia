@@ -9,9 +9,12 @@ public class QueryFilters
 
 	public string[] Tags { get; set; }
 
+	public NameLongIdPair[] Studios { get; set; }
+
 	public QueryFilters()
 	{
 		Tags = Array.Empty<string>();
 		Genres = new NameGuidPair[0];
+		Studios = new NameLongIdPair[0];
 	}
 }
