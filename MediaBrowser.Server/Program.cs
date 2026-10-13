@@ -76,7 +76,7 @@ namespace MediaBrowser.Server.Mono
 
         private static void SetSqliteProvider()
         {
-            SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_sqlite3());
+            SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_e_sqlite3());
         }
 
         private static ServerApplicationPaths CreateApplicationPaths(string applicationPath, string programDataPath)
@@ -137,7 +137,15 @@ namespace MediaBrowser.Server.Mono
         {
             var operatingSystem = Model.System.OperatingSystem.Linux;
 
-            if (string.Equals(options.GetOption("-os"), "freebsd", StringComparison.OrdinalIgnoreCase))
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                operatingSystem = Model.System.OperatingSystem.Windows;
+            }
+            else if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+            {
+                operatingSystem = Model.System.OperatingSystem.OSX;
+            }
+            else if (string.Equals(options.GetOption("-os"), "freebsd", StringComparison.OrdinalIgnoreCase))
             {
                 operatingSystem = Model.System.OperatingSystem.BSD;
             }
@@ -219,14 +227,6 @@ namespace MediaBrowser.Server.Mono
             }
 
             return "\"" + arg + "\"";
-        }
-    }
-
-    class NoCheckCertificatePolicy : ICertificatePolicy
-    {
-        public bool CheckValidationResult(ServicePoint srvPoint, X509Certificate certificate, WebRequest request, int certificateProblem)
-        {
-            return true;
         }
     }
 }

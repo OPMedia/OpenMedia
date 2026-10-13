@@ -1,10 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
-using Emby.Server.Connect;
 using Emby.Server.Implementations;
-using MediaBrowser.Controller.Connect;
-using MediaBrowser.Controller.Sync;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.System;
@@ -27,11 +24,6 @@ namespace MediaBrowser.Server.Mono
             }
         }
 
-        protected override IConnectManager CreateConnectManager()
-        {
-            return new ConnectManager();
-        }
-
         protected override void RestartInternal()
         {
             MainClass.Restart();
@@ -42,8 +34,6 @@ namespace MediaBrowser.Server.Mono
             var list = new List<Assembly>();
 
             list.Add(GetType().Assembly);
-            list.Add(typeof(ConnectManager).Assembly);
-            list.Add(typeof(Emby.Server.Sync.SyncManager).Assembly);
 
             return list;
         }

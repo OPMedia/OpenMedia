@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MediaBrowser.Server.Mono</RootNamespace>
+    <AssemblyName>MediaBrowser.Server</AssemblyName>
+    <StartupObject>MediaBrowser.Server.Mono.MainClass</StartupObject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
+    <Compile Include="SocketSharp\RequestMono.cs" />
+    <Compile Include="SocketSharp\SharpWebSocket.cs" />
+    <Compile Include="SocketSharp\WebSocketSharpListener.cs" />
+    <Compile Include="SocketSharp\WebSocketSharpRequest.cs" />
+    <Compile Include="SocketSharp\WebSocketSharpResponse.cs" />
+    <Compile Include="ApplicationPathHelper.cs" />
+    <Compile Include="ImageEncoderHelper.cs" />
+    <Compile Include="AppHost.cs" />
+    <Compile Include="Native\PowerManagement.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\src\MediaBrowser.Common\MediaBrowser.Common.csproj" />
+    <ProjectReference Include="..\src\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="..\src\Emby.Naming\Emby.Naming.csproj" />
+    <ProjectReference Include="..\src\Emby.XmlTv\Emby.XmlTv.csproj" />
+    <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />
+    <ProjectReference Include="..\BDInfo\BDInfo.csproj" />
+    <ProjectReference Include="..\DvdLib\DvdLib.csproj" />
+    <ProjectReference Include="..\Emby.Dlna\Emby.Dlna.csproj" />
+    <ProjectReference Include="..\Emby.Drawing.ImageMagick\Emby.Drawing.ImageMagick.csproj" />
+    <ProjectReference Include="..\Emby.Drawing.Skia\Emby.Drawing.Skia.csproj" />
+    <ProjectReference Include="..\Emby.Drawing\Emby.Drawing.csproj" />
+    <ProjectReference Include="..\Emby.Photos\Emby.Photos.csproj" />
+    <ProjectReference Include="..\Emby.Notifications\Emby.Notifications.csproj" />
+    <ProjectReference Include="..\Emby.Server.Implementations\Emby.Server.Implementations.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Api\MediaBrowser.Api.csproj" />
+    <ProjectReference Include="..\MediaBrowser.LocalMetadata\MediaBrowser.LocalMetadata.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Providers\MediaBrowser.Providers.csproj" />
+    <ProjectReference Include="..\MediaBrowser.WebDashboard\MediaBrowser.WebDashboard.csproj" />
+    <ProjectReference Include="..\MediaBrowser.XbmcMetadata\MediaBrowser.XbmcMetadata.csproj" />
+    <ProjectReference Include="..\Mono.Nat\Mono.Nat.csproj" />
+    <ProjectReference Include="..\RSSDP\RSSDP.csproj" />
+    <ProjectReference Include="..\SocketHttpListener\SocketHttpListener.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SQLitePCL 过渡期：Sqlite 仓储将在 C28 随 PG 数据层落地后移除 -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>
