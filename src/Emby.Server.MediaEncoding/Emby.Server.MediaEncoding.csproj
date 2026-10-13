@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Emby.Server.MediaEncoding</AssemblyName>
+    <RootNamespace>Emby.Server.MediaEncoding</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <ProjectReference Include="..\Emby.XmlTv\Emby.XmlTv.csproj" />
+    <ProjectReference Include="..\..\BDInfo\BDInfo.csproj" />
+    <ProjectReference Include="..\..\DvdLib\DvdLib.csproj" />
+  </ItemGroup>
+
+</Project>

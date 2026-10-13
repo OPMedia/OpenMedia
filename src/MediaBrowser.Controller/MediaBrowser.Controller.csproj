@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>MediaBrowser.Controller</AssemblyName>
+    <RootNamespace>MediaBrowser.Controller</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="MediaBrowser.Controller.MediaEncoding.DroidSansFallback.ttf" LogicalName="MediaBrowser.Controller.MediaEncoding.DroidSansFallback.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
+  </ItemGroup>
+
+</Project>
