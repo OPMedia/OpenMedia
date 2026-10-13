@@ -1,11 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Controller.IO;
+using HttpRequestOptions = MediaBrowser.Common.Net.HttpRequestOptions;
 
 namespace Emby.Server.Implementations.HttpClientManager
 {
@@ -61,14 +63,6 @@ namespace Emby.Server.Implementations.HttpClientManager
             _fileSystem = fileSystem;
             _appPaths = appPaths;
             _defaultUserAgentFn = defaultUserAgentFn;
-
-            // http://stackoverflow.com/questions/566437/http-post-returns-the-error-417-expectation-failed-c
-            ServicePointManager.Expect100Continue = false;
-
-#if NET46
-// Trakt requests sometimes fail without this
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls;
-#endif
         }
 
         /// <summary>
@@ -100,30 +94,24 @@ namespace Emby.Server.Implementations.HttpClientManager
             {
                 client = new HttpClientInfo();
 
+                var handler = new HttpClientHandler
+                {
+                    AutomaticDecompression = enableHttpCompression
+                        ? DecompressionMethods.GZip | DecompressionMethods.Deflate
+                        : DecompressionMethods.None,
+                    UseCookies = false
+                };
+
+                client.HttpClient = new HttpClient(handler);
+                client.HttpClient.Timeout = TimeSpan.FromMilliseconds(Timeout.Infinite);
+
                 _httpClients.TryAdd(key, client);
             }
 
             return client;
         }
 
-        private WebRequest CreateWebRequest(string url)
-        {
-            try
-            {
-                return WebRequest.Create(url);
-            }
-            catch (NotSupportedException)
-            {
-                //Webrequest creation does fail on MONO randomly when using WebRequest.Create
-                //the issue occurs in the GetCreator method here: http://www.oschina.net/code/explore/mono-2.8.1/mcs/class/System/System.Net/WebRequest.cs
-
-                var type = Type.GetType("System.Net.HttpRequestCreator, System, Version=4.0.0.0,Culture=neutral, PublicKeyToken=b77a5c561934e089");
-                var creator = Activator.CreateInstance(type, nonPublic: true) as IWebRequestCreate;
-                return creator.Create(new Uri(url)) as HttpWebRequest;
-            }
-        }
-
-        private WebRequest GetRequest(HttpRequestOptions options, string method)
+        private HttpRequestMessage CreateRequest(HttpRequestOptions options, string method)
         {
             var url = options.Url;
 
@@ -135,83 +123,24 @@ namespace Emby.Server.Implementations.HttpClientManager
                 url = url.Replace(userInfo + "@", string.Empty);
             }
 
-            var request = CreateWebRequest(url);
-            var httpWebRequest = request as HttpWebRequest;
+            var request = new HttpRequestMessage(new HttpMethod(method), url);
 
-            if (httpWebRequest != null)
-            {
-                AddRequestHeaders(httpWebRequest, options);
-
-                if (options.EnableHttpCompression)
-                {
-                    if (options.DecompressionMethod.HasValue)
-                    {
-                        httpWebRequest.AutomaticDecompression = options.DecompressionMethod.Value == CompressionMethod.Gzip
-                            ? DecompressionMethods.GZip
-                            : DecompressionMethods.Deflate;
-                    }
-                    else
-                    {
-                        httpWebRequest.AutomaticDecompression = DecompressionMethods.Deflate;
-                    }
-                }
-                else
-                {
-                    httpWebRequest.AutomaticDecompression = DecompressionMethods.None;
-                }
-            }
-
-
-
-            request.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.BypassCache);
-
-            if (httpWebRequest != null)
-            {
-                if (options.EnableKeepAlive)
-                {
-                    httpWebRequest.KeepAlive = true;
-                }
-            }
-
-            request.Method = method;
-            request.Timeout = options.TimeoutMs;
-
-            if (httpWebRequest != null)
-            {
-                if (!string.IsNullOrEmpty(options.Host))
-                {
-                    httpWebRequest.Host = options.Host;
-                }
-
-                if (!string.IsNullOrEmpty(options.Referer))
-                {
-                    httpWebRequest.Referer = options.Referer;
-                }
-            }
+            AddRequestHeaders(request, options);
 
             if (!string.IsNullOrWhiteSpace(userInfo))
             {
                 var parts = userInfo.Split(':');
                 if (parts.Length == 2)
                 {
-                    request.Credentials = GetCredential(url, parts[0], parts[1]);
-                    // TODO: .net core ??
-                    request.PreAuthenticate = true;
+                    var byteArray = Encoding.ASCII.GetBytes(parts[0] + ":" + parts[1]);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
                 }
             }
 
             return request;
         }
 
-        private CredentialCache GetCredential(string url, string username, string password)
-        {
-            //ServicePointManager.SecurityProtocol = SecurityProtocolType.Ssl3;
-            CredentialCache credentialCache = new CredentialCache();
-            credentialCache.Add(new Uri(url), "Basic", new NetworkCredential(username, password));
-            return credentialCache;
-        }
-
-        private void AddRequestHeaders(HttpWebRequest request, HttpRequestOptions options)
+        private void AddRequestHeaders(HttpRequestMessage request, HttpRequestOptions options)
         {
             var hasUserAgent = false;
 
@@ -219,28 +148,35 @@ namespace Emby.Server.Implementations.HttpClientManager
             {
                 if (string.Equals(header.Key, "Accept", StringComparison.OrdinalIgnoreCase))
                 {
-                    request.Accept = header.Value;
+                    request.Headers.Accept.ParseAdd(header.Value);
                 }
                 else if (string.Equals(header.Key, "User-Agent", StringComparison.OrdinalIgnoreCase))
                 {
-                    SetUserAgent(request, header.Value);
+                    request.Headers.UserAgent.ParseAdd(header.Value);
                     hasUserAgent = true;
+                }
+                else if (string.Equals(header.Key, "Referer", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Referrer = new Uri(header.Value);
+                }
+                else if (string.Equals(header.Key, "Host", StringComparison.OrdinalIgnoreCase))
+                {
+                    request.Headers.Host = header.Value;
                 }
                 else
                 {
-                    request.Headers.Set(header.Key, header.Value);
+                    if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value))
+                    {
+                        // Some headers need to be added to content headers
+                        // We'll handle this when setting content
+                    }
                 }
             }
 
             if (!hasUserAgent && options.EnableDefaultUserAgent)
             {
-                SetUserAgent(request, _defaultUserAgentFn());
+                request.Headers.UserAgent.ParseAdd(_defaultUserAgentFn());
             }
-        }
-
-        private void SetUserAgent(HttpWebRequest request, string userAgent)
-        {
-            request.UserAgent = userAgent;
         }
 
         /// <summary>
@@ -371,7 +307,7 @@ namespace Emby.Server.Implementations.HttpClientManager
                 };
             }
 
-            var httpWebRequest = GetRequest(options, httpMethod);
+            var request = CreateRequest(options, httpMethod);
 
             if (options.RequestContentBytes != null ||
                 !string.IsNullOrEmpty(options.RequestContent) ||
@@ -379,7 +315,6 @@ namespace Emby.Server.Implementations.HttpClientManager
             {
                 try
                 {
-                    // TODO: We can always put this in the options object if needed
                     var requestEncoding = Encoding.UTF8;
 
                     var bytes = options.RequestContentBytes ?? requestEncoding.GetBytes(options.RequestContent ?? string.Empty);
@@ -391,10 +326,9 @@ namespace Emby.Server.Implementations.HttpClientManager
                         contentType = contentType.TrimEnd(';') + "; charset=\"utf-8\"";
                     }
 
-                    httpWebRequest.ContentType = contentType;
-
-                    httpWebRequest.ContentLength = bytes.Length;
-                    (await httpWebRequest.GetRequestStreamAsync().ConfigureAwait(false)).Write(bytes, 0, bytes.Length);
+                    var content = new ByteArrayContent(bytes);
+                    content.Headers.TryAddWithoutValidation("Content-Type", contentType);
+                    request.Content = content;
                 }
                 catch (Exception ex)
                 {
@@ -433,36 +367,33 @@ namespace Emby.Server.Implementations.HttpClientManager
             {
                 options.CancellationToken.ThrowIfCancellationRequested();
 
-                if (!options.BufferContent)
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(options.CancellationToken))
                 {
-                    var response = await GetResponseAsync(httpWebRequest, TimeSpan.FromMilliseconds(options.TimeoutMs)).ConfigureAwait(false);
+                    cts.CancelAfter(options.TimeoutMs);
 
-                    var httpResponse = (HttpWebResponse)response;
-
-                    EnsureSuccessStatusCode(client, httpResponse, options);
-
-                    options.CancellationToken.ThrowIfCancellationRequested();
-
-                    return GetResponseInfo(httpResponse, httpResponse.GetResponseStream(), GetContentLength(httpResponse), httpResponse);
-                }
-
-                using (var response = await GetResponseAsync(httpWebRequest, TimeSpan.FromMilliseconds(options.TimeoutMs)).ConfigureAwait(false))
-                {
-                    var httpResponse = (HttpWebResponse)response;
-
-                    EnsureSuccessStatusCode(client, httpResponse, options);
-
-                    options.CancellationToken.ThrowIfCancellationRequested();
-
-                    using (var stream = httpResponse.GetResponseStream())
+                    using (var response = await client.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
                     {
-                        var memoryStream = new MemoryStream();
+                        EnsureSuccessStatusCode(client, response, options);
 
-                        await stream.CopyToAsync(memoryStream).ConfigureAwait(false);
+                        options.CancellationToken.ThrowIfCancellationRequested();
 
-                        memoryStream.Position = 0;
+                        if (!options.BufferContent)
+                        {
+                            var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
 
-                        return GetResponseInfo(httpResponse, memoryStream, memoryStream.Length, null);
+                            return GetResponseInfo(response, stream, response.Content.Headers.ContentLength, null);
+                        }
+
+                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        {
+                            var memoryStream = new MemoryStream();
+
+                            await stream.CopyToAsync(memoryStream).ConfigureAwait(false);
+
+                            memoryStream.Position = 0;
+
+                            return GetResponseInfo(response, memoryStream, memoryStream.Length, null);
+                        }
                     }
                 }
             }
@@ -483,7 +414,7 @@ namespace Emby.Server.Implementations.HttpClientManager
             }
         }
 
-        private HttpResponseInfo GetResponseInfo(HttpWebResponse httpResponse, Stream content, long? contentLength, IDisposable disposable)
+        private HttpResponseInfo GetResponseInfo(HttpResponseMessage httpResponse, Stream content, long? contentLength, IDisposable disposable)
         {
             var responseInfo = new HttpResponseInfo(disposable)
             {
@@ -491,11 +422,11 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                 StatusCode = httpResponse.StatusCode,
 
-                ContentType = httpResponse.ContentType,
+                ContentType = httpResponse.Content?.Headers?.ContentType?.ToString(),
 
                 ContentLength = contentLength,
 
-                ResponseUrl = httpResponse.ResponseUri.ToString()
+                ResponseUrl = httpResponse.RequestMessage?.RequestUri?.ToString()
             };
 
             if (httpResponse.Headers != null)
@@ -503,10 +434,15 @@ namespace Emby.Server.Implementations.HttpClientManager
                 SetHeaders(httpResponse.Headers, responseInfo);
             }
 
+            if (httpResponse.Content?.Headers != null)
+            {
+                SetHeaders(httpResponse.Content.Headers, responseInfo);
+            }
+
             return responseInfo;
         }
 
-        private HttpResponseInfo GetResponseInfo(HttpWebResponse httpResponse, string tempFile, long? contentLength)
+        private HttpResponseInfo GetResponseInfo(HttpResponseMessage httpResponse, string tempFile, long? contentLength)
         {
             var responseInfo = new HttpResponseInfo
             {
@@ -514,7 +450,7 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                 StatusCode = httpResponse.StatusCode,
 
-                ContentType = httpResponse.ContentType,
+                ContentType = httpResponse.Content?.Headers?.ContentType?.ToString(),
 
                 ContentLength = contentLength
             };
@@ -527,11 +463,11 @@ namespace Emby.Server.Implementations.HttpClientManager
             return responseInfo;
         }
 
-        private void SetHeaders(WebHeaderCollection headers, HttpResponseInfo responseInfo)
+        private void SetHeaders(HttpHeaders headers, HttpResponseInfo responseInfo)
         {
-            foreach (var key in headers.AllKeys)
+            foreach (var header in headers)
             {
-                responseInfo.Headers[key] = headers[key];
+                responseInfo.Headers[header.Key] = string.Join(", ", header.Value);
             }
         }
 
@@ -582,7 +518,9 @@ namespace Emby.Server.Implementations.HttpClientManager
 
             options.CancellationToken.ThrowIfCancellationRequested();
 
-            var httpWebRequest = GetRequest(options, "GET");
+            var client = GetHttpClient(GetHostFromUrl(options.Url), options.EnableHttpCompression);
+
+            var request = CreateRequest(options, "GET");
 
             if (options.ResourcePool != null)
             {
@@ -603,44 +541,48 @@ namespace Emby.Server.Implementations.HttpClientManager
                 }
             }
 
-            var client = GetHttpClient(GetHostFromUrl(options.Url), options.EnableHttpCompression);
-
             try
             {
                 options.CancellationToken.ThrowIfCancellationRequested();
 
-                using (var response = await httpWebRequest.GetResponseAsync().ConfigureAwait(false))
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(options.CancellationToken))
                 {
-                    var httpResponse = (HttpWebResponse)response;
+                    cts.CancelAfter(options.TimeoutMs);
 
-                    EnsureSuccessStatusCode(client, httpResponse, options);
-
-                    options.CancellationToken.ThrowIfCancellationRequested();
-
-                    var contentLength = GetContentLength(httpResponse);
-
-                    if (!contentLength.HasValue)
+                    using (var response = await client.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
                     {
-                        // We're not able to track progress
-                        using (var stream = httpResponse.GetResponseStream())
+                        EnsureSuccessStatusCode(client, response, options);
+
+                        options.CancellationToken.ThrowIfCancellationRequested();
+
+                        var contentLength = response.Content?.Headers?.ContentLength;
+
+                        if (!contentLength.HasValue || contentLength.Value == 0)
+                        {
+                            // We're not able to track progress
+                            using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            {
+                                using (var fs = _fileSystem.GetFileStream(tempFile, FileOpenMode.Create, FileAccessMode.Write, FileShareMode.Read, true))
+                                {
+                                    await stream.CopyToAsync(fs, StreamDefaults.DefaultCopyToBufferSize, options.CancellationToken).ConfigureAwait(false);
+                                }
+                            }
+                        }
+                        else
                         {
                             using (var fs = _fileSystem.GetFileStream(tempFile, FileOpenMode.Create, FileAccessMode.Write, FileShareMode.Read, true))
                             {
-                                await stream.CopyToAsync(fs, StreamDefaults.DefaultCopyToBufferSize, options.CancellationToken).ConfigureAwait(false);
+                                using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                                {
+                                    await stream.CopyToAsync(fs, StreamDefaults.DefaultCopyToBufferSize, options.CancellationToken).ConfigureAwait(false);
+                                }
                             }
                         }
-                    }
-                    else
-                    {
-                        using (var fs = _fileSystem.GetFileStream(tempFile, FileOpenMode.Create, FileAccessMode.Write, FileShareMode.Read, true))
-                        {
-                            await httpResponse.GetResponseStream().CopyToAsync(fs, StreamDefaults.DefaultCopyToBufferSize, options.CancellationToken).ConfigureAwait(false);
-                        }
-                    }
 
-                    options.Progress.Report(100);
+                        options.Progress.Report(100);
 
-                    return GetResponseInfo(httpResponse, tempFile, contentLength);
+                        return GetResponseInfo(response, tempFile, contentLength);
+                    }
                 }
             }
             catch (Exception ex)
@@ -657,18 +599,6 @@ namespace Emby.Server.Implementations.HttpClientManager
             }
         }
 
-        private long? GetContentLength(HttpWebResponse response)
-        {
-            var length = response.ContentLength;
-
-            if (length == 0)
-            {
-                return null;
-            }
-
-            return length;
-        }
-
         protected static readonly CultureInfo UsCulture = new CultureInfo("en-US");
 
         private Exception GetException(Exception ex, HttpRequestOptions options, HttpClientInfo client)
@@ -678,36 +608,23 @@ namespace Emby.Server.Implementations.HttpClientManager
                 return ex;
             }
 
-            var webException = ex as WebException
-                               ?? ex.InnerException as WebException;
+            var httpRequestException = ex as HttpRequestException
+                                       ?? ex.InnerException as HttpRequestException;
 
-            if (webException != null)
+            if (httpRequestException != null)
             {
                 if (options.LogErrors)
                 {
-                    _logger.ErrorException("Error " + webException.Status + " getting response from " + options.Url, webException);
+                    _logger.ErrorException("Error getting response from " + options.Url, httpRequestException);
                 }
 
-                var exception = new HttpException(webException.Message, webException);
+                var exception = new HttpException(httpRequestException.Message, httpRequestException);
 
-                var response = webException.Response as HttpWebResponse;
-                if (response != null)
+                var taskCanceledException = ex as TaskCanceledException ?? ex.InnerException as TaskCanceledException;
+                if (taskCanceledException != null)
                 {
-                    exception.StatusCode = response.StatusCode;
-
-                    if ((int)response.StatusCode == 429)
-                    {
-                        client.LastTimeout = DateTime.UtcNow;
-                    }
-                }
-
-                if (!exception.StatusCode.HasValue)
-                {
-                    if (webException.Status == WebExceptionStatus.NameResolutionFailure ||
-                        webException.Status == WebExceptionStatus.ConnectFailure)
-                    {
-                        exception.IsTimedOut = true;
-                    }
+                    exception.IsTimedOut = true;
+                    client.LastTimeout = DateTime.UtcNow;
                 }
 
                 return exception;
@@ -804,7 +721,7 @@ namespace Emby.Server.Implementations.HttpClientManager
             return exception;
         }
 
-        private void EnsureSuccessStatusCode(HttpClientInfo client, HttpWebResponse response, HttpRequestOptions options)
+        private void EnsureSuccessStatusCode(HttpClientInfo client, HttpResponseMessage response, HttpRequestOptions options)
         {
             var statusCode = response.StatusCode;
 
@@ -816,17 +733,11 @@ namespace Emby.Server.Implementations.HttpClientManager
                 {
                     try
                     {
-                        using (var stream = response.GetResponseStream())
+                        var content = response.Content;
+                        if (content != null)
                         {
-                            if (stream != null)
-                            {
-                                using (var reader = new StreamReader(stream))
-                                {
-                                    var msg = reader.ReadToEnd();
-
-                                    _logger.Error(msg);
-                                }
-                            }
+                            var msg = content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            _logger.Error(msg);
                         }
                     }
                     catch
@@ -834,60 +745,10 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                     }
                 }
-                throw new HttpException(response.StatusDescription)
+                throw new HttpException(response.ReasonPhrase)
                 {
                     StatusCode = response.StatusCode
                 };
-            }
-        }
-
-        private Task<WebResponse> GetResponseAsync(WebRequest request, TimeSpan timeout)
-        {
-            var taskCompletion = new TaskCompletionSource<WebResponse>();
-
-            Task<WebResponse> asyncTask = Task.Factory.FromAsync<WebResponse>(request.BeginGetResponse, request.EndGetResponse, null);
-
-            ThreadPool.RegisterWaitForSingleObject((asyncTask as IAsyncResult).AsyncWaitHandle, TimeoutCallback, request, timeout, true);
-            var callback = new TaskCallback { taskCompletion = taskCompletion };
-            asyncTask.ContinueWith(callback.OnSuccess, TaskContinuationOptions.NotOnFaulted);
-
-            // Handle errors
-            asyncTask.ContinueWith(callback.OnError, TaskContinuationOptions.OnlyOnFaulted);
-
-            return taskCompletion.Task;
-        }
-
-        private static void TimeoutCallback(object state, bool timedOut)
-        {
-            if (timedOut)
-            {
-                WebRequest request = (WebRequest)state;
-                if (state != null)
-                {
-                    request.Abort();
-                }
-            }
-        }
-
-        private class TaskCallback
-        {
-            public TaskCompletionSource<WebResponse> taskCompletion;
-
-            public void OnSuccess(Task<WebResponse> task)
-            {
-                taskCompletion.TrySetResult(task.Result);
-            }
-
-            public void OnError(Task<WebResponse> task)
-            {
-                if (task.Exception != null)
-                {
-                    taskCompletion.TrySetException(task.Exception);
-                }
-                else
-                {
-                    taskCompletion.TrySetException(new List<Exception>());
-                }
             }
         }
     }
