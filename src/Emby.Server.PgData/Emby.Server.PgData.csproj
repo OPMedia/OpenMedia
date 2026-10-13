@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>Emby.Server.PgData</AssemblyName>
+    <RootNamespace>Emby.Server.PgData</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
+    <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 目标 schema 单一事实来源：仓库根 emby_pgsql_dump_schema_optimized.sql 原样嵌入 -->
+    <EmbeddedResource Include="..\..\emby_pgsql_dump_schema_optimized.sql" Link="emby_pgsql_dump_schema_optimized.sql" />
+  </ItemGroup>
+
+</Project>
