@@ -29,8 +29,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- ServiceStack.Text 临时保留，C09 统一替换为 System.Text.Json -->
-    <PackageReference Include="ServiceStack.Text" Version="5.1.0" />
     <PackageReference Include="SharpCompress" Version="0.38.0" />
     <PackageReference Include="SimpleInjector" Version="5.6.0" />
     <PackageReference Include="PlaylistsNET" Version="1.0.2" />

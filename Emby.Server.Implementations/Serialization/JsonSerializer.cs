@@ -1,33 +1,73 @@
-﻿using System;
+using System;
 using System.IO;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
-using System.Threading.Tasks;
 
 namespace Emby.Common.Implementations.Serialization
 {
     /// <summary>
-    /// Provides a wrapper around third party json serialization.
+    /// System.Text.Json 实现的 IJsonSerializer（替代 ServiceStack.Text 5.1.0）。
+    /// 序列化契约与旧实现逐项对齐（见 docs/json-migration-map.md §3）：
+    /// PascalCase 原名、null 省略、Guid "N" 格式、枚举字符串、ISO8601/"O" 日期、
+    /// 宽容反序列化（吞错语义）。
     /// </summary>
     public class JsonSerializer : IJsonSerializer
     {
         private readonly IFileSystem _fileSystem;
         private readonly ILogger _logger;
 
+        /// <summary>
+        /// 全局共享的序列化配置（与旧 ServiceStack JsConfig 语义对齐）。
+        /// </summary>
+        public static readonly JsonSerializerOptions Options = CreateOptions();
+
         public JsonSerializer(IFileSystem fileSystem, ILogger logger)
         {
             _fileSystem = fileSystem;
             _logger = logger;
-            Configure();
+        }
+
+        private static JsonSerializerOptions CreateOptions()
+        {
+            var options = new JsonSerializerOptions
+            {
+                // 命名：属性原名（PascalCase，前端契约）
+                PropertyNamingPolicy = null,
+                DictionaryKeyPolicy = null,
+
+                // null 处理：null 属性省略（旧 IncludeNullValues=false）
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+
+                // 大小写匹配（读）：放宽为超集
+                PropertyNameCaseInsensitive = true,
+
+                // 数字容错（读）："42" → 42
+                NumberHandling = JsonNumberHandling.AllowReadingFromString,
+
+                // 转义：原样输出非 ASCII
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+
+                WriteIndented = false,
+                MaxDepth = 128
+            };
+
+            options.Converters.Add(new EmbyGuidConverter());
+            options.Converters.Add(new EmbyDateTimeConverter());
+            options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new LenientPrimitiveConverterFactory());
+
+            return options;
         }
 
         /// <summary>
         /// Serializes to stream.
         /// </summary>
-        /// <param name="obj">The obj.</param>
-        /// <param name="stream">The stream.</param>
-        /// <exception cref="System.ArgumentNullException">obj</exception>
         public void SerializeToStream(object obj, Stream stream)
         {
             if (obj == null)
@@ -40,15 +80,12 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("stream");
             }
 
-            ServiceStack.Text.JsonSerializer.SerializeToStream(obj, obj.GetType(), stream);
+            System.Text.Json.JsonSerializer.Serialize(stream, obj, obj.GetType(), Options);
         }
 
         /// <summary>
         /// Serializes to file.
         /// </summary>
-        /// <param name="obj">The obj.</param>
-        /// <param name="file">The file.</param>
-        /// <exception cref="System.ArgumentNullException">obj</exception>
         public void SerializeToFile(object obj, string file)
         {
             if (obj == null)
@@ -69,17 +106,12 @@ namespace Emby.Common.Implementations.Serialization
 
         private Stream OpenFile(string path)
         {
-            //_logger.Debug("Deserializing file {0}", path);
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 131072);
         }
 
         /// <summary>
         /// Deserializes from file.
         /// </summary>
-        /// <param name="type">The type.</param>
-        /// <param name="file">The file.</param>
-        /// <returns>System.Object.</returns>
-        /// <exception cref="System.ArgumentNullException">type</exception>
         public object DeserializeFromFile(Type type, string file)
         {
             if (type == null)
@@ -101,10 +133,6 @@ namespace Emby.Common.Implementations.Serialization
         /// <summary>
         /// Deserializes from file.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="file">The file.</param>
-        /// <returns>``0.</returns>
-        /// <exception cref="System.ArgumentNullException">file</exception>
         public T DeserializeFromFile<T>(string file)
             where T : class
         {
@@ -122,10 +150,6 @@ namespace Emby.Common.Implementations.Serialization
         /// <summary>
         /// Deserializes from stream.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="stream">The stream.</param>
-        /// <returns>``0.</returns>
-        /// <exception cref="System.ArgumentNullException">stream</exception>
         public T DeserializeFromStream<T>(Stream stream)
         {
             if (stream == null)
@@ -133,7 +157,7 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("stream");
             }
 
-            return ServiceStack.Text.JsonSerializer.DeserializeFromStream<T>(stream);
+            return System.Text.Json.JsonSerializer.Deserialize<T>(stream, Options);
         }
 
         public async Task<T> DeserializeFromStreamAsync<T>(Stream stream)
@@ -143,21 +167,12 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("stream");
             }
 
-            using (var reader = new StreamReader(stream))
-            {
-                var json = await reader.ReadToEndAsync().ConfigureAwait(false);
-
-                return ServiceStack.Text.JsonSerializer.DeserializeFromString<T>(json);
-            }
+            return await System.Text.Json.JsonSerializer.DeserializeAsync<T>(stream, Options).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Deserializes from string.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="text">The text.</param>
-        /// <returns>``0.</returns>
-        /// <exception cref="System.ArgumentNullException">text</exception>
         public T DeserializeFromString<T>(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -165,16 +180,12 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("text");
             }
 
-            return ServiceStack.Text.JsonSerializer.DeserializeFromString<T>(text);
+            return System.Text.Json.JsonSerializer.Deserialize<T>(text, Options);
         }
 
         /// <summary>
         /// Deserializes from stream.
         /// </summary>
-        /// <param name="stream">The stream.</param>
-        /// <param name="type">The type.</param>
-        /// <returns>System.Object.</returns>
-        /// <exception cref="System.ArgumentNullException">stream</exception>
         public object DeserializeFromStream(Stream stream, Type type)
         {
             if (stream == null)
@@ -187,7 +198,7 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("type");
             }
 
-            return ServiceStack.Text.JsonSerializer.DeserializeFromStream(type, stream);
+            return System.Text.Json.JsonSerializer.Deserialize(stream, type, Options);
         }
 
         public async Task<object> DeserializeFromStreamAsync(Stream stream, Type type)
@@ -202,45 +213,12 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("type");
             }
 
-            using (var reader = new StreamReader(stream))
-            {
-                var json = await reader.ReadToEndAsync().ConfigureAwait(false);
-
-                return ServiceStack.Text.JsonSerializer.DeserializeFromString(json, type);
-            }
-        }
-
-        /// <summary>
-        /// Configures this instance.
-        /// </summary>
-        private void Configure()
-        {
-            ServiceStack.Text.JsConfig.DateHandler = ServiceStack.Text.DateHandler.ISO8601;
-            ServiceStack.Text.JsConfig.ExcludeTypeInfo = true;
-            ServiceStack.Text.JsConfig.IncludeNullValues = false;
-            ServiceStack.Text.JsConfig.AlwaysUseUtc = true;
-            ServiceStack.Text.JsConfig.AssumeUtc = true;
-
-            ServiceStack.Text.JsConfig<Guid>.SerializeFn = SerializeGuid;
-        }
-
-        private string SerializeGuid(Guid guid)
-        {
-            if (guid.Equals(Guid.Empty))
-            {
-                return null;
-            }
-
-            return guid.ToString("N");
+            return await System.Text.Json.JsonSerializer.DeserializeAsync(stream, type, Options).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Deserializes from string.
         /// </summary>
-        /// <param name="json">The json.</param>
-        /// <param name="type">The type.</param>
-        /// <returns>System.Object.</returns>
-        /// <exception cref="System.ArgumentNullException">json</exception>
         public object DeserializeFromString(string json, Type type)
         {
             if (string.IsNullOrEmpty(json))
@@ -253,15 +231,12 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("type");
             }
 
-            return ServiceStack.Text.JsonSerializer.DeserializeFromString(json, type);
+            return System.Text.Json.JsonSerializer.Deserialize(json, type, Options);
         }
 
         /// <summary>
         /// Serializes to string.
         /// </summary>
-        /// <param name="obj">The obj.</param>
-        /// <returns>System.String.</returns>
-        /// <exception cref="System.ArgumentNullException">obj</exception>
         public string SerializeToString(object obj)
         {
             if (obj == null)
@@ -269,7 +244,7 @@ namespace Emby.Common.Implementations.Serialization
                 throw new ArgumentNullException("obj");
             }
 
-            return ServiceStack.Text.JsonSerializer.SerializeToString(obj, obj.GetType());
+            return System.Text.Json.JsonSerializer.Serialize(obj, obj.GetType(), Options);
         }
     }
 }

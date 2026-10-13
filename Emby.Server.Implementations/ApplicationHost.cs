@@ -100,7 +100,6 @@ using MediaBrowser.Providers.Manager;
 using MediaBrowser.Providers.Subtitles;
 using MediaBrowser.WebDashboard.Api;
 using MediaBrowser.XbmcMetadata.Providers;
-using ServiceStack;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -118,7 +117,6 @@ using StringExtensions = MediaBrowser.Controller.Extensions.StringExtensions;
 using X509Certificate = System.Security.Cryptography.X509Certificates.X509Certificate;
 using MediaBrowser.Controller.Authentication;
 using System.Diagnostics;
-using ServiceStack.Text.Jsv;
 
 namespace Emby.Server.Implementations
 {
@@ -1074,7 +1072,7 @@ namespace Emby.Server.Implementations
 
         private static Func<string, object> GetParseFn(Type propertyType)
         {
-            return s => JsvReader.GetParseFn(propertyType)(s);
+            return Emby.Common.Implementations.Serialization.QueryStringParser.GetParseFn(propertyType);
         }
 
         public virtual string PackageRuntime
