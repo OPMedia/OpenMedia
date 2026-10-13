@@ -39,7 +39,6 @@ namespace MediaBrowser.Server.Mono
         {
             var applicationPath = Assembly.GetEntryAssembly().Location;
 
-            SetSqliteProvider();
 
             var options = new StartupOptions(Environment.GetCommandLineArgs());
 
@@ -74,10 +73,6 @@ namespace MediaBrowser.Server.Mono
             }
         }
 
-        private static void SetSqliteProvider()
-        {
-            SQLitePCL.raw.SetProvider(new SQLitePCL.SQLite3Provider_e_sqlite3());
-        }
 
         private static ServerApplicationPaths CreateApplicationPaths(string applicationPath, string programDataPath)
         {

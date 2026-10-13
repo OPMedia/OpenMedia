@@ -43,8 +43,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- SQLitePCL 过渡期：Sqlite 仓储将在 C28 随 PG 数据层落地后移除 -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.0" />
   </ItemGroup>
 
