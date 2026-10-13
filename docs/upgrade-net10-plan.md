@@ -16,6 +16,21 @@
 | D5 入口 | **合并为单一跨平台 MediaBrowser.Server** |
 | D6 历史分支 | `backup-migration-20261013-210711` 保留作参考 |
 | PG 连接 | 本机 PostgreSQL，密码 `123456`（默认连接串见 §5.1） |
+| **D7 API 规范** | **API 层对齐 `openapi.json`（Emby Server API 4.1.1.0：356 路径/414 操作/201 schema）**，官方客户端零适配直连（2026-10-13 追加） |
+
+### D7 API 对齐差距盘点（已完成初步 diff）
+
+| 项 | 数量 | 处置 |
+|----|------|------|
+| 规范化匹配路径 | 236 | 逐个 DTO 字段级对齐（请求/响应 schema 核对） |
+| 规范有而旧代码无 | 117 | 其中 18 Sync + 2 Connect 随功能移除跳过；swagger 2 个跳过；**~95 个需新实现**（大头：user_usage_stats 19、Dlna 14、Videos 10、Notifications 8、Audio 7） |
+| 旧代码有而规范无 | 17 | 插件注册/安全信息（Emby 授权体系，死功能）删除；Startup 向导/System 端点为 dashboard 自用，保留 |
+
+### P6 API 规范对齐（新增阶段，D7）
+
+- C29 API 差距地图：逐端点核对 236 个已有路径的请求/响应 DTO 与 spec schema 差异 + 95 个缺失端点的实现清单（产出 docs/api-gap-map.md）
+- C30+ 按域分批实现：DTO 字段对齐（Model 层）、缺失端点（MediaBrowser.Api 新服务）、认证头契约（X-Emby-Token/X-Emby-Authorization）、响应序列化字段命名与 spec 一致
+- 验收：用 spec 的 414 个操作做冒烟核对（P5 扩展）
 
 ---
 
