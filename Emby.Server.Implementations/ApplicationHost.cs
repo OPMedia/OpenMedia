@@ -934,11 +934,18 @@ namespace Emby.Server.Implementations
             // This is only needed for disposal purposes. If removing this, make sure to have the manager handle disposing it
             RegisterSingleInstance(UserRepository);
 
-            var displayPreferencesRepo = new SqliteDisplayPreferencesRepository(LogManager.GetLogger("SqliteDisplayPreferencesRepository"), JsonSerializer, ApplicationPaths, FileSystemManager);
+            // PostgreSQL：schema 幂等初始化（to_regclass 门卫 + 补充对齐 DDL）
+            using (var pgConnection = new Npgsql.NpgsqlConnection(GetPostgresConnectionString()))
+            {
+                pgConnection.Open();
+                Emby.Server.PgData.PgSchemaInitializer.Initialize(pgConnection);
+            }
+
+            var displayPreferencesRepo = new Emby.Server.PgData.PgDisplayPreferencesRepository(LogManager.GetLogger("PgDisplayPreferencesRepository"), JsonSerializer, GetPostgresConnectionString());
             DisplayPreferencesRepository = displayPreferencesRepo;
             RegisterSingleInstance(DisplayPreferencesRepository);
 
-            var itemRepo = new SqliteItemRepository(ServerConfigurationManager, this, JsonSerializer, LogManager.GetLogger("SqliteItemRepository"), assemblyInfo, FileSystemManager, EnvironmentInfo, TimerFactory);
+            var itemRepo = new Emby.Server.PgData.PgItemRepository(ServerConfigurationManager, this, JsonSerializer, LogManager.GetLogger("PgItemRepository"), assemblyInfo, FileSystemManager, GetPostgresConnectionString());
             ItemRepository = itemRepo;
             RegisterSingleInstance(ItemRepository);
 
@@ -1055,14 +1062,15 @@ namespace Emby.Server.Implementations
 
             displayPreferencesRepo.Initialize();
 
-            var userDataRepo = new SqliteUserDataRepository(LogManager.GetLogger("SqliteUserDataRepository"), ApplicationPaths, FileSystemManager);
+            var userDataRepo = new Emby.Server.PgData.PgUserDataRepository(LogManager.GetLogger("PgUserDataRepository"), GetPostgresConnectionString());
+            userDataRepo.Initialize();
 
             SetStaticProperties();
 
             ((UserManager)UserManager).Initialize();
 
             ((UserDataManager)UserDataManager).Repository = userDataRepo;
-            itemRepo.Initialize(userDataRepo, UserManager);
+            itemRepo.Initialize();
             ((LibraryManager)LibraryManager).ItemRepository = ItemRepository;
         }
 
@@ -1288,7 +1296,7 @@ namespace Emby.Server.Implementations
         /// <returns>Task{IUserRepository}.</returns>
         private IUserRepository GetUserRepository()
         {
-            var repo = new SqliteUserRepository(LogManager.GetLogger("SqliteUserRepository"), ApplicationPaths, JsonSerializer);
+            var repo = new Emby.Server.PgData.PgUserRepository(LogManager.GetLogger("PgUserRepository"), JsonSerializer, GetPostgresConnectionString());
 
             repo.Initialize();
 
@@ -1297,7 +1305,7 @@ namespace Emby.Server.Implementations
 
         private IAuthenticationRepository GetAuthenticationRepository()
         {
-            var repo = new AuthenticationRepository(LogManager.GetLogger("AuthenticationRepository"), ServerConfigurationManager);
+            var repo = new Emby.Server.PgData.PgAuthenticationRepository(LogManager.GetLogger("PgAuthenticationRepository"), GetPostgresConnectionString());
 
             repo.Initialize();
 
@@ -1306,7 +1314,7 @@ namespace Emby.Server.Implementations
 
         private IActivityRepository GetActivityLogRepository()
         {
-            var repo = new ActivityRepository(LogManager.GetLogger("ActivityRepository"), ServerConfigurationManager.ApplicationPaths, FileSystemManager);
+            var repo = new Emby.Server.PgData.PgActivityRepository(LogManager.GetLogger("PgActivityRepository"), GetPostgresConnectionString());
 
             repo.Initialize();
 
@@ -1314,11 +1322,25 @@ namespace Emby.Server.Implementations
         }
 
         /// <summary>
+        /// PostgreSQL 连接串：环境变量 OPENMEDIA_PGCONN 覆盖 > 默认本机。
+        /// </summary>
+        private static string GetPostgresConnectionString()
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("OPENMEDIA_PGCONN");
+            if (!string.IsNullOrWhiteSpace(fromEnv))
+            {
+                return fromEnv;
+            }
+
+            return Emby.Server.PgData.BasePgRepository.DefaultConnectionString;
+        }
+
+        /// <summary>
         /// Dirty hacks
         /// </summary>
         private void SetStaticProperties()
         {
-            ((SqliteItemRepository)ItemRepository).ImageProcessor = ImageProcessor;
+            ((Emby.Server.PgData.PgItemRepository)ItemRepository).ImageProcessor = ImageProcessor;
 
             // For now there's no real way to inject these properly
             BaseItem.Logger = LogManager.GetLogger("BaseItem");
