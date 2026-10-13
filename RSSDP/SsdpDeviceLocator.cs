@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 
 namespace Rssdp.Infrastructure
 {
