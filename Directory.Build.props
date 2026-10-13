@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    OpenMedia 全局构建属性（SDK 风格项目自动继承）
+    旧式 csproj（转换过渡期）不受 TargetFramework 影响，其余属性无害。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <RootNamespace Condition="'$(RootNamespace)' == ''">$(MSBuildProjectName)</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <!-- 反编译恢复的代码大量使用旧式警告模式 -->
+    <NoWarn>$(NoWarn);CS1591;CS0618;CS0672;CS0108;CS0114;CS0169;CS0649;CS0414;CS8632</NoWarn>
+  </PropertyGroup>
+
+</Project>
