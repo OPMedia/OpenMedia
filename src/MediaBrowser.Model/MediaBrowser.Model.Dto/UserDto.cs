@@ -1,6 +1,5 @@
 using System;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Connect;
 using MediaBrowser.Model.Users;
 
 namespace MediaBrowser.Model.Dto;
@@ -13,11 +12,8 @@ public class UserDto : IItemDto, IHasServerId
 
 	public string ServerName { get; set; }
 
-	public string ConnectUserName { get; set; }
 
-	public string ConnectUserId { get; set; }
 
-	public UserLinkType? ConnectLinkType { get; set; }
 
 	public Guid Id { get; set; }
 

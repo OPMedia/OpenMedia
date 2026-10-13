@@ -1,5 +1,4 @@
-﻿using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Connect;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -17,19 +16,17 @@ namespace Emby.Server.Implementations.HttpServer.Security
     {
         private readonly IServerConfigurationManager _config;
 
-        public AuthService(IUserManager userManager, IAuthorizationContext authorizationContext, IServerConfigurationManager config, IConnectManager connectManager, ISessionManager sessionManager, INetworkManager networkManager)
+        public AuthService(IUserManager userManager, IAuthorizationContext authorizationContext, IServerConfigurationManager config, ISessionManager sessionManager, INetworkManager networkManager)
         {
             AuthorizationContext = authorizationContext;
             _config = config;
             SessionManager = sessionManager;
-            ConnectManager = connectManager;
             UserManager = userManager;
             NetworkManager = networkManager;
         }
 
         public IUserManager UserManager { get; private set; }
         public IAuthorizationContext AuthorizationContext { get; private set; }
-        public IConnectManager ConnectManager { get; private set; }
         public ISessionManager SessionManager { get; private set; }
         public INetworkManager NetworkManager { get; private set; }
 
@@ -51,12 +48,7 @@ namespace Emby.Server.Implementations.HttpServer.Security
 
             if (!IsExemptFromAuthenticationToken(auth, authAttribtues, request))
             {
-                var valid = IsValidConnectKey(auth.Token);
-
-                if (!valid)
-                {
-                    ValidateSecurityToken(request, auth.Token);
-                }
+                ValidateSecurityToken(request, auth.Token);
             }
 
             if (authAttribtues.AllowLocalOnly && !request.IsLocal)
@@ -219,16 +211,6 @@ namespace Emby.Server.Implementations.HttpServer.Security
             object info;
             request.Items.TryGetValue("OriginalAuthenticationInfo", out info);
             return info as AuthenticationInfo;
-        }
-
-        private bool IsValidConnectKey(string token)
-        {
-            if (string.IsNullOrEmpty(token))
-            {
-                return false;
-            }
-
-            return ConnectManager.IsAuthorizationTokenValid(token);
         }
 
         private void ValidateSecurityToken(IRequest request, string token)

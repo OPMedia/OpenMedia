@@ -1,7 +1,6 @@
 ﻿using MediaBrowser.Common;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Connect;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Connect;
+
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Security;
 using System;
@@ -13,13 +13,11 @@ namespace Emby.Server.Implementations.HttpServer.Security
     public class AuthorizationContext : IAuthorizationContext
     {
         private readonly IAuthenticationRepository _authRepo;
-        private readonly IConnectManager _connectManager;
         private readonly IUserManager _userManager;
 
-        public AuthorizationContext(IAuthenticationRepository authRepo, IConnectManager connectManager, IUserManager userManager)
+        public AuthorizationContext(IAuthenticationRepository authRepo, IUserManager userManager)
         {
             _authRepo = authRepo;
-            _connectManager = connectManager;
             _userManager = userManager;
         }
 
@@ -161,10 +159,6 @@ namespace Emby.Server.Implementations.HttpServer.Security
                     {
                         _authRepo.Update(tokenInfo);
                     }
-                }
-                else
-                {
-                    info.User = _connectManager.GetUserFromExchangeToken(token);
                 }
                 httpReq.Items["OriginalAuthenticationInfo"] = tokenInfo;
             }

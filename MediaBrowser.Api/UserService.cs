@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -6,7 +6,6 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Connect;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Users;
 using System;
@@ -302,7 +301,8 @@ namespace MediaBrowser.Api
 
             if (request.IsGuest.HasValue)
             {
-                users = users.Where(i => (i.ConnectLinkType.HasValue && i.ConnectLinkType.Value == UserLinkType.Guest) == request.IsGuest.Value);
+                // Connect 来宾账户已移除，本地用户永非来宾
+                users = users.Where(i => false == request.IsGuest.Value);
             }
 
             if (filterByDevice)

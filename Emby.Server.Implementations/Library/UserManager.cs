@@ -1,8 +1,7 @@
-﻿using MediaBrowser.Common.Events;
+using MediaBrowser.Common.Events;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Connect;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -11,7 +10,6 @@ using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Connect;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Events;
@@ -74,7 +72,6 @@ namespace Emby.Server.Implementations.Library
 
         private readonly Func<IImageProcessor> _imageProcessorFactory;
         private readonly Func<IDtoService> _dtoServiceFactory;
-        private readonly Func<IConnectManager> _connectFactory;
         private readonly IServerApplicationHost _appHost;
         private readonly IFileSystem _fileSystem;
         private readonly ICryptoProvider _cryptographyProvider;
@@ -82,7 +79,7 @@ namespace Emby.Server.Implementations.Library
         private IAuthenticationProvider[] _authenticationProviders;
         private DefaultAuthenticationProvider _defaultAuthenticationProvider;
 
-        public UserManager(ILogger logger, IServerConfigurationManager configurationManager, IUserRepository userRepository, IXmlSerializer xmlSerializer, INetworkManager networkManager, Func<IImageProcessor> imageProcessorFactory, Func<IDtoService> dtoServiceFactory, Func<IConnectManager> connectFactory, IServerApplicationHost appHost, IJsonSerializer jsonSerializer, IFileSystem fileSystem, ICryptoProvider cryptographyProvider)
+        public UserManager(ILogger logger, IServerConfigurationManager configurationManager, IUserRepository userRepository, IXmlSerializer xmlSerializer, INetworkManager networkManager, Func<IImageProcessor> imageProcessorFactory, Func<IDtoService> dtoServiceFactory, IServerApplicationHost appHost, IJsonSerializer jsonSerializer, IFileSystem fileSystem, ICryptoProvider cryptographyProvider)
         {
             _logger = logger;
             UserRepository = userRepository;
@@ -90,7 +87,6 @@ namespace Emby.Server.Implementations.Library
             _networkManager = networkManager;
             _imageProcessorFactory = imageProcessorFactory;
             _dtoServiceFactory = dtoServiceFactory;
-            _connectFactory = connectFactory;
             _appHost = appHost;
             _jsonSerializer = jsonSerializer;
             _fileSystem = fileSystem;
@@ -203,11 +199,8 @@ namespace Emby.Server.Implementations.Library
             {
                 foreach (var user in users)
                 {
-                    if (!user.ConnectLinkType.HasValue || user.ConnectLinkType.Value == UserLinkType.LinkedUser)
-                    {
-                        user.Policy.IsAdministrator = true;
-                        UpdateUserPolicy(user, user.Policy, false);
-                    }
+                    user.Policy.IsAdministrator = true;
+                    UpdateUserPolicy(user, user.Policy, false);
                 }
             }
         }
@@ -265,27 +258,9 @@ namespace Emby.Server.Implementations.Library
 
             if (user != null)
             {
-                // Authenticate using local credentials if not a guest
-                if (!user.ConnectLinkType.HasValue || user.ConnectLinkType.Value != UserLinkType.Guest)
-                {
-                    var authResult = await AuthenticateLocalUser(username, password, hashedPassword, user, remoteEndPoint).ConfigureAwait(false);
-                    authenticationProvider = authResult.Item1;
-                    success = authResult.Item2;
-                }
-
-                // Maybe user accidently entered connect credentials. let's be flexible
-                if (!success && user.ConnectLinkType.HasValue && !string.IsNullOrWhiteSpace(user.ConnectUserName))
-                {
-                    try
-                    {
-                        await _connectFactory().Authenticate(user.ConnectUserName, password).ConfigureAwait(false);
-                        success = true;
-                    }
-                    catch
-                    {
-
-                    }
-                }
+                var authResult = await AuthenticateLocalUser(username, password, hashedPassword, user, remoteEndPoint).ConfigureAwait(false);
+                authenticationProvider = authResult.Item1;
+                success = authResult.Item2;
             }
             else
             {
@@ -315,23 +290,6 @@ namespace Emby.Server.Implementations.Library
                 {
                     user.Policy.AuthenticationProviderId = providerId;
                     UpdateUserPolicy(user, user.Policy, true);
-                }
-            }
-
-            // Try originally entered username
-            if (!success && (user == null || !string.Equals(user.ConnectUserName, username, StringComparison.OrdinalIgnoreCase)))
-            {
-                try
-                {
-                    var connectAuthResult = await _connectFactory().Authenticate(username, password).ConfigureAwait(false);
-
-                    user = Users.FirstOrDefault(i => string.Equals(i.ConnectUserId, connectAuthResult.User.Id, StringComparison.OrdinalIgnoreCase));
-
-                    success = user != null;
-                }
-                catch
-                {
-
                 }
             }
 
@@ -583,9 +541,6 @@ namespace Emby.Server.Implementations.Library
                 LastActivityDate = user.LastActivityDate,
                 LastLoginDate = user.LastLoginDate,
                 Configuration = user.Configuration,
-                ConnectLinkType = user.ConnectLinkType,
-                ConnectUserId = user.ConnectUserId,
-                ConnectUserName = user.ConnectUserName,
                 ServerId = _appHost.SystemId,
                 Policy = user.Policy
             };
@@ -777,11 +732,6 @@ namespace Emby.Server.Implementations.Library
                 throw new ArgumentNullException("user");
             }
 
-            if (user.ConnectLinkType.HasValue)
-            {
-                await _connectFactory().RemoveConnect(user).ConfigureAwait(false);
-            }
-
             var allUsers = Users.ToList();
 
             if (allUsers.FirstOrDefault(u => u.Id == user.Id) == null)
@@ -847,11 +797,6 @@ namespace Emby.Server.Implementations.Library
             if (user == null)
             {
                 throw new ArgumentNullException("user");
-            }
-
-            if (user.ConnectLinkType.HasValue && user.ConnectLinkType.Value == UserLinkType.Guest)
-            {
-                throw new ArgumentException("Passwords for guests cannot be changed.");
             }
 
             await GetAuthenticationProvider(user).ChangePassword(user, newPassword).ConfigureAwait(false);
@@ -963,11 +908,6 @@ namespace Emby.Server.Implementations.Library
                 null :
                 GetUserByName(enteredUsername);
 
-            if (user != null && user.ConnectLinkType.HasValue && user.ConnectLinkType.Value == UserLinkType.Guest)
-            {
-                throw new ArgumentException("Unable to process forgot password request for guests.");
-            }
-
             var action = ForgotPasswordAction.InNetworkRequired;
             string pinFile = null;
             DateTime? expirationDate = null;
@@ -1012,8 +952,7 @@ namespace Emby.Server.Implementations.Library
                 _lastPin = null;
                 _lastPasswordPinCreationResult = null;
 
-                var users = Users.Where(i => !i.ConnectLinkType.HasValue || i.ConnectLinkType.Value != UserLinkType.Guest)
-                        .ToList();
+                var users = Users.ToList();
 
                 foreach (var user in users)
                 {

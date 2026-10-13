@@ -50,7 +50,6 @@ using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Connect;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Dlna;
 using MediaBrowser.Controller.Drawing;
@@ -321,7 +320,6 @@ namespace Emby.Server.Implementations
         private IMediaEncoder MediaEncoder { get; set; }
         private ISubtitleEncoder SubtitleEncoder { get; set; }
 
-        private IConnectManager ConnectManager { get; set; }
         private ISessionManager SessionManager { get; set; }
 
         private ILiveTvManager LiveTvManager { get; set; }
@@ -842,8 +840,6 @@ namespace Emby.Server.Implementations
             }
         }
 
-        protected abstract IConnectManager CreateConnectManager();
-
         protected virtual IHttpClient CreateHttpClient()
         {
             return new HttpClientManager.HttpClientManager(ApplicationPaths, LogManager.GetLogger("HttpClient"), FileSystemManager, GetDefaultUserAgent);
@@ -950,7 +946,7 @@ namespace Emby.Server.Implementations
             AuthenticationRepository = GetAuthenticationRepository();
             RegisterSingleInstance(AuthenticationRepository);
 
-            UserManager = new UserManager(LogManager.GetLogger("UserManager"), ServerConfigurationManager, UserRepository, XmlSerializer, NetworkManager, () => ImageProcessor, () => DtoService, () => ConnectManager, this, JsonSerializer, FileSystemManager, CryptographyProvider);
+            UserManager = new UserManager(LogManager.GetLogger("UserManager"), ServerConfigurationManager, UserRepository, XmlSerializer, NetworkManager, () => ImageProcessor, () => DtoService, this, JsonSerializer, FileSystemManager, CryptographyProvider);
             RegisterSingleInstance(UserManager);
 
             LibraryManager = new LibraryManager(this, Logger, TaskManager, UserManager, ServerConfigurationManager, UserDataManager, () => LibraryMonitor, FileSystemManager, () => ProviderManager, () => UserViewManager);
@@ -989,8 +985,6 @@ namespace Emby.Server.Implementations
             var encryptionManager = new EncryptionManager();
             RegisterSingleInstance<IEncryptionManager>(encryptionManager);
 
-            ConnectManager = CreateConnectManager();
-            RegisterSingleInstance(ConnectManager);
 
             DeviceManager = new DeviceManager(AuthenticationRepository, JsonSerializer, LibraryManager, LocalizationManager, UserManager, FileSystemManager, LibraryMonitor, ServerConfigurationManager, LogManager.GetLogger("DeviceManager"), NetworkManager);
             RegisterSingleInstance(DeviceManager);
@@ -1048,11 +1042,11 @@ namespace Emby.Server.Implementations
             RegisterSingleInstance(activityLogRepo);
             RegisterSingleInstance<IActivityManager>(new ActivityManager(LogManager.GetLogger("ActivityManager"), activityLogRepo, UserManager));
 
-            var authContext = new AuthorizationContext(AuthenticationRepository, ConnectManager, UserManager);
+            var authContext = new AuthorizationContext(AuthenticationRepository, UserManager);
             RegisterSingleInstance<IAuthorizationContext>(authContext);
             RegisterSingleInstance<ISessionContext>(new SessionContext(UserManager, authContext, SessionManager));
 
-            AuthService = new AuthService(UserManager, authContext, ServerConfigurationManager, ConnectManager, SessionManager, NetworkManager);
+            AuthService = new AuthService(UserManager, authContext, ServerConfigurationManager, SessionManager, NetworkManager);
             RegisterSingleInstance<IAuthService>(AuthService);
 
             SubtitleEncoder = new SubtitleEncoder(LibraryManager, LogManager.GetLogger("SubtitleEncoder"), ApplicationPaths, FileSystemManager, MediaEncoder, JsonSerializer, HttpClient, MediaSourceManager, ProcessFactory, TextEncoding);
@@ -1995,7 +1989,6 @@ namespace Emby.Server.Implementations
                 CanSelfRestart = CanSelfRestart,
                 CanSelfUpdate = CanSelfUpdate,
                 CanLaunchWebBrowser = CanLaunchWebBrowser,
-                WanAddress = ConnectManager.WanApiAddress,
                 HasUpdateAvailable = HasUpdateAvailable,
                 SupportsAutoRunAtStartup = SupportsAutoRunAtStartup,
                 TranscodingTempPath = ApplicationPaths.TranscodingTempPath,
@@ -2028,7 +2021,6 @@ namespace Emby.Server.Implementations
                 Version = ApplicationVersion.ToString(),
                 Id = SystemId,
                 OperatingSystem = EnvironmentInfo.OperatingSystem.ToString(),
-                WanAddress = ConnectManager.WanApiAddress,
                 ServerName = FriendlyName,
                 LocalAddress = localAddress
             };

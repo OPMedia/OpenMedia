@@ -1,6 +1,5 @@
-﻿using MediaBrowser.Controller;
+using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Connect;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using System;
@@ -51,16 +50,14 @@ namespace MediaBrowser.Api
         private readonly IServerConfigurationManager _config;
         private readonly IServerApplicationHost _appHost;
         private readonly IUserManager _userManager;
-        private readonly IConnectManager _connectManager;
         private readonly IMediaEncoder _mediaEncoder;
         private readonly IHttpClient _httpClient;
 
-        public StartupWizardService(IServerConfigurationManager config, IHttpClient httpClient, IServerApplicationHost appHost, IUserManager userManager, IConnectManager connectManager, IMediaEncoder mediaEncoder)
+        public StartupWizardService(IServerConfigurationManager config, IHttpClient httpClient, IServerApplicationHost appHost, IUserManager userManager, IMediaEncoder mediaEncoder)
         {
             _config = config;
             _appHost = appHost;
             _userManager = userManager;
-            _connectManager = connectManager;
             _mediaEncoder = mediaEncoder;
             _httpClient = httpClient;
         }
@@ -134,8 +131,7 @@ namespace MediaBrowser.Api
 
             return new StartupUser
             {
-                Name = user.Name,
-                ConnectUserName = user.ConnectUserName
+                Name = user.Name
             };
         }
 
@@ -146,19 +142,7 @@ namespace MediaBrowser.Api
             user.Name = request.Name;
             _userManager.UpdateUser(user);
 
-            var result = new UpdateStartupUserResult();
-
-            if (!string.IsNullOrWhiteSpace(user.ConnectUserName) &&
-                string.IsNullOrWhiteSpace(request.ConnectUserName))
-            {
-                await _connectManager.RemoveConnect(user).ConfigureAwait(false);
-            }
-            else if (!string.Equals(user.ConnectUserName, request.ConnectUserName, StringComparison.OrdinalIgnoreCase))
-            {
-                result.UserLinkResult = await _connectManager.LinkUser(user, request.ConnectUserName).ConfigureAwait(false);
-            }
-
-            return result;
+            return new UpdateStartupUserResult();
         }
     }
 
@@ -172,11 +156,9 @@ namespace MediaBrowser.Api
     public class StartupUser
     {
         public string Name { get; set; }
-        public string ConnectUserName { get; set; }
     }
 
     public class UpdateStartupUserResult
     {
-        public UserLinkResult UserLinkResult { get; set; }
     }
 }

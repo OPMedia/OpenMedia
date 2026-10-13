@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
-using MediaBrowser.Model.Connect;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Users;
 
@@ -33,13 +32,9 @@ public class User : BaseItem
 
 	public string Salt { get; set; }
 
-	public string ConnectUserName { get; set; }
 
-	public string ConnectUserId { get; set; }
 
-	public UserLinkType? ConnectLinkType { get; set; }
 
-	public string ConnectAccessKey { get; set; }
 
 	public override ItemImageInfo[] ImageInfos
 	{
