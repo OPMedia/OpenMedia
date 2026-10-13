@@ -1,4 +1,5 @@
-﻿using ImageMagickSharp;
+using ImageMagick;
+using ImageMagick.Drawing;
 using System;
 
 namespace Emby.Drawing.ImageMagick
@@ -7,34 +8,29 @@ namespace Emby.Drawing.ImageMagick
     {
         private const int IndicatorHeight = 8;
 
-        public void Process(MagickWand wand, double percent)
+        public void Process(MagickImage image, double percent)
         {
-            var currentImage = wand.CurrentImage;
-            var height = currentImage.Height;
+            var height = image.Height;
 
-            using (var draw = new DrawingWand())
-            {
-                using (PixelWand pixel = new PixelWand())
-                {
-                    var endX = currentImage.Width - 1;
-                    var endY = height - 1;
+            var endX = image.Width - 1;
+            var endY = height - 1;
 
-                    pixel.Color = "black";
-                    pixel.Opacity = 0.4;
-                    draw.FillColor = pixel;
-                    draw.DrawRectangle(0, endY - IndicatorHeight, endX, endY);
+            var draw = new Drawables();
 
-                    double foregroundWidth = endX;
-                    foregroundWidth *= percent;
-                    foregroundWidth /= 100;
+            // Old PixelWand: Color="black", Opacity=0.4 (40% transparent => 60% opaque)
+            draw.FillColor(new MagickColor("black"))
+                .FillOpacity(new Percentage(60))
+                .Rectangle(0, endY - IndicatorHeight, endX, endY);
 
-                    pixel.Color = "#52B54B";
-                    pixel.Opacity = 0;
-                    draw.FillColor = pixel;
-                    draw.DrawRectangle(0, endY - IndicatorHeight, Convert.ToInt32(Math.Round(foregroundWidth)), endY);
-                    wand.CurrentImage.DrawImage(draw);
-                }
-            }
+            double foregroundWidth = endX;
+            foregroundWidth *= percent;
+            foregroundWidth /= 100;
+
+            draw.FillColor(new MagickColor("#52B54B"))
+                .FillOpacity(new Percentage(100))
+                .Rectangle(0, endY - IndicatorHeight, Convert.ToInt32(Math.Round(foregroundWidth)), endY);
+
+            image.Draw(draw);
         }
     }
 }

@@ -1,5 +1,5 @@
-﻿using System.Threading.Tasks;
-using ImageMagickSharp;
+using System.Threading.Tasks;
+using ImageMagick;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Drawing;
@@ -40,19 +40,19 @@ namespace Emby.Drawing.ImageMagick
                 {
                     "tiff",
                     "tif",
-                    "jpeg", 
-                    "jpg", 
-                    "png", 
-                    "aiff", 
-                    "cr2", 
-                    "crw", 
-                    "dng", 
+                    "jpeg",
+                    "jpg",
+                    "png",
+                    "aiff",
+                    "cr2",
+                    "crw",
+                    "dng",
 
                     // Remove until supported
-                    //"nef", 
-                    "orf", 
-                    "pef", 
-                    "arw", 
+                    //"nef",
+                    "orf",
+                    "pef",
+                    "arw",
                     "webp",
                     "gif",
                     "bmp",
@@ -80,12 +80,11 @@ namespace Emby.Drawing.ImageMagick
         {
             _logger.Info("ImageMagick version: " + GetVersion());
             TestWebp();
-            Wand.SetMagickThreadCount(1);
         }
 
         public static string GetVersion()
         {
-            return Wand.VersionString;
+            return MagickNET.Version;
         }
 
         private bool _webpAvailable = true;
@@ -96,9 +95,10 @@ namespace Emby.Drawing.ImageMagick
                 var tmpPath = Path.Combine(_appPaths.TempDirectory, Guid.NewGuid() + ".webp");
                 _fileSystem.CreateDirectory(_fileSystem.GetDirectoryName(tmpPath));
 
-                using (var wand = new MagickWand(1, 1, new PixelWand("none", 1)))
+                // 1x1 transparent image, saved as webp to verify the delegate is present
+                using (var image = new MagickImage(new MagickColor("none"), 1, 1))
                 {
-                    wand.SaveImage(tmpPath);
+                    image.Write(tmpPath);
                 }
             }
             catch
@@ -112,17 +112,14 @@ namespace Emby.Drawing.ImageMagick
         {
             CheckDisposed();
 
-            using (var wand = new MagickWand())
-            {
-                wand.PingImage(path);
-                var img = wand.CurrentImage;
+            // Ping semantics: only reads the image header
+            var info = new MagickImageInfo(path);
 
-                return new ImageSize
-                {
-                    Width = img.Width,
-                    Height = img.Height
-                };
-            }
+            return new ImageSize
+            {
+                Width = info.Width,
+                Height = info.Height
+            };
         }
 
         private bool HasTransparency(string path)
@@ -140,14 +137,14 @@ namespace Emby.Drawing.ImageMagick
 
             if (string.IsNullOrEmpty(options.BackgroundColor) || !HasTransparency(inputPath))
             {
-                using (var originalImage = new MagickWand(inputPath))
+                using (var originalImage = new MagickImage(inputPath))
                 {
                     if (options.CropWhiteSpace)
                     {
-                        originalImage.CurrentImage.TrimImage(10);
+                        originalImage.Trim();
                     }
 
-                    var originalImageSize = new ImageSize(originalImage.CurrentImage.Width, originalImage.CurrentImage.Height);
+                    var originalImageSize = new ImageSize(originalImage.Width, originalImage.Height);
 
                     if (!options.CropWhiteSpace && options.HasDefaultOptions(inputPath, originalImageSize) && !autoOrient)
                     {
@@ -170,26 +167,26 @@ namespace Emby.Drawing.ImageMagick
                     AddForegroundLayer(originalImage, options);
                     DrawIndicator(originalImage, width, height, options);
 
-                    originalImage.CurrentImage.CompressionQuality = quality;
-                    originalImage.CurrentImage.StripImage();
+                    originalImage.Quality = (uint)quality;
+                    originalImage.Strip();
 
                     _fileSystem.CreateDirectory(_fileSystem.GetDirectoryName(outputPath));
 
-                    originalImage.SaveImage(outputPath);
+                    originalImage.Write(outputPath);
                 }
             }
             else
             {
-                using (var originalImage = new MagickWand(inputPath))
+                using (var originalImage = new MagickImage(inputPath))
                 {
-                    var originalImageSize = new ImageSize(originalImage.CurrentImage.Width, originalImage.CurrentImage.Height);
+                    var originalImageSize = new ImageSize(originalImage.Width, originalImage.Height);
 
                     var newImageSize = ImageHelper.GetNewImageSize(options, originalImageSize);
 
                     var width = Convert.ToInt32(Math.Round(newImageSize.Width));
                     var height = Convert.ToInt32(Math.Round(newImageSize.Height));
 
-                    using (var wand = new MagickWand(width, height, options.BackgroundColor))
+                    using (var wand = new MagickImage(new MagickColor(options.BackgroundColor), (uint)width, (uint)height))
                     {
                         ScaleImage(originalImage, width, height, options.Blur ?? 0);
 
@@ -198,15 +195,15 @@ namespace Emby.Drawing.ImageMagick
                             AutoOrientImage(originalImage);
                         }
 
-                        wand.CurrentImage.CompositeImage(originalImage, CompositeOperator.OverCompositeOp, 0, 0);
+                        wand.Composite(originalImage, 0, 0, CompositeOperator.Over);
 
                         AddForegroundLayer(wand, options);
                         DrawIndicator(wand, width, height, options);
 
-                        wand.CurrentImage.CompressionQuality = quality;
-                        wand.CurrentImage.StripImage();
+                        wand.Quality = (uint)quality;
+                        wand.Strip();
 
-                        wand.SaveImage(outputPath);
+                        wand.Write(outputPath);
                     }
                 }
             }
@@ -214,7 +211,7 @@ namespace Emby.Drawing.ImageMagick
             return outputPath;
         }
 
-        private void AddForegroundLayer(MagickWand wand, ImageProcessingOptions options)
+        private void AddForegroundLayer(MagickImage image, ImageProcessingOptions options)
         {
             if (string.IsNullOrEmpty(options.ForegroundLayer))
             {
@@ -224,48 +221,44 @@ namespace Emby.Drawing.ImageMagick
             Double opacity;
             if (!Double.TryParse(options.ForegroundLayer, out opacity)) opacity = .4;
 
-            using (var pixel = new PixelWand("#000", opacity))
-            using (var overlay = new MagickWand(wand.CurrentImage.Width, wand.CurrentImage.Height, pixel))
+            // Old PixelWand("#000", opacity): black at (1 - opacity) opacity
+            using (var overlay = new MagickImage(MagickColors.Black, (uint)image.Width, (uint)image.Height))
             {
-                wand.CurrentImage.CompositeImage(overlay, CompositeOperator.OverCompositeOp, 0, 0);
+                overlay.Evaluate(Channels.Alpha, EvaluateOperator.Multiply, 1 - opacity);
+                image.Composite(overlay, 0, 0, CompositeOperator.Over);
             }
         }
 
-        private void AutoOrientImage(MagickWand wand)
+        private void AutoOrientImage(MagickImage image)
         {
-            wand.CurrentImage.AutoOrientImage();
+            image.AutoOrient();
         }
 
-        public static void RotateImage(MagickWand wand, float angle)
+        public static void RotateImage(MagickImage image, float angle)
         {
-            using (var pixelWand = new PixelWand("none", 1))
-            {
-                wand.CurrentImage.RotateImage(pixelWand, angle);
-            }
+            image.Rotate(angle);
         }
 
-        private void ScaleImage(MagickWand wand, int width, int height, int blur)
+        private void ScaleImage(MagickImage image, int width, int height, int blur)
         {
             var useResize = blur > 1;
 
             if (useResize)
             {
-                wand.CurrentImage.ResizeImage(width, height, FilterTypes.GaussianFilter, blur);
+                image.FilterType = FilterType.Gaussian;
             }
-            else
-            {
-                wand.CurrentImage.ScaleImage(width, height);
-            }
+
+            image.Resize(new MagickGeometry((uint)width, (uint)height) { IgnoreAspectRatio = true });
         }
 
         /// <summary>
         /// Draws the indicator.
         /// </summary>
-        /// <param name="wand">The wand.</param>
+        /// <param name="image">The image.</param>
         /// <param name="imageWidth">Width of the image.</param>
         /// <param name="imageHeight">Height of the image.</param>
         /// <param name="options">The options.</param>
-        private void DrawIndicator(MagickWand wand, int imageWidth, int imageHeight, ImageProcessingOptions options)
+        private void DrawIndicator(MagickImage image, int imageWidth, int imageHeight, ImageProcessingOptions options)
         {
             if (!options.AddPlayedIndicator && !options.UnplayedCount.HasValue && options.PercentPlayed.Equals(0))
             {
@@ -278,19 +271,19 @@ namespace Emby.Drawing.ImageMagick
                 {
                     var currentImageSize = new ImageSize(imageWidth, imageHeight);
 
-                    var task = new PlayedIndicatorDrawer(_appPaths, _httpClientFactory(), _fileSystem).DrawPlayedIndicator(wand, currentImageSize);
+                    var task = new PlayedIndicatorDrawer(_appPaths, _httpClientFactory(), _fileSystem).DrawPlayedIndicator(image, currentImageSize);
                     Task.WaitAll(task);
                 }
                 else if (options.UnplayedCount.HasValue)
                 {
                     var currentImageSize = new ImageSize(imageWidth, imageHeight);
 
-                    new UnplayedCountIndicator(_appPaths, _fileSystem).DrawUnplayedCountIndicator(wand, currentImageSize, options.UnplayedCount.Value);
+                    new UnplayedCountIndicator(_appPaths, _fileSystem).DrawUnplayedCountIndicator(image, currentImageSize, options.UnplayedCount.Value);
                 }
 
                 if (options.PercentPlayed > 0)
                 {
-                    new PercentPlayedDrawer().Process(wand, options.PercentPlayed);
+                    new PercentPlayedDrawer().Process(image, options.PercentPlayed);
                 }
             }
             catch (Exception ex)
@@ -327,7 +320,6 @@ namespace Emby.Drawing.ImageMagick
         public void Dispose()
         {
             _disposed = true;
-            Wand.CloseEnvironment();
         }
 
         private void CheckDisposed()

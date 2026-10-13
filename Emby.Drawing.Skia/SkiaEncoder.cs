@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Model.Drawing;
@@ -239,36 +239,36 @@ namespace Emby.Drawing.Skia
             return tempPath;
         }
 
-        private static SKCodecOrigin GetSKCodecOrigin(ImageOrientation? orientation)
+        private static SKEncodedOrigin GetSKEncodedOrigin(ImageOrientation? orientation)
         {
             if (!orientation.HasValue)
             {
-                return SKCodecOrigin.TopLeft;
+                return SKEncodedOrigin.TopLeft;
             }
 
             switch (orientation.Value)
             {
                 case ImageOrientation.TopRight:
-                    return SKCodecOrigin.TopRight;
+                    return SKEncodedOrigin.TopRight;
                 case ImageOrientation.RightTop:
-                    return SKCodecOrigin.RightTop;
+                    return SKEncodedOrigin.RightTop;
                 case ImageOrientation.RightBottom:
-                    return SKCodecOrigin.RightBottom;
+                    return SKEncodedOrigin.RightBottom;
                 case ImageOrientation.LeftTop:
-                    return SKCodecOrigin.LeftTop;
+                    return SKEncodedOrigin.LeftTop;
                 case ImageOrientation.LeftBottom:
-                    return SKCodecOrigin.LeftBottom;
+                    return SKEncodedOrigin.LeftBottom;
                 case ImageOrientation.BottomRight:
-                    return SKCodecOrigin.BottomRight;
+                    return SKEncodedOrigin.BottomRight;
                 case ImageOrientation.BottomLeft:
-                    return SKCodecOrigin.BottomLeft;
+                    return SKEncodedOrigin.BottomLeft;
                 default:
-                    return SKCodecOrigin.TopLeft;
+                    return SKEncodedOrigin.TopLeft;
             }
         }
 
         private static string[] TransparentImageTypes = new string[] { ".png", ".gif", ".webp" };
-        internal static SKBitmap Decode(string path, bool forceCleanBitmap, IFileSystem fileSystem, ILogger logger, ImageOrientation? orientation, out SKCodecOrigin origin)
+        internal static SKBitmap Decode(string path, bool forceCleanBitmap, IFileSystem fileSystem, ILogger logger, ImageOrientation? orientation, out SKEncodedOrigin origin)
         {
             if (!fileSystem.FileExists(path))
             {
@@ -288,7 +288,7 @@ namespace Emby.Drawing.Skia
                     {
                         if (codec == null)
                         {
-                            origin = GetSKCodecOrigin(orientation);
+                            origin = GetSKEncodedOrigin(orientation);
                             return null;
                         }
 
@@ -302,15 +302,15 @@ namespace Emby.Drawing.Skia
 
                             if (result != SKCodecResult.Success)
                             {
-                                origin = GetSKCodecOrigin(orientation);
+                                origin = GetSKEncodedOrigin(orientation);
                                 return null;
                             }
 
-                            origin = codec.Origin;
+                            origin = codec.EncodedOrigin;
                         }
                         else
                         {
-                            origin = GetSKCodecOrigin(orientation);
+                            origin = GetSKEncodedOrigin(orientation);
                         }
 
                         return bitmap;
@@ -328,7 +328,7 @@ namespace Emby.Drawing.Skia
 
             if (resultBitmap.IsNull || resultBitmap.IsEmpty)
             {
-                origin = GetSKCodecOrigin(orientation);
+                origin = GetSKEncodedOrigin(orientation);
                 return null;
             }
 
@@ -341,11 +341,11 @@ namespace Emby.Drawing.Skia
                 }
             }
 
-            origin = SKCodecOrigin.TopLeft;
+            origin = SKEncodedOrigin.TopLeft;
             return resultBitmap;
         }
 
-        private SKBitmap GetBitmap(string path, bool cropWhitespace, bool forceAnalyzeBitmap, ImageOrientation? orientation, out SKCodecOrigin origin)
+        private SKBitmap GetBitmap(string path, bool cropWhitespace, bool forceAnalyzeBitmap, ImageOrientation? orientation, out SKEncodedOrigin origin)
         {
             if (cropWhitespace)
             {
@@ -360,7 +360,7 @@ namespace Emby.Drawing.Skia
 
         private SKBitmap GetBitmap(string path, bool cropWhitespace, bool autoOrient, ImageOrientation? orientation)
         {
-            SKCodecOrigin origin;
+            SKEncodedOrigin origin;
 
             if (autoOrient)
             {
@@ -368,7 +368,7 @@ namespace Emby.Drawing.Skia
 
                 if (bitmap != null)
                 {
-                    if (origin != SKCodecOrigin.TopLeft)
+                    if (origin != SKEncodedOrigin.TopLeft)
                     {
                         using (bitmap)
                         {
@@ -383,7 +383,7 @@ namespace Emby.Drawing.Skia
             return GetBitmap(path, cropWhitespace, false, orientation, out origin);
         }
 
-        private SKBitmap OrientImage(SKBitmap bitmap, SKCodecOrigin origin)
+        private SKBitmap OrientImage(SKBitmap bitmap, SKEncodedOrigin origin)
         {
             //var transformations = {
             //    2: { rotate: 0, flip: true},
@@ -398,7 +398,7 @@ namespace Emby.Drawing.Skia
             switch (origin)
             {
 
-                case SKCodecOrigin.TopRight:
+                case SKEncodedOrigin.TopRight:
                     {
                         var rotated = new SKBitmap(bitmap.Width, bitmap.Height);
                         using (var surface = new SKCanvas(rotated))
@@ -411,7 +411,7 @@ namespace Emby.Drawing.Skia
                         return rotated;
                     }
 
-                case SKCodecOrigin.BottomRight:
+                case SKEncodedOrigin.BottomRight:
                     {
                         var rotated = new SKBitmap(bitmap.Width, bitmap.Height);
                         using (var surface = new SKCanvas(rotated))
@@ -429,7 +429,7 @@ namespace Emby.Drawing.Skia
                         return rotated;
                     }
 
-                case SKCodecOrigin.BottomLeft:
+                case SKEncodedOrigin.BottomLeft:
                     {
                         var rotated = new SKBitmap(bitmap.Width, bitmap.Height);
                         using (var surface = new SKCanvas(rotated))
@@ -450,7 +450,7 @@ namespace Emby.Drawing.Skia
                         return rotated;
                     }
 
-                case SKCodecOrigin.LeftTop:
+                case SKEncodedOrigin.LeftTop:
                     {
                         // TODO: Remove dual canvases, had trouble with flipping
                         using (var rotated = new SKBitmap(bitmap.Height, bitmap.Width))
@@ -477,7 +477,7 @@ namespace Emby.Drawing.Skia
                         }
                     }
 
-                case SKCodecOrigin.RightTop:
+                case SKEncodedOrigin.RightTop:
                     {
                         var rotated = new SKBitmap(bitmap.Height, bitmap.Width);
                         using (var surface = new SKCanvas(rotated))
@@ -490,7 +490,7 @@ namespace Emby.Drawing.Skia
                         return rotated;
                     }
 
-                case SKCodecOrigin.RightBottom:
+                case SKEncodedOrigin.RightBottom:
                     {
                         // TODO: Remove dual canvases, had trouble with flipping
                         using (var rotated = new SKBitmap(bitmap.Height, bitmap.Width))
@@ -514,7 +514,7 @@ namespace Emby.Drawing.Skia
                         }
                     }
 
-                case SKCodecOrigin.LeftBottom:
+                case SKEncodedOrigin.LeftBottom:
                     {
                         var rotated = new SKBitmap(bitmap.Height, bitmap.Width);
                         using (var surface = new SKCanvas(rotated))
@@ -575,9 +575,9 @@ namespace Emby.Drawing.Skia
                 using (var resizedBitmap = new SKBitmap(width, height))//, bitmap.ColorType, bitmap.AlphaType))
                 {
                     // scale image
-                    var resizeMethod = SKBitmapResizeMethod.Lanczos3;
+                    var resizeMethod = SKFilterQuality.High;
 
-                    bitmap.Resize(resizedBitmap, resizeMethod);
+                    bitmap.ScalePixels(resizedBitmap, resizeMethod);
 
                     // If all we're doing is resizing then we can stop now
                     if (!hasBackgroundColor && !hasForegroundColor && blur == 0 && !hasIndicator)

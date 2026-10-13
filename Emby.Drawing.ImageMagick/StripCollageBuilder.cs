@@ -1,4 +1,4 @@
-﻿using ImageMagickSharp;
+using ImageMagick;
 using MediaBrowser.Common.Configuration;
 using System;
 using System.Collections.Generic;
@@ -23,7 +23,7 @@ namespace Emby.Drawing.ImageMagick
         {
             using (var wand = BuildPosterCollageWand(paths, width, height))
             {
-                wand.SaveImage(outputPath);
+                wand.Write(outputPath);
             }
         }
 
@@ -31,7 +31,7 @@ namespace Emby.Drawing.ImageMagick
         {
             using (var wand = BuildSquareCollageWand(paths, width, height))
             {
-                wand.SaveImage(outputPath);
+                wand.Write(outputPath);
             }
         }
 
@@ -39,65 +39,66 @@ namespace Emby.Drawing.ImageMagick
         {
             using (var wand = BuildThumbCollageWand(paths, width, height))
             {
-                wand.SaveImage(outputPath);
+                wand.Write(outputPath);
             }
         }
 
-        private MagickWand BuildPosterCollageWand(string[] paths, int width, int height)
+        private MagickImage BuildPosterCollageWand(string[] paths, int width, int height)
         {
             var inputPaths = ImageHelpers.ProjectPaths(paths, 3);
-            using (var wandImages = new MagickWand(inputPaths.ToArray()))
+            using (var wandImages = new MagickImageCollection())
             {
-                var wand = new MagickWand(width, height);
-                wand.OpenImage("gradient:#111111-#111111");
-                using (var draw = new DrawingWand())
+                foreach (var path in inputPaths)
                 {
-                    var iSlice = Convert.ToInt32(width * 0.3);
-                    int iTrans = Convert.ToInt32(height * .25);
-                    int iHeight = Convert.ToInt32(height * .65);
-                    var horizontalImagePadding = Convert.ToInt32(width * 0.0366);
+                    wandImages.Add(new MagickImage(path));
+                }
 
-                    foreach (var element in wandImages.ImageList)
+                // Old code opened "gradient:#111111-#111111" (a solid dark background)
+                var wand = new MagickImage(new MagickColor("#111111"), (uint)width, (uint)height);
+
+                var iSlice = Convert.ToInt32(width * 0.3);
+                int iTrans = Convert.ToInt32(height * .25);
+                int iHeight = Convert.ToInt32(height * .65);
+                var horizontalImagePadding = Convert.ToInt32(width * 0.0366);
+
+                foreach (var element in wandImages)
+                {
+                    int iWidth = (int)Math.Abs(iHeight * element.Width / (double)element.Height);
+                    element.BackgroundColor = MagickColors.Black;
+                    element.Resize(new MagickGeometry((uint)iWidth, (uint)iHeight));
+                    int ix = (int)Math.Abs((iWidth - iSlice) / 2);
+                    element.Crop(new MagickGeometry(ix, 0, (uint)iSlice, (uint)iHeight), Gravity.Center);
+
+                    element.Extent(0 - horizontalImagePadding, 0, (uint)iSlice, (uint)iHeight);
+                }
+
+                using (var wandList = (MagickImage)wandImages.AppendHorizontally())
+                {
+                    wandList.Trim();
+
+                    using (var mwr = (MagickImage)wandList.Clone())
                     {
-                        using (var blackPixelWand = new PixelWand(ColorName.Black))
-                        {
-                            int iWidth = (int)Math.Abs(iHeight * element.Width / element.Height);
-                            element.Gravity = GravityType.CenterGravity;
-                            element.BackgroundColor = blackPixelWand;
-                            element.ResizeImage(iWidth, iHeight, FilterTypes.LanczosFilter);
-                            int ix = (int)Math.Abs((iWidth - iSlice) / 2);
-                            element.CropImage(iSlice, iHeight, ix, 0);
+                        mwr.Resize(new MagickGeometry((uint)wandList.Width, (uint)(wandList.Height / 2)));
+                        mwr.Flip();
 
-                            element.ExtentImage(iSlice, iHeight, 0 - horizontalImagePadding, 0);
-                        }
-                    }
+                        mwr.Alpha(AlphaOption.Opaque);
+                        // Old ColorizeImage(black, grey70): 70% blend toward black
+                        mwr.Colorize(MagickColors.Black, new Percentage(70));
 
-                    wandImages.SetFirstIterator();
-                    using (var wandList = wandImages.AppendImages())
-                    {
-                        wandList.CurrentImage.TrimImage(1);
-                        using (var mwr = wandList.CloneMagickWand())
+                        using (var mwg = new MagickImage(new MagickColor("none"), (uint)wandList.Width, (uint)iTrans))
                         {
-                            using (var blackPixelWand = new PixelWand(ColorName.Black))
+                            var verticalSpacing = Convert.ToInt32(height * 0.01111111111111111111111111111111);
+                            mwr.Composite(mwg, 0, verticalSpacing, CompositeOperator.CopyAlpha);
+
+                            // Old: wandList.AddImage(mwr); AppendImages(true) => vertical stack of strips + reflection
+                            using (var stack = new MagickImageCollection())
                             {
-                                using (var greyPixelWand = new PixelWand(ColorName.Grey70))
+                                stack.Add(wandList.Clone());
+                                stack.Add(mwr.Clone());
+                                using (var appended = (MagickImage)stack.AppendVertically())
                                 {
-                                    mwr.CurrentImage.ResizeImage(wandList.CurrentImage.Width, (wandList.CurrentImage.Height / 2), FilterTypes.LanczosFilter, 1);
-                                    mwr.CurrentImage.FlipImage();
-
-                                    mwr.CurrentImage.AlphaChannel = AlphaChannelType.DeactivateAlphaChannel;
-                                    mwr.CurrentImage.ColorizeImage(blackPixelWand, greyPixelWand);
-
-                                    using (var mwg = new MagickWand(wandList.CurrentImage.Width, iTrans))
-                                    {
-                                        mwg.OpenImage("gradient:black-none");
-                                        var verticalSpacing = Convert.ToInt32(height * 0.01111111111111111111111111111111);
-                                        mwr.CurrentImage.CompositeImage(mwg, CompositeOperator.CopyOpacityCompositeOp, 0, verticalSpacing);
-
-                                        wandList.AddImage(mwr);
-                                        int ex = (int)(wand.CurrentImage.Width - mwg.CurrentImage.Width) / 2;
-                                        wand.CurrentImage.CompositeImage(wandList.AppendImages(true), CompositeOperator.AtopCompositeOp, ex, Convert.ToInt32(height * .05));
-                                    }
+                                    int ex = (int)(wand.Width - mwg.Width) / 2;
+                                    wand.Composite(appended, ex, Convert.ToInt32(height * .05), CompositeOperator.Atop);
                                 }
                             }
                         }
@@ -108,61 +109,62 @@ namespace Emby.Drawing.ImageMagick
             }
         }
 
-        private MagickWand BuildThumbCollageWand(string[] paths, int width, int height)
+        private MagickImage BuildThumbCollageWand(string[] paths, int width, int height)
         {
             var inputPaths = ImageHelpers.ProjectPaths(paths, 4);
-            using (var wandImages = new MagickWand(inputPaths.ToArray()))
+            using (var wandImages = new MagickImageCollection())
             {
-                var wand = new MagickWand(width, height);
-                wand.OpenImage("gradient:#111111-#111111");
-                using (var draw = new DrawingWand())
+                foreach (var path in inputPaths)
                 {
-                    var iSlice = Convert.ToInt32(width * 0.24125);
-                    int iTrans = Convert.ToInt32(height * .25);
-                    int iHeight = Convert.ToInt32(height * .70);
-                    var horizontalImagePadding = Convert.ToInt32(width * 0.0125);
+                    wandImages.Add(new MagickImage(path));
+                }
 
-                    foreach (var element in wandImages.ImageList)
+                // Old code opened "gradient:#111111-#111111" (a solid dark background)
+                var wand = new MagickImage(new MagickColor("#111111"), (uint)width, (uint)height);
+
+                var iSlice = Convert.ToInt32(width * 0.24125);
+                int iTrans = Convert.ToInt32(height * .25);
+                int iHeight = Convert.ToInt32(height * .70);
+                var horizontalImagePadding = Convert.ToInt32(width * 0.0125);
+
+                foreach (var element in wandImages)
+                {
+                    int iWidth = (int)Math.Abs(iHeight * element.Width / (double)element.Height);
+                    element.BackgroundColor = MagickColors.Black;
+                    element.Resize(new MagickGeometry((uint)iWidth, (uint)iHeight));
+                    int ix = (int)Math.Abs((iWidth - iSlice) / 2);
+                    element.Crop(new MagickGeometry(ix, 0, (uint)iSlice, (uint)iHeight), Gravity.Center);
+
+                    element.Extent(0 - horizontalImagePadding, 0, (uint)iSlice, (uint)iHeight);
+                }
+
+                using (var wandList = (MagickImage)wandImages.AppendHorizontally())
+                {
+                    wandList.Trim();
+
+                    using (var mwr = (MagickImage)wandList.Clone())
                     {
-                        using (var blackPixelWand = new PixelWand(ColorName.Black))
-                        {
-                            int iWidth = (int)Math.Abs(iHeight * element.Width / element.Height);
-                            element.Gravity = GravityType.CenterGravity;
-                            element.BackgroundColor = blackPixelWand;
-                            element.ResizeImage(iWidth, iHeight, FilterTypes.LanczosFilter);
-                            int ix = (int)Math.Abs((iWidth - iSlice) / 2);
-                            element.CropImage(iSlice, iHeight, ix, 0);
+                        mwr.Resize(new MagickGeometry((uint)wandList.Width, (uint)(wandList.Height / 2)));
+                        mwr.Flip();
 
-                            element.ExtentImage(iSlice, iHeight, 0 - horizontalImagePadding, 0);
-                        }
-                    }
+                        mwr.Alpha(AlphaOption.Opaque);
+                        // Old ColorizeImage(black, grey70): 70% blend toward black
+                        mwr.Colorize(MagickColors.Black, new Percentage(70));
 
-                    wandImages.SetFirstIterator();
-                    using (var wandList = wandImages.AppendImages())
-                    {
-                        wandList.CurrentImage.TrimImage(1);
-                        using (var mwr = wandList.CloneMagickWand())
+                        using (var mwg = new MagickImage(new MagickColor("none"), (uint)wandList.Width, (uint)iTrans))
                         {
-                            using (var blackPixelWand = new PixelWand(ColorName.Black))
+                            var verticalSpacing = Convert.ToInt32(height * 0.01111111111111111111111111111111);
+                            mwr.Composite(mwg, 0, verticalSpacing, CompositeOperator.CopyAlpha);
+
+                            // Old: wandList.AddImage(mwr); AppendImages(true) => vertical stack of strips + reflection
+                            using (var stack = new MagickImageCollection())
                             {
-                                using (var greyPixelWand = new PixelWand(ColorName.Grey70))
+                                stack.Add(wandList.Clone());
+                                stack.Add(mwr.Clone());
+                                using (var appended = (MagickImage)stack.AppendVertically())
                                 {
-                                    mwr.CurrentImage.ResizeImage(wandList.CurrentImage.Width, (wandList.CurrentImage.Height / 2), FilterTypes.LanczosFilter, 1);
-                                    mwr.CurrentImage.FlipImage();
-
-                                    mwr.CurrentImage.AlphaChannel = AlphaChannelType.DeactivateAlphaChannel;
-                                    mwr.CurrentImage.ColorizeImage(blackPixelWand, greyPixelWand);
-
-                                    using (var mwg = new MagickWand(wandList.CurrentImage.Width, iTrans))
-                                    {
-                                        mwg.OpenImage("gradient:black-none");
-                                        var verticalSpacing = Convert.ToInt32(height * 0.01111111111111111111111111111111);
-                                        mwr.CurrentImage.CompositeImage(mwg, CompositeOperator.CopyOpacityCompositeOp, 0, verticalSpacing);
-
-                                        wandList.AddImage(mwr);
-                                        int ex = (int)(wand.CurrentImage.Width - mwg.CurrentImage.Width) / 2;
-                                        wand.CurrentImage.CompositeImage(wandList.AppendImages(true), CompositeOperator.AtopCompositeOp, ex, Convert.ToInt32(height * .045));
-                                    }
+                                    int ex = (int)(wand.Width - mwg.Width) / 2;
+                                    wand.Composite(appended, ex, Convert.ToInt32(height * .045), CompositeOperator.Atop);
                                 }
                             }
                         }
@@ -173,24 +175,26 @@ namespace Emby.Drawing.ImageMagick
             }
         }
 
-        private MagickWand BuildSquareCollageWand(string[] paths, int width, int height)
+        private MagickImage BuildSquareCollageWand(string[] paths, int width, int height)
         {
             var inputPaths = ImageHelpers.ProjectPaths(paths, 4);
-            var outputWand = new MagickWand(width, height, new PixelWand("none", 1));
+            var outputWand = new MagickImage(new MagickColor("none"), (uint)width, (uint)height);
             var imageIndex = 0;
-            var cellWidth = width/2;
-            var cellHeight = height/2;
+            var cellWidth = width / 2;
+            var cellHeight = height / 2;
+
             for (var x = 0; x < 2; x++)
             {
                 for (var y = 0; y < 2; y++)
                 {
-                    using (var temp = new MagickWand(inputPaths[imageIndex]))
+                    using (var temp = new MagickImage(inputPaths[imageIndex]))
                     {
-                        temp.CurrentImage.ScaleImage(cellWidth, cellHeight);
+                        // Old ScaleImage forced the exact cell size (no aspect ratio preserved)
+                        temp.Resize(new MagickGeometry((uint)cellWidth, (uint)cellHeight) { IgnoreAspectRatio = true });
                         // draw this image into the strip at the next position
-                        var xPos = x*cellWidth;
-                        var yPos = y*cellHeight;
-                        outputWand.CurrentImage.CompositeImage(temp, CompositeOperator.OverCompositeOp, xPos, yPos);
+                        var xPos = x * cellWidth;
+                        var yPos = y * cellHeight;
+                        outputWand.Composite(temp, xPos, yPos, CompositeOperator.Over);
                     }
                     imageIndex++;
                 }

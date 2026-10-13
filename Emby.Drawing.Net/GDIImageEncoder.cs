@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Drawing;
+using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Logging;
 using System;
@@ -7,11 +7,9 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using MediaBrowser.Common.IO;
 using MediaBrowser.Controller.IO;
 using MediaBrowser.Model.IO;
 using ImageFormat = MediaBrowser.Model.Drawing.ImageFormat;
-using Emby.Drawing;
 
 namespace Emby.Drawing.Net
 {
@@ -89,14 +87,11 @@ namespace Emby.Drawing.Net
             return Image.FromFile(path);
         }
 
-        public void EncodeImage(string inputPath, ImageSize? originalImageSize, string outputPath, bool autoOrient, int quality, ImageProcessingOptions options, ImageFormat selectedOutputFormat)
+        public string EncodeImage(string inputPath, DateTime dateModified, string outputPath, bool autoOrient, ImageOrientation? orientation, int quality, ImageProcessingOptions options, ImageFormat selectedOutputFormat)
         {
             using (var originalImage = GetImage(inputPath, options.CropWhiteSpace))
             {
-                if (options.CropWhiteSpace || !originalImageSize.HasValue)
-                {
-                    originalImageSize = new ImageSize(originalImage.Width, originalImage.Height);
-                }
+                var originalImageSize = new ImageSize(originalImage.Width, originalImage.Height);
 
                 var newImageSize = ImageHelper.GetNewImageSize(options, originalImageSize);
 
@@ -148,6 +143,8 @@ namespace Emby.Drawing.Net
                 }
 
             }
+
+            return outputPath;
         }
 
         /// <summary>
