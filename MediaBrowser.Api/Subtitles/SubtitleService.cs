@@ -4,6 +4,7 @@ using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using System;
@@ -122,6 +123,20 @@ namespace MediaBrowser.Api.Subtitles
         public int SegmentLength { get; set; }
     }
 
+    [Route("/Videos/{Id}/subtitles.m3u8", "GET", Summary = "Gets an HLS subtitle playlist for the item's first subtitle stream.")]
+    [Authenticated]
+    public class GetVideoSubtitlesPlaylist
+    {
+        [ApiMember(Name = "Id", Description = "Item Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string Id { get; set; }
+
+        [ApiMember(Name = "SubtitleSegmentLength", Description = "The subtitle segment length", IsRequired = false, DataType = "int", ParameterType = "query", Verb = "GET")]
+        public int SubtitleSegmentLength { get; set; }
+
+        [ApiMember(Name = "ManifestSubtitles", Description = "Whether subtitles should be embedded in the manifest", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? ManifestSubtitles { get; set; }
+    }
+
     public class SubtitleService : BaseApiService
     {
         private readonly ILibraryManager _libraryManager;
@@ -191,6 +206,39 @@ namespace MediaBrowser.Api.Subtitles
             builder.AppendLine("#EXT-X-ENDLIST");
 
             return ResultFactory.GetResult(Request, builder.ToString(), MimeTypes.GetMimeType("playlist.m3u8"), new Dictionary<string, string>());
+        }
+
+        public async Task<object> Get(GetVideoSubtitlesPlaylist request)
+        {
+            var item = (Video)_libraryManager.GetItemById(new Guid(request.Id));
+
+            var mediaSources = _mediaSourceManager.GetStaticMediaSources(item, false, null);
+            var mediaSource = mediaSources.FirstOrDefault() ?? item.GetMediaSources(false).FirstOrDefault();
+
+            if (mediaSource == null)
+            {
+                throw new ResourceNotFoundException("No media source found");
+            }
+
+            var subtitleStream = mediaSource.MediaStreams == null
+                ? null
+                : mediaSource.MediaStreams.FirstOrDefault(i => i.Type == MediaStreamType.Subtitle && (i.IsExternal || i.SupportsExternalStream))
+                  ?? mediaSource.MediaStreams.FirstOrDefault(i => i.Type == MediaStreamType.Subtitle);
+
+            if (subtitleStream == null)
+            {
+                throw new ResourceNotFoundException("No subtitle stream found");
+            }
+
+            var segmentLength = request.SubtitleSegmentLength > 0 ? request.SubtitleSegmentLength : 30;
+
+            return await Get(new GetSubtitlePlaylist
+            {
+                Id = request.Id,
+                MediaSourceId = mediaSource.Id,
+                Index = subtitleStream.Index,
+                SegmentLength = segmentLength
+            }).ConfigureAwait(false);
         }
 
         public async Task<object> Get(GetSubtitle request)

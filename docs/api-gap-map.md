@@ -121,6 +121,8 @@ IsKids, IsMovie, IsNews, IsSeries, IsSports, Path, SubtitleCodecs, VideoCodecs
 
 ### 4.1 核心端点（19 个，必须实现）
 
+> **实现状态（B3/B4 已完成）**：14 个新端点已实现（TagService 8、Encoding 2、DeleteInfo、SelectableMediaFolders、Plugins/Thumb、LiveTv 3 个 GET）；`/LiveTv/Programs` 与 `/LiveTv/ChannelMappingOptions`+`/LiveTv/ChannelMappings` 经核实**已存在**（多 verb Route `"GET,POST"` 与单参数 Route 两种写法未被脚本扫描识别，属盘点误报，DTO 与处理方法齐全）；`/Videos/{Id}/subtitles.m3u8` 已实现（SubtitleService 扩展，自动选第一条字幕流）；`/Videos/{Id}/index.bif` 已建 404 占位端点（BIF 生成待 ffmpeg 抽帧，客户端可优雅降级）。
+
 | # | 端点 | verb | 响应 | 难度 | 建议位置 |
 |---|------|------|------|------|----------|
 | 1-8 | `/AudioCodecs` `/VideoCodecs` `/SubtitleCodecs` `/Containers` `/OfficialRatings` `/Tags` `/Artists/Prefixes` `/Items/Prefixes` | GET | `QueryResult<TagItem>` / `NameValuePair[]` | **易**（ItemRepository distinct 查询拼装；参数集复用 BaseItemsRequest） | 新建 `MediaBrowser.Api/UserLibrary/TagService.cs`（8 端点一个文件，复用 BaseItemsByNameService 模式） |
@@ -208,16 +210,17 @@ spec `components.securitySchemes` vs 旧 `Emby.Server.Implementations/HttpServer
 | 会话 | GET /Sessions、POST /Sessions/Capabilities/Full | ✅ 就绪 |
 | 系统 | GET /System/Ping、/System/Info | ✅ 就绪（SystemInfo 补 1 字段） |
 
-**建议批次**（每批 dotnet build 0 错误后交 lead 提交）：
+**建议批次**（每批 dotnet build 0 错误后交 lead 提交）——**B1–B5 已全部完成并提交**：
 
-| 批次 | 内容 | 文件 | 规模 |
-|------|------|------|------|
-| **B1 DTO 字段对齐** | §3 全部易级字段（UserPolicy 5、ServerConfiguration 4、BaseItemDto 3、LiveStreamRequest 3、ListingsProviderInfo 2、ThemeMediaResult 2、PlaybackStart/Progress RunTimeTicks、PluginInfo/QueryFilters/WakeOnLanInfo/SystemInfo/RemoteSubtitleInfo 各 1）+ §2.3 零散参数（Similar/InstantMix 的 IncludeItemTypes、字幕 2 参数、DatePlayed） | `src/MediaBrowser.Model/`（约 14 个 DTO 文件）+ 对应 Api 请求类 | ~30 字段，纯加属性 |
-| **B2 items 过滤参数集** | BaseItemsRequest 补 13 参数 + ItemFilter/查询映射 + GET /LiveTv/Recordings 接入 BaseItemsRequest | `MediaBrowser.Api/UserLibrary/BaseItemsRequest.cs`、`ItemsService.cs`、`BaseItemsByNameService.cs`、`LiveTvService.cs` + 查询引擎映射 | 中 |
-| **B3 核心新端点·易** | TagService 8 端点 + Encoding 2 + Items/DeleteInfo + Library/SelectableMediaFolders + Plugins/Thumb + LiveTv 4 个 GET（ListingProviders/TunerHosts/Available/Programs） | 新建 `TagService.cs`、`EncodingService.cs`；扩展 LiveTvService/ItemLookupService/LibraryService/PluginService | 17 端点 |
-| **B4 LiveTv 映射 + 字幕清单** | ChannelMappingOptions/ChannelMappings（GET+POST）+ /Videos/{Id}/subtitles.m3u8 | LiveTvService + Model 新 DTO + SubtitleService | 中 |
-| **B5 BIF + GenreItems** | `/Videos/{Id}/index.bif`（可 404 占位后补 ffmpeg 抽帧）+ GenreItems 的 Id 改 long（可选，低风险） | 新建 `BifService.cs`；`BaseItemDto` 填充逻辑 | 难/可拆 |
-| **B6 插件端点（可选）** | user_usage_stats 19 + Reports 4 + ThumbnailSet + SMTP Test | 视需求 | 暂缓 |
+| 批次 | 内容 | 文件 | 规模 | 状态 |
+|------|------|------|------|------|
+| **B1 DTO 字段对齐** | §3 全部易级字段（UserPolicy 5、ServerConfiguration 4、BaseItemDto 3、LiveStreamRequest 3、ListingsProviderInfo 2、PlaybackStart/Progress RunTimeTicks、PluginInfo/QueryFilters/WakeOnLanInfo/SystemInfo/RemoteSubtitleInfo 各 1）+ §2.3 零散参数（Similar/InstantMix 的 IncludeItemTypes、字幕 2 参数） | `src/MediaBrowser.Model/`（约 14 个 DTO 文件）+ 对应 Api 请求类 | ~30 字段，纯加属性 | ✅ 已提交（fab6087884） |
+| **B2 items 过滤参数集** | BaseItemsRequest 补 13 参数 + ItemFilter/查询映射 + GET /LiveTv/Recordings 接入 BaseItemsRequest | `MediaBrowser.Api/UserLibrary/BaseItemsRequest.cs`、`ItemsService.cs`、`BaseItemsByNameService.cs`、`LiveTvService.cs` + SqliteItemRepository WHERE 分支 | 中 | ✅ 已提交（dd2c5b6c19） |
+| **B3 核心新端点·易** | TagService 8 端点 + Encoding 2 + Items/DeleteInfo + Library/SelectableMediaFolders + Plugins/Thumb + LiveTv 3 个 GET（ListingProviders/TunerHosts/Available） | 新建 `TagService.cs`、`EncodingService.cs`；扩展 LiveTvService/ItemLookupService/LibraryService/PluginService | 14 端点 | ✅ 已提交（765edea551） |
+| **B4 字幕清单** | /Videos/{Id}/subtitles.m3u8（自动选第一条字幕流，复用现有 m3u8 构建） | SubtitleService.cs | 中 | ✅ 本轮 |
+| **B5 BIF 占位** | index.bif 404 占位端点（BIF 生成待 ffmpeg 抽帧） | 新建 `BifService.cs` | 难/后续 | ✅ 占位完成 |
+| ~~B5 GenreItems~~ | ~~GenreItems 的 Id 改 long~~ | — | — | ⛔ 不做：Sqlite 过渡期无 long genre id 数据源（genre 存 ItemValues 表无独立主键）；JSON 层 Guid "N" 字符串与 spec 的 string Id 形态兼容、客户端把 Id 当不透明值，实际影响为零。若 PG 域层（pg-data）将来以 bigint 作 genre 主键，属 C16+ 域层重构再联动 |
+| **B6 插件端点（可选）** | user_usage_stats 19 + Reports 4 + ThumbnailSet + SMTP Test | 视需求 | 暂缓 | ⏸ lead 已拍板暂缓 |
 
 **验收**（P5 扩展）：以 spec 445 操作做冒烟——443 匹配操作参数/响应字段核对通过 + 44 缺失端点中核心 19 个上线 + 25 个插件端点显式 404（或实现）+ 25 个跳过端点返回与 4.1 一致的 404/空响应。
 
