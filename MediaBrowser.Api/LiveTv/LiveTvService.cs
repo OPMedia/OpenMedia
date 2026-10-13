@@ -641,6 +641,33 @@ namespace MediaBrowser.Api.LiveTv
 
     }
 
+    [Route("/LiveTv/TunerHosts", "GET", Summary = "Gets configured tuner hosts")]
+    [Authenticated]
+    public class GetTunerHosts : IReturn<List<TunerHostInfo>>
+    {
+    }
+
+    [Route("/LiveTv/ListingProviders", "GET", Summary = "Gets configured listing providers")]
+    [Authenticated]
+    public class GetListingProviders : IReturn<List<ListingsProviderInfo>>
+    {
+    }
+
+    public class ListingProviderTypeInfo
+    {
+        public string Name { get; set; }
+
+        public string Id { get; set; }
+
+        public string SetupUrl { get; set; }
+    }
+
+    [Route("/LiveTv/ListingProviders/Available", "GET", Summary = "Gets available listing provider types")]
+    [Authenticated]
+    public class GetAvailableListingProviders : IReturn<List<ListingProviderTypeInfo>>
+    {
+    }
+
     [Route("/LiveTv/Tuners/Discvover", "GET")]
     [Authenticated]
     public class DiscoverTuners : IReturn<List<TunerHostInfo>>
@@ -725,6 +752,33 @@ namespace MediaBrowser.Api.LiveTv
         public async Task<object> Get(DiscoverTuners request)
         {
             var result = await _liveTvManager.DiscoverTuners(request.NewDevicesOnly, CancellationToken.None).ConfigureAwait(false);
+            return ToOptimizedResult(result);
+        }
+
+        public object Get(GetTunerHosts request)
+        {
+            var result = _liveTvManager.GetTunerHostInfos();
+            return ToOptimizedResult(result);
+        }
+
+        public object Get(GetListingProviders request)
+        {
+            var result = _liveTvManager.GetListingProviderInfos();
+            return ToOptimizedResult(result);
+        }
+
+        public object Get(GetAvailableListingProviders request)
+        {
+            var result = _liveTvManager.ListingProviders
+                .OrderBy(i => i.Name)
+                .Select(i => new ListingProviderTypeInfo
+                {
+                    Name = i.Name,
+                    Id = i.Type,
+                    SetupUrl = null
+                })
+                .ToList();
+
             return ToOptimizedResult(result);
         }
 

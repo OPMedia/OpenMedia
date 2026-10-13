@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common;
+using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Progress;
@@ -197,6 +197,16 @@ namespace Emby.Server.Implementations.LiveTv
         public Task<List<TunerHostInfo>> DiscoverTuners(bool newDevicesOnly, CancellationToken cancellationToken)
         {
             return EmbyTV.EmbyTV.Current.DiscoverTuners(newDevicesOnly, cancellationToken);
+        }
+
+        public ListingsProviderInfo[] GetListingProviderInfos()
+        {
+            return GetConfiguration().ListingProviders;
+        }
+
+        public TunerHostInfo[] GetTunerHostInfos()
+        {
+            return GetConfiguration().TunerHosts;
         }
 
         void service_DataSourceChanged(object sender, EventArgs e)

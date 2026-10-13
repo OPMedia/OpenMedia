@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common;
+using MediaBrowser.Common;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Common.Updates;
@@ -54,6 +54,14 @@ namespace MediaBrowser.Api
         /// Gets or sets the id.
         /// </summary>
         /// <value>The id.</value>
+        [ApiMember(Name = "Id", Description = "Plugin Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string Id { get; set; }
+    }
+
+    [Route("/Plugins/{Id}/Thumb", "GET", Summary = "Gets a plugin's thumb image")]
+    [Authenticated]
+    public class GetPluginThumb
+    {
         [ApiMember(Name = "Id", Description = "Plugin Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
         public string Id { get; set; }
     }
@@ -254,6 +262,28 @@ namespace MediaBrowser.Api
             var plugin = _appHost.Plugins.First(p => p.Id == guid) as IHasPluginConfiguration;
 
             return ToOptimizedResult(plugin.Configuration);
+        }
+
+        public object Get(GetPluginThumb request)
+        {
+            var guid = new Guid(request.Id);
+            var plugin = _appHost.Plugins.First(p => p.Id == guid);
+
+            var assembly = plugin.GetType().Assembly;
+            var resourceNames = assembly.GetManifestResourceNames();
+
+            var thumbName = resourceNames.FirstOrDefault(n =>
+                n.IndexOf("thumb", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                (n.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)));
+
+            if (string.IsNullOrEmpty(thumbName))
+            {
+                throw new FileNotFoundException("Plugin thumb not found");
+            }
+
+            var contentType = thumbName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+
+            return ResultFactory.GetResult(Request, assembly.GetManifestResourceStream(thumbName), contentType);
         }
 
         /// <summary>

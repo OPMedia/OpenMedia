@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -118,6 +118,19 @@ namespace MediaBrowser.Api
         }
     }
 
+    public class DeleteInfo
+    {
+        public string[] Paths { get; set; }
+    }
+
+    [Route("/Items/{Id}/DeleteInfo", "GET", Summary = "Gets info about the paths that will be used when deleting an item")]
+    [Authenticated]
+    public class GetDeleteInfo : IReturn<DeleteInfo>
+    {
+        [ApiMember(Name = "Id", Description = "The item id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string Id { get; set; }
+    }
+
     public class ItemLookupService : BaseApiService
     {
         private readonly IProviderManager _providerManager;
@@ -142,6 +155,39 @@ namespace MediaBrowser.Api
             var infos = _providerManager.GetExternalIdInfos(item).ToList();
 
             return ToOptimizedResult(infos);
+        }
+
+        public object Get(GetDeleteInfo request)
+        {
+            var item = _libraryManager.GetItemById(request.Id);
+
+            var paths = new List<string>();
+
+            if (item != null)
+            {
+                if (!string.IsNullOrWhiteSpace(item.Path))
+                {
+                    paths.Add(item.Path);
+                }
+
+                var video = item as Video;
+                if (video != null && video.GetLocalAlternateVersionIds() != null)
+                {
+                    foreach (var id in video.GetLocalAlternateVersionIds())
+                    {
+                        var alt = _libraryManager.GetItemById(id);
+                        if (alt != null && !string.IsNullOrWhiteSpace(alt.Path))
+                        {
+                            paths.Add(alt.Path);
+                        }
+                    }
+                }
+            }
+
+            return ToOptimizedResult(new DeleteInfo
+            {
+                Paths = paths.ToArray()
+            });
         }
 
         public async Task<object> Post(GetTrailerRemoteSearchResults request)

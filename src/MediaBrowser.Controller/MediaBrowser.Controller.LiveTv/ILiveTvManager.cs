@@ -100,6 +100,10 @@ public interface ILiveTvManager
 
 	Task<List<TunerHostInfo>> DiscoverTuners(bool newDevicesOnly, CancellationToken cancellationToken);
 
+	ListingsProviderInfo[] GetListingProviderInfos();
+
+	TunerHostInfo[] GetTunerHostInfos();
+
 	string GetEmbyTvActiveRecordingPath(string id);
 
 	ActiveRecordingInfo GetActiveRecordingInfo(string path);

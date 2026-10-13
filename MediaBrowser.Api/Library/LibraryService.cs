@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Api.Movies;
+using MediaBrowser.Api.Movies;
 using MediaBrowser.Api.Music;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -218,6 +218,28 @@ namespace MediaBrowser.Api.Library
     {
         [ApiMember(Name = "IsHidden", Description = "Optional. Filter by folders that are marked hidden, or not.", IsRequired = false, DataType = "boolean", ParameterType = "query", Verb = "GET")]
         public bool? IsHidden { get; set; }
+    }
+
+    public class SubFolderInfo
+    {
+        public string Name { get; set; }
+
+        public string Id { get; set; }
+    }
+
+    public class SelectableMediaFolderInfo
+    {
+        public string Name { get; set; }
+
+        public string Id { get; set; }
+
+        public SubFolderInfo[] SubFolders { get; set; }
+    }
+
+    [Route("/Library/SelectableMediaFolders", "GET", Summary = "Gets all selectable media folders (used by metadata editor).")]
+    [Authenticated]
+    public class GetSelectableMediaFolders : IReturn<List<SelectableMediaFolderInfo>>
+    {
     }
 
     [Route("/Library/Series/Added", "POST", Summary = "Reports that new episodes of a series have been added by an external source")]
@@ -731,6 +753,24 @@ namespace MediaBrowser.Api.Library
             };
 
             return result;
+        }
+
+        public object Get(GetSelectableMediaFolders request)
+        {
+            var items = _libraryManager.GetUserRootFolder().Children.Concat(_libraryManager.RootFolder.VirtualChildren).OrderBy(i => i.SortName).ToList();
+
+            var result = items.Select(i => new SelectableMediaFolderInfo
+            {
+                Name = i.Name,
+                Id = i.Id.ToString("N"),
+                SubFolders = (i as Folder)?.Children.Select(c => new SubFolderInfo
+                {
+                    Name = c.Name,
+                    Id = c.Id.ToString("N")
+                }).ToArray() ?? new SubFolderInfo[] { }
+            }).ToList();
+
+            return ToOptimizedResult(result);
         }
 
         public void Post(PostUpdatedSeries request)
