@@ -12,7 +12,12 @@ namespace Emby.Server.PgData
     /// 1) 幂等门卫：SELECT to_regclass('public.media_items') 为 NULL 才执行全量 DDL
     ///    （SQL 文件里的分区子表 CREATE TABLE ... PARTITION OF 没有 IF NOT EXISTS，重复执行会失败）。
     /// 2) 全量 DDL 来自嵌入资源 emby_pgsql_dump_schema_optimized.sql（单一事实来源，含 sync 三表照建留空）。
-    /// 3) 补充对齐 DDL（docs/upgrade-net10-plan.md §5.2，全部幂等）。
+    ///    执行前做一处必要的内存内修正：剥离引用 media_items(id, type) 复合主键的单列外键子句
+    ///    （PostgreSQL 要求外键引用列与被引用列数量一致，"FOREIGN KEY (x) REFERENCES media_items (id, type)"
+    ///     会报 "number of referencing and referenced columns for foreign key disagree"，
+    ///     该约束在文件中无法成立；剥离后与旧 SQLite 行为一致——由应用层维护引用完整性，
+    ///     DeleteItem 显式删除子行）。磁盘上的 SQL 文件保持原样不动（D3 决策）。
+    /// 3) 补充对齐 DDL（docs/upgrade-net10-plan.md §5.2 + 查询引擎语义保留所需的列/索引），全部幂等。
     /// </summary>
     public static class PgSchemaInitializer
     {
@@ -56,6 +61,8 @@ namespace Emby.Server.PgData
         {
             var sql = ReadEmbeddedSchema();
 
+            sql = StripBrokenForeignKeys(sql);
+
             using (var transaction = connection.BeginTransaction())
             {
                 try
@@ -84,6 +91,30 @@ namespace Emby.Server.PgData
                     throw;
                 }
             }
+        }
+
+        /// <summary>
+        /// 剥离引用 media_items(id, type) 复合主键的单列外键子句。
+        /// PostgreSQL 要求外键的引用列数与被引用列数一致；schema 文件中所有
+        /// "FOREIGN KEY (单列) REFERENCES media_items (id, type)" 形式的约束都无法建立
+        /// （且被引用列 (id) 单独不存在唯一约束，也无法改为单列引用）。
+        /// 剥离后引用完整性由仓储层维护（与旧 SQLite 完全一致：无外键、显式删除子行）。
+        /// 其余合法外键（user_data_keys/devices/local_users 等单列对单列）保持不变。
+        /// </summary>
+        internal static string StripBrokenForeignKeys(string sql)
+        {
+            // 1) 移除外键子句本身（含可选的 ON DELETE 动作与尾随逗号——
+            //    media_items 的三个自引用 FK 均带尾逗号，不吞掉会留下悬空逗号）
+            var result = Regex.Replace(
+                sql,
+                @"FOREIGN\s+KEY\s*\(\s*\w+\s*\)\s+REFERENCES\s+media_items\s*\(\s*id\s*,\s*type\s*\)(\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION))?\s*,?",
+                string.Empty,
+                RegexOptions.IgnoreCase);
+
+            // 2) 清理移除后遗留的悬空逗号（逗号后仅空白直接跟右括号）
+            result = Regex.Replace(result, @",\s*\)", ")");
+
+            return result;
         }
 
         private static string ReadEmbeddedSchema()
@@ -137,10 +168,15 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
-        /// 补充对齐 DDL（方案 §5.2 + 仓储运行所需的最小补充），全部幂等可重复执行。
+        /// 补充对齐 DDL，全部幂等可重复执行。
+        /// §5.2 的 5 条 + 查询引擎语义保留所需的补充列/索引
+        /// （旧 TypedBaseItems 的 IsFolder/IsVirtualItem/MediaType/TopParentId/CleanName 等过滤列
+        ///  在优化后的 media_items 中不存在，WHERE 语义无法保留，故补齐）。
         /// </summary>
         private static void ApplyAlignmentDdl(NpgsqlConnection connection)
         {
+            // ========== §5.2 核心 5 条 ==========
+
             // §5.2-1: media_items.data — 旧 TypedBaseItems 靠它存整个 BaseItem 序列化 JSON
             Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS data JSONB");
 
@@ -150,8 +186,8 @@ namespace Emby.Server.PgData
             // §5.2-3: guid 唯一索引（分区表唯一索引必须含分区键 type；guid 为最左前缀可服务 GUID 查找）
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_guid ON media_items (guid, type)");
 
-            // §5.2-4: item_extradata 主键修正为 (item_id, extradata_type_id, value)
-            FixItemExtradataPrimaryKey(connection);
+            // §5.2-4: item_extradata 主键修正为 (item_id, extradata_type_id, value) + clean_value 列
+            FixItemExtradata(connection);
 
             // §5.2-5: display_preferences（旧 userdisplaypreferences 的 PG 对应表）
             Execute(connection, @"
@@ -163,20 +199,62 @@ namespace Emby.Server.PgData
                     PRIMARY KEY (item_id, user_id, client)
                 )");
 
-            // 仓储运行所需：活动日志类型字典唯一索引（PgActivityRepository 的 type 字典 upsert 依赖）
+            // ========== 查询引擎语义保留所需的 media_items 补充列 ==========
+            // （旧 TypedBaseItems 的过滤/排序列，优化 schema 中缺失）
+
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS is_folder BOOLEAN DEFAULT FALSE");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS is_virtual_item BOOLEAN DEFAULT FALSE");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS media_type TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS channel_id TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS top_parent_id TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS clean_name TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS album TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS extra_ids TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS unrated_type TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS trailer_types TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS external_series_id TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS owner_id TEXT");
+            Execute(connection, "ALTER TABLE media_items ADD COLUMN IF NOT EXISTS date_last_media_added TIMESTAMPTZ");
+
+            // ========== 查询引擎所需索引（对照旧 idx_CleanNameType / idx_TopParentIdGuid 等） ==========
+
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_clean_name_type ON media_items (clean_name, type)");
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_top_parent_id ON media_items (top_parent_id)");
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_media_type ON media_items (media_type) WHERE media_type IS NOT NULL");
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_is_virtual_item ON media_items (is_virtual_item) WHERE is_virtual_item = TRUE");
+
+            // ========== item_extradata 查询索引（对照旧 idx_ItemValues6/7/8） ==========
+
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_type_clean_value ON item_extradata (extradata_type_id, clean_value)");
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_item_type ON item_extradata (item_id, extradata_type_id)");
+
+            // ========== item_people 补充列（person_type SMALLINT 存不下任意字符串类型；sort_order 旧 People 表有） ==========
+
+            Execute(connection, "ALTER TABLE item_people ADD COLUMN IF NOT EXISTS person_type_name TEXT");
+            Execute(connection, "ALTER TABLE item_people ADD COLUMN IF NOT EXISTS sort_order INTEGER");
+
+            // ========== media_streams 补充列（旧 mediastreams 的 IsAvc/CodecTimeBase 在优化 schema 中缺失） ==========
+
+            Execute(connection, "ALTER TABLE media_streams ADD COLUMN IF NOT EXISTS is_avc BOOLEAN");
+            Execute(connection, "ALTER TABLE media_streams ADD COLUMN IF NOT EXISTS codec_time_base TEXT");
+
+            // ========== 仓储运行所需字典表唯一索引（upsert 的 ON CONFLICT 依赖） ==========
+
+            // PgActivityRepository 的活动类型字典 upsert
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_log_types_name ON activity_log_types (name)");
 
-            // 仓储运行所需：设备表 reported_device_id 唯一索引（PgAuthenticationRepository 的设备 upsert 依赖）
+            // PgAuthenticationRepository 的设备 upsert
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_reported_device_id_unique ON devices (reported_device_id)");
         }
 
         /// <summary>
         /// item_extradata 主键修正：
         /// 原 PK (item_id, extradata_type_id) 存不下多值 Genres/Studios/Tags/Artists，
-        /// 修正为 (item_id, extradata_type_id, value)。
+        /// 修正为 (item_id, extradata_type_id, value)，并补充 clean_value 列
+        /// （旧 ItemValues.CleanValue，Name/Genre/Tag 匹配与聚合分组依赖）。
         /// 若表已按旧定义存在 → 新建修正表 + 拷数据 + 替换；初始化场景下表为空，拷贝为空操作。
         /// </summary>
-        private static void FixItemExtradataPrimaryKey(NpgsqlConnection connection)
+        private static void FixItemExtradata(NpgsqlConnection connection)
         {
             if (!TableExists(connection, "item_extradata"))
             {
@@ -186,7 +264,16 @@ namespace Emby.Server.PgData
 
             var pkColumnCount = GetPrimaryKeyColumnCount(connection, "item_extradata");
 
-            if (pkColumnCount >= 3)
+            var hasCleanValueColumn = false;
+
+            using (var cmd = new NpgsqlCommand(
+                "SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='item_extradata' AND column_name='clean_value'",
+                connection))
+            {
+                hasCleanValueColumn = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+
+            if (pkColumnCount >= 3 && hasCleanValueColumn)
             {
                 // 已是修正后的定义
                 return;
@@ -201,8 +288,8 @@ namespace Emby.Server.PgData
                             item_id            BIGINT  NOT NULL,
                             extradata_type_id  INTEGER NOT NULL,
                             value              TEXT    NOT NULL,
+                            clean_value        TEXT,
                             PRIMARY KEY (item_id, extradata_type_id, value),
-                            FOREIGN KEY (item_id)           REFERENCES media_items (id, type) ON DELETE CASCADE,
                             FOREIGN KEY (extradata_type_id) REFERENCES item_extradata_types (extradata_type_id)
                         ) WITH (fillfactor = 90)");
 
