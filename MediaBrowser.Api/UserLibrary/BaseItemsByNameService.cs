@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
@@ -114,6 +114,16 @@ namespace MediaBrowser.Api.UserLibrary
                 NameLessThan = request.NameLessThan,
                 NameStartsWith = request.NameStartsWith,
                 NameStartsWithOrGreater = request.NameStartsWithOrGreater,
+                IsMovie = request.IsMovie,
+                IsSeries = request.IsSeries,
+                IsNews = request.IsNews,
+                IsKids = request.IsKids,
+                IsSports = request.IsSports,
+                Path = string.IsNullOrWhiteSpace(request.Path) ? null : request.Path,
+                AudioCodecs = request.GetAudioCodecs(),
+                Containers = request.GetContainers(),
+                SubtitleCodecs = request.GetSubtitleCodecs(),
+                VideoCodecs = request.GetVideoCodecs(),
                 Tags = request.GetTags(),
                 OfficialRatings = request.GetOfficialRatings(),
                 Genres = request.GetGenres(),

@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
@@ -266,7 +266,7 @@ namespace MediaBrowser.Api.UserLibrary
                 StartIndex = request.StartIndex,
                 IsMissing = request.IsMissing,
                 IsUnaired = request.IsUnaired,
-                CollapseBoxSetItems = request.CollapseBoxSetItems,
+                CollapseBoxSetItems = request.CollapseBoxSetItems ?? request.GroupItemsIntoCollections,
                 NameLessThan = request.NameLessThan,
                 NameStartsWith = request.NameStartsWith,
                 NameStartsWithOrGreater = request.NameStartsWithOrGreater,
@@ -290,6 +290,16 @@ namespace MediaBrowser.Api.UserLibrary
                 HasTrailer = request.HasTrailer,
                 IsHD = request.IsHD,
                 Is4K = request.Is4K,
+                IsMovie = request.IsMovie,
+                IsSeries = request.IsSeries,
+                IsNews = request.IsNews,
+                IsKids = request.IsKids,
+                IsSports = request.IsSports,
+                Path = string.IsNullOrWhiteSpace(request.Path) ? null : request.Path,
+                AudioCodecs = request.GetAudioCodecs(),
+                Containers = request.GetContainers(),
+                SubtitleCodecs = request.GetSubtitleCodecs(),
+                VideoCodecs = request.GetVideoCodecs(),
                 Tags = request.GetTags(),
                 OfficialRatings = request.GetOfficialRatings(),
                 Genres = request.GetGenres(),
@@ -381,6 +391,25 @@ namespace MediaBrowser.Api.UserLibrary
             if (!string.IsNullOrEmpty(request.SeriesStatus))
             {
                 query.SeriesStatuses = request.SeriesStatus.Split(',').Select(d => (SeriesStatus)Enum.Parse(typeof(SeriesStatus), d, true)).ToArray();
+            }
+
+            // AnyProviderIdEquals: 'prov.id' pairs, pipe delimited
+            if (!string.IsNullOrWhiteSpace(request.AnyProviderIdEquals))
+            {
+                var hasAnyProviderId = new Dictionary<string, string>();
+                foreach (var pair in request.AnyProviderIdEquals.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = pair.Split(new[] { '.' }, 2);
+                    if (parts.Length == 2)
+                    {
+                        hasAnyProviderId[parts[0]] = parts[1];
+                    }
+                }
+
+                if (hasAnyProviderId.Count > 0)
+                {
+                    query.HasAnyProviderId = hasAnyProviderId;
+                }
             }
 
             // ExcludeLocationTypes

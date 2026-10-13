@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -90,6 +90,46 @@ namespace MediaBrowser.Api.UserLibrary
             if (string.IsNullOrWhiteSpace(request.IncludeItemTypes))
             {
                 //request.IncludeItemTypes = "Audio,MusicVideo";
+            }
+
+            // ArtistType=AlbumArtist is equivalent to the /Artists/AlbumArtists endpoint
+            if (string.Equals(request.ArtistType, "AlbumArtist", StringComparison.OrdinalIgnoreCase))
+            {
+                return Get(new GetAlbumArtists
+                {
+                    UserId = request.UserId,
+                    ParentId = request.ParentId,
+                    StartIndex = request.StartIndex,
+                    Limit = request.Limit,
+                    Fields = request.Fields,
+                    EnableImages = request.EnableImages,
+                    EnableUserData = request.EnableUserData,
+                    ImageTypeLimit = request.ImageTypeLimit,
+                    EnableImageTypes = request.EnableImageTypes,
+                    SortOrder = request.SortOrder,
+                    SortBy = request.SortBy,
+                    SearchTerm = request.SearchTerm,
+                    Filters = request.Filters,
+                    Genres = request.Genres,
+                    GenreIds = request.GenreIds,
+                    OfficialRatings = request.OfficialRatings,
+                    Tags = request.Tags,
+                    Years = request.Years,
+                    NameStartsWith = request.NameStartsWith,
+                    NameStartsWithOrGreater = request.NameStartsWithOrGreater,
+                    NameLessThan = request.NameLessThan,
+                    IsFavorite = request.IsFavorite,
+                    Person = request.Person,
+                    PersonIds = request.PersonIds,
+                    PersonTypes = request.PersonTypes,
+                    Studios = request.Studios,
+                    StudioIds = request.StudioIds,
+                    ExcludeItemTypes = request.ExcludeItemTypes,
+                    IncludeItemTypes = request.IncludeItemTypes,
+                    MediaTypes = request.MediaTypes,
+                    MinCommunityRating = request.MinCommunityRating,
+                    EnableTotalRecordCount = request.EnableTotalRecordCount
+                });
             }
 
            return GetResultSlim(request);

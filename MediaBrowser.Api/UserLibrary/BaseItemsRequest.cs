@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
 using System;
 using System.Collections.Generic;
@@ -356,6 +356,45 @@ namespace MediaBrowser.Api.UserLibrary
         [ApiMember(Name = "NameLessThan", Description = "Optional filter by items whose name is equally or lesser than a given input string.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
         public string NameLessThan { get; set; }
 
+        [ApiMember(Name = "AnyProviderIdEquals", Description = "Optional. If specified, result will be filtered to contain only items which match at least one of the specified IDs. Each provider ID must be in the form 'prov.id', e.g. 'imdb.tt123456'. This allows multiple, pipe delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
+        public string AnyProviderIdEquals { get; set; }
+
+        [ApiMember(Name = "ArtistType", Description = "Optional. When searching for artists, filter by Artist or AlbumArtist.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
+        public string ArtistType { get; set; }
+
+        [ApiMember(Name = "AudioCodecs", Description = "Optional filter by AudioCodec. Allows multiple, comma delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
+        public string AudioCodecs { get; set; }
+
+        [ApiMember(Name = "Containers", Description = "Optional filter by Container. Allows multiple, comma delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
+        public string Containers { get; set; }
+
+        [ApiMember(Name = "GroupItemsIntoCollections", Description = "Whether or not to hide items behind their boxsets.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? GroupItemsIntoCollections { get; set; }
+
+        [ApiMember(Name = "IsKids", Description = "Optional filter for kids.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? IsKids { get; set; }
+
+        [ApiMember(Name = "IsMovie", Description = "Optional filter for movies.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? IsMovie { get; set; }
+
+        [ApiMember(Name = "IsNews", Description = "Optional filter for news.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? IsNews { get; set; }
+
+        [ApiMember(Name = "IsSeries", Description = "Optional filter for series.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? IsSeries { get; set; }
+
+        [ApiMember(Name = "IsSports", Description = "Optional filter for sports.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        public bool? IsSports { get; set; }
+
+        [ApiMember(Name = "Path", Description = "Optional filter by Path.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
+        public string Path { get; set; }
+
+        [ApiMember(Name = "SubtitleCodecs", Description = "Optional filter by SubtitleCodec. Allows multiple, comma delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
+        public string SubtitleCodecs { get; set; }
+
+        [ApiMember(Name = "VideoCodecs", Description = "Optional filter by VideoCodec. Allows multiple, comma delimeted.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
+        public string VideoCodecs { get; set; }
+
         public string[] GetGenres()
         {
             return (Genres ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -394,6 +433,26 @@ namespace MediaBrowser.Api.UserLibrary
         public string[] GetStudios()
         {
             return (Studios ?? string.Empty).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        public string[] GetAudioCodecs()
+        {
+            return (AudioCodecs ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        public string[] GetContainers()
+        {
+            return (Containers ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        public string[] GetSubtitleCodecs()
+        {
+            return (SubtitleCodecs ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        public string[] GetVideoCodecs()
+        {
+            return (VideoCodecs ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
         public string[] GetPersonTypes()

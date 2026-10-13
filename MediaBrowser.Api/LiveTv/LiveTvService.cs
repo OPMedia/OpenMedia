@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
@@ -154,61 +154,21 @@ namespace MediaBrowser.Api.LiveTv
 
     [Route("/LiveTv/Recordings", "GET", Summary = "Gets live tv recordings")]
     [Authenticated]
-    public class GetRecordings : IReturn<QueryResult<BaseItemDto>>, IHasDtoOptions
+    public class GetRecordings : BaseItemsRequest, IReturn<QueryResult<BaseItemDto>>
     {
         [ApiMember(Name = "ChannelId", Description = "Optional filter by channel id.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
         public string ChannelId { get; set; }
 
-        [ApiMember(Name = "UserId", Description = "Optional filter by user and attach user data.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public Guid UserId { get; set; }
-
-        [ApiMember(Name = "StartIndex", Description = "Optional. The record index to start at. All items with a lower index will be dropped from the results.", IsRequired = false, DataType = "int", ParameterType = "query", Verb = "GET")]
-        public int? StartIndex { get; set; }
-
-        [ApiMember(Name = "Limit", Description = "Optional. The maximum number of records to return", IsRequired = false, DataType = "int", ParameterType = "query", Verb = "GET")]
-        public int? Limit { get; set; }
-
         [ApiMember(Name = "Status", Description = "Optional filter by recording status.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
         public RecordingStatus? Status { get; set; }
 
-        [ApiMember(Name = "Status", Description = "Optional filter by recordings that are in progress, or not.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
+        [ApiMember(Name = "IsInProgress", Description = "Optional filter by recordings that are in progress, or not.", IsRequired = false, DataType = "bool", ParameterType = "query", Verb = "GET")]
         public bool? IsInProgress { get; set; }
 
         [ApiMember(Name = "SeriesTimerId", Description = "Optional filter by recordings belonging to a series timer", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
         public string SeriesTimerId { get; set; }
 
-        [ApiMember(Name = "EnableImages", Description = "Optional, include image information in output", IsRequired = false, DataType = "boolean", ParameterType = "query", Verb = "GET")]
-        public bool? EnableImages { get; set; }
-
-        [ApiMember(Name = "ImageTypeLimit", Description = "Optional, the max number of images to return, per image type", IsRequired = false, DataType = "int", ParameterType = "query", Verb = "GET")]
-        public int? ImageTypeLimit { get; set; }
-
-        [ApiMember(Name = "EnableImageTypes", Description = "Optional. The image types to include in the output.", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET")]
-        public string EnableImageTypes { get; set; }
-
-        /// <summary>
-        /// Fields to return within the items, in addition to basic information
-        /// </summary>
-        /// <value>The fields.</value>
-        [ApiMember(Name = "Fields", Description = "Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimeted. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "GET", AllowMultiple = true)]
-        public string Fields { get; set; }
-
-        public bool EnableTotalRecordCount { get; set; }
-
-        [ApiMember(Name = "EnableUserData", Description = "Optional, include user data", IsRequired = false, DataType = "boolean", ParameterType = "query", Verb = "GET")]
-        public bool? EnableUserData { get; set; }
-
-        public bool? IsMovie { get; set; }
-        public bool? IsSeries { get; set; }
-        public bool? IsKids { get; set; }
-        public bool? IsSports { get; set; }
-        public bool? IsNews { get; set; }
         public bool? IsLibraryItem { get; set; }
-
-        public GetRecordings()
-        {
-            EnableTotalRecordCount = true;
-        }
     }
 
     [Route("/LiveTv/Recordings/Series", "GET", Summary = "Gets live tv recordings")]
@@ -1083,12 +1043,15 @@ namespace MediaBrowser.Api.LiveTv
         {
             var options = GetDtoOptions(_authContext, request);
 
+            var hasInMemoryFilters = HasRecordingInMemoryFilters(request);
+
             var result = _liveTvManager.GetRecordings(new RecordingQuery
             {
                 ChannelId = request.ChannelId,
                 UserId = request.UserId,
-                StartIndex = request.StartIndex,
-                Limit = request.Limit,
+                // when in-memory filters are active, page in memory over the full set
+                StartIndex = hasInMemoryFilters ? null : request.StartIndex,
+                Limit = hasInMemoryFilters ? null : request.Limit,
                 Status = request.Status,
                 SeriesTimerId = request.SeriesTimerId,
                 IsInProgress = request.IsInProgress,
@@ -1105,7 +1068,197 @@ namespace MediaBrowser.Api.LiveTv
 
             }, options);
 
+            if (hasInMemoryFilters)
+            {
+                ApplyRecordingInMemoryFilters(result, request);
+            }
+
             return ToOptimizedResult(result);
+        }
+
+        private static bool HasRecordingInMemoryFilters(GetRecordings request)
+        {
+            return !string.IsNullOrWhiteSpace(request.Genres)
+                || !string.IsNullOrWhiteSpace(request.GenreIds)
+                || !string.IsNullOrWhiteSpace(request.Tags)
+                || !string.IsNullOrWhiteSpace(request.OfficialRatings)
+                || !string.IsNullOrWhiteSpace(request.Years)
+                || !string.IsNullOrWhiteSpace(request.Studios)
+                || !string.IsNullOrWhiteSpace(request.Artists)
+                || !string.IsNullOrWhiteSpace(request.Albums)
+                || !string.IsNullOrWhiteSpace(request.Person)
+                || !string.IsNullOrWhiteSpace(request.NameStartsWith)
+                || !string.IsNullOrWhiteSpace(request.NameStartsWithOrGreater)
+                || !string.IsNullOrWhiteSpace(request.NameLessThan)
+                || !string.IsNullOrWhiteSpace(request.SortBy)
+                || !string.IsNullOrWhiteSpace(request.Filters)
+                || request.IsFavorite.HasValue
+                || request.IsPlayed.HasValue
+                || request.MinCommunityRating.HasValue
+                || request.MinCriticRating.HasValue
+                || request.MinPremiereDate != null
+                || request.MaxPremiereDate != null;
+        }
+
+        private static void ApplyRecordingInMemoryFilters(QueryResult<BaseItemDto> result, GetRecordings request)
+        {
+            var items = result.Items?.ToList() ?? new List<BaseItemDto>();
+
+            var genres = request.GetGenres();
+            if (genres.Length > 0)
+            {
+                items = items.Where(i => i.Genres != null && genres.Any(g => i.Genres.Contains(g, StringComparer.OrdinalIgnoreCase))).ToList();
+            }
+
+            var tags = request.GetTags();
+            if (tags.Length > 0)
+            {
+                items = items.Where(i => tags.Any(t => string.Equals(i.Type, t, StringComparison.OrdinalIgnoreCase) || (i.Taglines != null && i.Taglines.Contains(t, StringComparer.OrdinalIgnoreCase)))).ToList();
+            }
+
+            var officialRatings = request.GetOfficialRatings();
+            if (officialRatings.Length > 0)
+            {
+                items = items.Where(i => officialRatings.Contains(i.OfficialRating, StringComparer.OrdinalIgnoreCase)).ToList();
+            }
+
+            var years = request.GetYears();
+            if (years.Length > 0)
+            {
+                items = items.Where(i => i.ProductionYear.HasValue && years.Contains(i.ProductionYear.Value)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.NameStartsWithOrGreater))
+            {
+                items = items.Where(i => string.Compare(i.SortName, request.NameStartsWithOrGreater, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.NameStartsWith))
+            {
+                items = items.Where(i => (i.SortName ?? i.Name ?? string.Empty).StartsWith(request.NameStartsWith, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.NameLessThan))
+            {
+                items = items.Where(i => string.Compare(i.SortName, request.NameLessThan, StringComparison.OrdinalIgnoreCase) <= 0).ToList();
+            }
+
+            if (request.IsFavorite.HasValue)
+            {
+                items = items.Where(i => i.UserData != null && i.UserData.IsFavorite == request.IsFavorite.Value).ToList();
+            }
+
+            if (request.IsPlayed.HasValue)
+            {
+                items = items.Where(i => i.UserData != null && i.UserData.Played == request.IsPlayed.Value).ToList();
+            }
+
+            foreach (var filter in request.GetFilters())
+            {
+                switch (filter)
+                {
+                    case ItemFilter.IsFavorite:
+                        items = items.Where(i => i.UserData != null && i.UserData.IsFavorite).ToList();
+                        break;
+                    case ItemFilter.IsPlayed:
+                        items = items.Where(i => i.UserData != null && i.UserData.Played).ToList();
+                        break;
+                    case ItemFilter.IsUnplayed:
+                        items = items.Where(i => i.UserData == null || !i.UserData.Played).ToList();
+                        break;
+                    case ItemFilter.IsResumable:
+                        items = items.Where(i => i.UserData != null && i.UserData.PlayedPercentage > 0 && i.UserData.PlayedPercentage < 100).ToList();
+                        break;
+                    case ItemFilter.Likes:
+                        items = items.Where(i => i.UserData != null && i.UserData.Likes == true).ToList();
+                        break;
+                    case ItemFilter.Dislikes:
+                        items = items.Where(i => i.UserData != null && i.UserData.Likes == false).ToList();
+                        break;
+                }
+            }
+
+            if (request.MinCommunityRating.HasValue)
+            {
+                items = items.Where(i => (i.CommunityRating ?? 0) >= request.MinCommunityRating.Value).ToList();
+            }
+
+            if (request.MinCriticRating.HasValue)
+            {
+                items = items.Where(i => (i.CriticRating ?? 0) >= request.MinCriticRating.Value).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.MinPremiereDate))
+            {
+                var minDate = DateTime.Parse(request.MinPremiereDate, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+                items = items.Where(i => i.PremiereDate.HasValue && i.PremiereDate.Value >= minDate).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.MaxPremiereDate))
+            {
+                var maxDate = DateTime.Parse(request.MaxPremiereDate, null, DateTimeStyles.RoundtripKind).ToUniversalTime();
+                items = items.Where(i => i.PremiereDate.HasValue && i.PremiereDate.Value <= maxDate).ToList();
+            }
+
+            // sort
+            var orderBy = request.GetOrderBy();
+            if (orderBy.Length > 0)
+            {
+                items = SortRecordingItems(items, orderBy);
+            }
+
+            // page
+            var startIndex = request.StartIndex ?? 0;
+            if (startIndex > 0)
+            {
+                items = items.Skip(startIndex).ToList();
+            }
+
+            if (request.Limit.HasValue)
+            {
+                items = items.Take(request.Limit.Value).ToList();
+            }
+
+            result.Items = items.ToArray();
+            if (request.EnableTotalRecordCount)
+            {
+                result.TotalRecordCount = items.Count;
+            }
+        }
+
+        private static List<BaseItemDto> SortRecordingItems(List<BaseItemDto> items, ValueTuple<string, MediaBrowser.Model.Entities.SortOrder>[] orderBy)
+        {
+            IOrderedEnumerable<BaseItemDto> ordered = null;
+
+            foreach (var (field, order) in orderBy)
+            {
+                var descending = order == MediaBrowser.Model.Entities.SortOrder.Descending;
+                Func<BaseItemDto, object> keySelector = field switch
+                {
+                    "SortName" => i => i.SortName ?? i.Name ?? string.Empty,
+                    "Name" => i => i.Name ?? string.Empty,
+                    "PremiereDate" => i => i.PremiereDate ?? DateTime.MinValue,
+                    "DateCreated" => i => i.DateCreated ?? DateTime.MinValue,
+                    "ProductionYear" => i => i.ProductionYear ?? 0,
+                    "CommunityRating" => i => i.CommunityRating ?? 0,
+                    "CriticRating" => i => i.CriticRating ?? 0,
+                    "RunTimeTicks" => i => i.RunTimeTicks ?? 0,
+                    "PlayCount" => i => i.UserData?.PlayCount ?? 0,
+                    "DatePlayed" => i => i.UserData?.LastPlayedDate ?? DateTime.MinValue,
+                    _ => i => i.SortName ?? i.Name ?? string.Empty,
+                };
+
+                if (ordered == null)
+                {
+                    ordered = descending ? items.OrderByDescending(keySelector) : items.OrderBy(keySelector);
+                }
+                else
+                {
+                    ordered = descending ? ordered.ThenByDescending(keySelector) : ordered.ThenBy(keySelector);
+                }
+            }
+
+            return ordered?.ToList() ?? items;
         }
 
         public object Get(GetRecordingSeries request)

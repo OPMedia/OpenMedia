@@ -4567,6 +4567,66 @@ namespace Emby.Server.Implementations.Data
                 }
             }
 
+            if (query.AudioCodecs != null && query.AudioCodecs.Length > 0)
+            {
+                var codecClauses = new List<string>();
+                for (var i = 0; i < query.AudioCodecs.Length; i++)
+                {
+                    var paramName = "@AudioCodec" + i;
+                    codecClauses.Add("(select Codec from MediaStreams where MediaStreams.ItemId=A.Guid and MediaStreams.StreamType='Audio' and MediaStreams.Codec=" + paramName + " limit 1) not null");
+                    if (statement != null)
+                    {
+                        statement.TryBind(paramName, query.AudioCodecs[i]);
+                    }
+                }
+                whereClauses.Add("(" + string.Join(" OR ", codecClauses.ToArray()) + ")");
+            }
+
+            if (query.VideoCodecs != null && query.VideoCodecs.Length > 0)
+            {
+                var codecClauses = new List<string>();
+                for (var i = 0; i < query.VideoCodecs.Length; i++)
+                {
+                    var paramName = "@VideoCodec" + i;
+                    codecClauses.Add("(select Codec from MediaStreams where MediaStreams.ItemId=A.Guid and MediaStreams.StreamType='Video' and MediaStreams.Codec=" + paramName + " limit 1) not null");
+                    if (statement != null)
+                    {
+                        statement.TryBind(paramName, query.VideoCodecs[i]);
+                    }
+                }
+                whereClauses.Add("(" + string.Join(" OR ", codecClauses.ToArray()) + ")");
+            }
+
+            if (query.SubtitleCodecs != null && query.SubtitleCodecs.Length > 0)
+            {
+                var codecClauses = new List<string>();
+                for (var i = 0; i < query.SubtitleCodecs.Length; i++)
+                {
+                    var paramName = "@SubtitleCodec" + i;
+                    codecClauses.Add("(select Codec from MediaStreams where MediaStreams.ItemId=A.Guid and MediaStreams.StreamType='Subtitle' and MediaStreams.Codec=" + paramName + " limit 1) not null");
+                    if (statement != null)
+                    {
+                        statement.TryBind(paramName, query.SubtitleCodecs[i]);
+                    }
+                }
+                whereClauses.Add("(" + string.Join(" OR ", codecClauses.ToArray()) + ")");
+            }
+
+            if (query.Containers != null && query.Containers.Length > 0)
+            {
+                var containerClauses = new List<string>();
+                for (var i = 0; i < query.Containers.Length; i++)
+                {
+                    var paramName = "@Container" + i;
+                    containerClauses.Add("A.data like " + paramName);
+                    if (statement != null)
+                    {
+                        statement.TryBind(paramName, "%\"Container\":\"" + query.Containers[i] + "\"%");
+                    }
+                }
+                whereClauses.Add("(" + string.Join(" OR ", containerClauses.ToArray()) + ")");
+            }
+
             if (query.HasChapterImages.HasValue)
             {
                 if (query.HasChapterImages.Value)

@@ -172,6 +172,16 @@ public class InternalItemsQuery
 
 	public bool? IsSeries { get; set; }
 
+	public string ArtistType { get; set; }
+
+	public string[] AudioCodecs { get; set; }
+
+	public string[] Containers { get; set; }
+
+	public string[] SubtitleCodecs { get; set; }
+
+	public string[] VideoCodecs { get; set; }
+
 	public int? MinPlayers { get; set; }
 
 	public int? MaxPlayers { get; set; }
