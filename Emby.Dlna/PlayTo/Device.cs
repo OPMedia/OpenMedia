@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Net;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using Emby.Dlna.Common;
 using Emby.Dlna.Ssdp;
@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using Emby.Dlna.Server;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using MediaBrowser.Model.Extensions;
 
 namespace Emby.Dlna.PlayTo

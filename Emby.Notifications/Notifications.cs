@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Devices;
@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Threading;
+using ITimer = MediaBrowser.Model.Threading.ITimer;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Activity;
 using MediaBrowser.Model.Events;
