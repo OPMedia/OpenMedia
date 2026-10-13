@@ -1,20 +1,24 @@
-﻿using System;
+using MediaBrowser.Model.Logging;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
-using System.Linq;
 
-namespace Emby.Server.Implementations.HttpServer
+namespace Emby.Server.HttpServer.Results
 {
-    public class FileWriter : IHttpResult
+    /// <summary>
+    /// 流范围结果（等价旧 Emby.Server.Implementations.HttpServer.RangeRequestWriter）：视频流拖动。
+    /// </summary>
+    public class RangeRequestWriter : IAsyncStreamWriter, IHttpResult
     {
-        private ILogger Logger { get; set; }
-
+        /// <summary>
+        /// Gets or sets the source stream.
+        /// </summary>
+        private Stream SourceStream { get; set; }
         private string RangeHeader { get; set; }
         private bool IsHeadRequest { get; set; }
 
@@ -24,64 +28,56 @@ namespace Emby.Server.Implementations.HttpServer
         private long TotalContentLength { get; set; }
 
         public Action OnComplete { get; set; }
-        public Action OnError { get; set; }
+        private readonly ILogger _logger;
+
+        private const int BufferSize = 81920;
+
+        private readonly Dictionary<string, string> _options = new Dictionary<string, string>();
+
         private static readonly CultureInfo UsCulture = new CultureInfo("en-US");
+
         public List<Cookie> Cookies { get; private set; }
 
-        public FileShareMode FileShare { get; set; }
-
         /// <summary>
-        /// The _options
+        /// Additional HTTP Headers
         /// </summary>
-        private readonly IDictionary<string, string> _options = new Dictionary<string, string>();
-        /// <summary>
-        /// Gets the options.
-        /// </summary>
-        /// <value>The options.</value>
         public IDictionary<string, string> Headers
         {
             get { return _options; }
         }
 
-        public string Path { get; set; }
-
-        public FileWriter(string path, string contentType, string rangeHeader, ILogger logger, IFileSystem fileSystem)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RangeRequestWriter" /> class.
+        /// </summary>
+        public RangeRequestWriter(string rangeHeader, long contentLength, Stream source, string contentType, bool isHeadRequest, ILogger logger)
         {
             if (string.IsNullOrEmpty(contentType))
             {
                 throw new ArgumentNullException("contentType");
             }
 
-            Path = path;
-            Logger = logger;
             RangeHeader = rangeHeader;
+            SourceStream = source;
+            IsHeadRequest = isHeadRequest;
+            this._logger = logger;
 
+            ContentType = contentType;
             Headers["Content-Type"] = contentType;
-
-            TotalContentLength = fileSystem.GetFileInfo(path).Length;
             Headers["Accept-Ranges"] = "bytes";
+            StatusCode = HttpStatusCode.PartialContent;
 
-            if (string.IsNullOrWhiteSpace(rangeHeader))
-            {
-                Headers["Content-Length"] = TotalContentLength.ToString(UsCulture);
-                StatusCode = HttpStatusCode.OK;
-            }
-            else
-            {
-                StatusCode = HttpStatusCode.PartialContent;
-                SetRangeValues();
-            }
-
-            FileShare = FileShareMode.Read;
             Cookies = new List<Cookie>();
+            SetRangeValues(contentLength);
         }
 
         /// <summary>
         /// Sets the range values.
         /// </summary>
-        private void SetRangeValues()
+        private void SetRangeValues(long contentLength)
         {
             var requestedRange = RequestedRanges[0];
+
+            TotalContentLength = contentLength;
 
             // If the requested range is "0-", we can optimize by just doing a stream copy
             if (!requestedRange.Value.HasValue)
@@ -97,22 +93,20 @@ namespace Emby.Server.Implementations.HttpServer
             RangeLength = 1 + RangeEnd - RangeStart;
 
             // Content-Length is the length of what we're serving, not the original content
-            var lengthString = RangeLength.ToString(UsCulture);
-            Headers["Content-Length"] = lengthString;
-            var rangeString = string.Format("bytes {0}-{1}/{2}", RangeStart, RangeEnd, TotalContentLength);
-            Headers["Content-Range"] = rangeString;
+            Headers["Content-Length"] = RangeLength.ToString(UsCulture);
+            Headers["Content-Range"] = string.Format("bytes {0}-{1}/{2}", RangeStart, RangeEnd, TotalContentLength);
 
-            Logger.Info("Setting range response values for {0}. RangeRequest: {1} Content-Length: {2}, Content-Range: {3}", Path, RangeHeader, lengthString, rangeString);
+            if (RangeStart > 0 && SourceStream.CanSeek)
+            {
+                SourceStream.Position = RangeStart;
+            }
         }
 
-        /// <summary>
-        /// The _requested ranges
-        /// </summary>
         private List<KeyValuePair<long, long?>> _requestedRanges;
+
         /// <summary>
         /// Gets the requested ranges.
         /// </summary>
-        /// <value>The requested ranges.</value>
         protected List<KeyValuePair<long, long?>> RequestedRanges
         {
             get
@@ -135,7 +129,7 @@ namespace Emby.Server.Implementations.HttpServer
                         {
                             start = long.Parse(vals[0], UsCulture);
                         }
-                        if (!string.IsNullOrEmpty(vals[1]))
+                        if (vals.Length > 1 && !string.IsNullOrEmpty(vals[1]))
                         {
                             end = long.Parse(vals[1], UsCulture);
                         }
@@ -148,14 +142,7 @@ namespace Emby.Server.Implementations.HttpServer
             }
         }
 
-        private string[] SkipLogExtensions = new string[] 
-        {
-            ".js",
-            ".html",
-            ".css"
-        };
-
-        public async Task WriteToAsync(IResponse response, CancellationToken cancellationToken)
+        public async Task WriteToAsync(Stream responseStream, CancellationToken cancellationToken)
         {
             try
             {
@@ -165,30 +152,48 @@ namespace Emby.Server.Implementations.HttpServer
                     return;
                 }
 
-                var path = Path;
-
-                if (string.IsNullOrWhiteSpace(RangeHeader) || (RangeStart <= 0 && RangeEnd >= TotalContentLength - 1))
+                using (var source = SourceStream)
                 {
-                    var extension = System.IO.Path.GetExtension(path);
-
-                    if (extension == null || !SkipLogExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+                    // If the requested range is "0-", we can optimize by just doing a stream copy
+                    if (RangeEnd >= TotalContentLength - 1)
                     {
-                        Logger.Debug("Transmit file {0}", path);
+                        await source.CopyToAsync(responseStream, BufferSize).ConfigureAwait(false);
                     }
-
-                    //var count = FileShare == FileShareMode.ReadWrite ? TotalContentLength : 0;
-
-                    await response.TransmitFile(path, 0, 0, FileShare, cancellationToken).ConfigureAwait(false);
-                    return;
+                    else
+                    {
+                        await CopyToInternalAsync(source, responseStream, RangeLength).ConfigureAwait(false);
+                    }
                 }
-
-                await response.TransmitFile(path, RangeStart, RangeLength, FileShare, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
                 if (OnComplete != null)
                 {
                     OnComplete();
+                }
+            }
+        }
+
+        private async Task CopyToInternalAsync(Stream source, Stream destination, long copyLength)
+        {
+            var array = new byte[BufferSize];
+            int bytesRead;
+            while ((bytesRead = await source.ReadAsync(array, 0, array.Length).ConfigureAwait(false)) != 0)
+            {
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+
+                var bytesToCopy = Math.Min(bytesRead, copyLength);
+
+                await destination.WriteAsync(array, 0, Convert.ToInt32(bytesToCopy)).ConfigureAwait(false);
+
+                copyLength -= bytesToCopy;
+
+                if (copyLength <= 0)
+                {
+                    break;
                 }
             }
         }
@@ -208,6 +213,5 @@ namespace Emby.Server.Implementations.HttpServer
         }
 
         public string StatusDescription { get; set; }
-
     }
 }

@@ -15,7 +15,8 @@ using Emby.Server.Implementations.Devices;
 using Emby.Server.Implementations.Diagnostics;
 using Emby.Server.Implementations.Dto;
 using Emby.Server.Implementations.FFMpeg;
-using Emby.Server.Implementations.HttpServer;
+using Emby.Server.HttpServer;
+using Emby.Server.HttpServer.Results;
 using Emby.Server.Implementations.HttpServer.Security;
 using Emby.Server.Implementations.IO;
 using Emby.Server.Implementations.Library;
@@ -904,7 +905,7 @@ namespace Emby.Server.Implementations
             ZipClient = new ZipClient(FileSystemManager);
             RegisterSingleInstance(ZipClient);
 
-            HttpResultFactory = new HttpResultFactory(LogManager, FileSystemManager, JsonSerializer, CreateBrotliCompressor());
+            HttpResultFactory = new KestrelHttpResultFactory(LogManager, FileSystemManager, JsonSerializer, CreateBrotliCompressor());
             RegisterSingleInstance(HttpResultFactory);
 
             RegisterSingleInstance<IServerApplicationHost>(this);
@@ -961,7 +962,7 @@ namespace Emby.Server.Implementations
             CertificateInfo = GetCertificateInfo(true);
             Certificate = GetCertificate(CertificateInfo);
 
-            HttpServer = new HttpListenerHost(this,
+            HttpServer = new KestrelHost(this,
                 LogManager.GetLogger("HttpServer"),
                 ServerConfigurationManager,
                 "web/index.html",
@@ -1157,14 +1158,6 @@ namespace Emby.Server.Implementations
             }
 
             return result;
-        }
-
-        protected virtual bool SupportsDualModeSockets
-        {
-            get
-            {
-                return true;
-            }
         }
 
         private X509Certificate GetCertificate(CertificateInfo info)
@@ -1549,7 +1542,6 @@ namespace Emby.Server.Implementations
             });
         }
 
-        protected abstract IHttpListener CreateHttpListener();
 
         /// <summary>
         /// Starts the server.
@@ -1558,7 +1550,7 @@ namespace Emby.Server.Implementations
         {
             try
             {
-                ((HttpListenerHost)HttpServer).StartServer(GetUrlPrefixes().ToArray(), CreateHttpListener());
+                ((KestrelHost)HttpServer).StartServer(GetUrlPrefixes().ToArray());
                 return;
             }
             catch (Exception ex)
@@ -1579,7 +1571,7 @@ namespace Emby.Server.Implementations
 
             try
             {
-                ((HttpListenerHost)HttpServer).StartServer(GetUrlPrefixes().ToArray(), CreateHttpListener());
+                ((KestrelHost)HttpServer).StartServer(GetUrlPrefixes().ToArray());
             }
             catch (Exception ex)
             {

@@ -10,11 +10,6 @@
 
   <ItemGroup>
     <Compile Include="..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
-    <Compile Include="SocketSharp\RequestMono.cs" />
-    <Compile Include="SocketSharp\SharpWebSocket.cs" />
-    <Compile Include="SocketSharp\WebSocketSharpListener.cs" />
-    <Compile Include="SocketSharp\WebSocketSharpRequest.cs" />
-    <Compile Include="SocketSharp\WebSocketSharpResponse.cs" />
     <Compile Include="ApplicationPathHelper.cs" />
     <Compile Include="ImageEncoderHelper.cs" />
     <Compile Include="AppHost.cs" />
@@ -45,7 +40,6 @@
     <ProjectReference Include="..\MediaBrowser.XbmcMetadata\MediaBrowser.XbmcMetadata.csproj" />
     <ProjectReference Include="..\Mono.Nat\Mono.Nat.csproj" />
     <ProjectReference Include="..\RSSDP\RSSDP.csproj" />
-    <ProjectReference Include="..\SocketHttpListener\SocketHttpListener.csproj" />
   </ItemGroup>
 
   <ItemGroup>

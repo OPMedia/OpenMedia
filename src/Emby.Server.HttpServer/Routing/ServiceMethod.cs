@@ -1,6 +1,7 @@
-﻿using System;
+using System;
+using System.Threading.Tasks;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Routing
 {
     public class ServiceMethod
     {
@@ -14,4 +15,8 @@ namespace Emby.Server.Implementations.Services
             return serviceType.FullName + " " + method.ToUpper() + " " + requestDtoName;
         }
     }
+
+    public delegate Task<object> InstanceExecFn(MediaBrowser.Model.Services.IRequest requestContext, object instance, object request);
+    public delegate object ActionInvokerFn(object instance, object request);
+    public delegate void VoidActionInvokerFn(object instance, object request);
 }

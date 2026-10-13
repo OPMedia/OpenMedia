@@ -5,10 +5,13 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using MediaBrowser.Model.Logging;
-using MediaBrowser.Model.Extensions;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Routing
 {
+    /// <summary>
+    /// REST 路径模板（等价旧 Emby.Server.Implementations.Services.RestPath）：
+    /// literal 段 / {变量} 段 / {变量*} 通配符段 / {a}.{b} 点分子段，FirstMatchHashKey 字典索引。
+    /// </summary>
     public class RestPath
     {
         private const string WildCard = "*";
@@ -18,7 +21,7 @@ namespace Emby.Server.Implementations.Services
         private const char ComponentSeperator = '.';
         private const string VariablePrefix = "{";
 
-        readonly bool[] componentsWithSeparators;
+        private readonly bool[] componentsWithSeparators;
 
         private readonly string restPath;
         public bool IsWildCardPath { get; private set; }
@@ -39,7 +42,7 @@ namespace Emby.Server.Implementations.Services
         public int PathComponentsCount { get; set; }
 
         /// <summary>
-        /// The total number of segments after subparts have been exploded ('.') 
+        /// The total number of segments after subparts have been exploded ('.')
         /// e.g. /path/to/here.ext == 4
         /// </summary>
         public int TotalComponentsCount { get; set; }
@@ -56,7 +59,7 @@ namespace Emby.Server.Implementations.Services
         public string Description { get; private set; }
         public bool IsHidden { get; private set; }
 
-        public int Priority { get; set; } //passed back to RouteAttribute
+        public int Priority { get; set; }
 
         public IEnumerable<string> PathVariables
         {
@@ -109,7 +112,7 @@ namespace Emby.Server.Implementations.Services
             this.Description = description;
             this.restPath = path;
 
-            this.Verbs = string.IsNullOrWhiteSpace(verbs) ? ServiceExecExtensions.AllVerbs : verbs.ToUpper().Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            this.Verbs = string.IsNullOrWhiteSpace(verbs) ? ServiceExecutorExtensions.AllVerbs : verbs.ToUpper().Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
 
             var componentsList = new List<string>();
 
@@ -132,13 +135,13 @@ namespace Emby.Server.Implementations.Services
                 }
             }
 
-            var components = componentsList.ToArray(componentsList.Count);
+            var components = componentsList.ToArray();
             this.TotalComponentsCount = components.Length;
 
             this.literalsToMatch = new string[this.TotalComponentsCount];
             this.variablesNames = new string[this.TotalComponentsCount];
             this.isWildcard = new bool[this.TotalComponentsCount];
-            this.componentsWithSeparators = hasSeparators.ToArray(hasSeparators.Count);
+            this.componentsWithSeparators = hasSeparators.ToArray();
             this.PathComponentsCount = this.componentsWithSeparators.Length;
             string firstLiteralMatch = null;
 
@@ -203,7 +206,6 @@ namespace Emby.Server.Implementations.Services
             "JsonIgnoreAttribute"
         };
 
-
         private static Type excludeType = typeof(Stream);
 
         internal static List<PropertyInfo> GetSerializableProperties(Type type)
@@ -239,7 +241,6 @@ namespace Emby.Server.Implementations.Services
                 }
             }
 
-            // else return those properties that are not decorated with IgnoreDataMember
             return list;
         }
 
@@ -297,7 +298,7 @@ namespace Emby.Server.Implementations.Services
                 if (mi != null && mi.IsStatic) continue;
                 pis.Add(pi);
             }
-            return pis.ToArray(pis.Count);
+            return pis.ToArray();
         }
 
         /// <summary>
@@ -354,25 +355,21 @@ namespace Emby.Server.Implementations.Services
 
             if (withPathInfoParts.Length != this.PathComponentsCount && !this.IsWildCardPath)
             {
-                //logger.Info("withPathInfoParts mismatch for {0} for {1}", httpMethod, string.Join("/", withPathInfoParts));
                 return false;
             }
 
             if (!Verbs.Contains(httpMethod, StringComparer.OrdinalIgnoreCase))
             {
-                //logger.Info("allowsAllVerbs mismatch for {0} for {1} allowedverbs {2}", httpMethod, string.Join("/", withPathInfoParts), this.allowedVerbs);
                 return false;
             }
 
             if (!ExplodeComponents(ref withPathInfoParts))
             {
-                //logger.Info("ExplodeComponents mismatch for {0} for {1}", httpMethod, string.Join("/", withPathInfoParts));
                 return false;
             }
 
             if (this.TotalComponentsCount != withPathInfoParts.Length && !this.IsWildCardPath)
             {
-                //logger.Info("TotalComponentsCount mismatch for {0} for {1}", httpMethod, string.Join("/", withPathInfoParts));
                 return false;
             }
 
@@ -393,7 +390,6 @@ namespace Emby.Server.Implementations.Services
                         // Ensure there are still enough parts left to match the remainder
                         if ((withPathInfoParts.Length - pathIx) < (this.TotalComponentsCount - i - 1))
                         {
-                            //logger.Info("withPathInfoParts length mismatch for {0} for {1}", httpMethod, string.Join("/", withPathInfoParts));
                             return false;
                         }
                     }
@@ -416,7 +412,6 @@ namespace Emby.Server.Implementations.Services
 
                     if (withPathInfoParts.Length <= pathIx || !LiteralsEqual(withPathInfoParts[pathIx], literalToMatch))
                     {
-                        //logger.Info("withPathInfoParts2 length mismatch for {0} for {1}. not equals: {2} != {3}.", httpMethod, string.Join("/", withPathInfoParts), withPathInfoParts[pathIx], literalToMatch);
                         return false;
                     }
                     pathIx++;
@@ -438,7 +433,6 @@ namespace Emby.Server.Implementations.Services
             str1 = str1.ToUpperInvariant();
             str2 = str2.ToUpperInvariant();
 
-            // Invariant IgnoreCase would probably be better but it's not available in PCL
             return String.Equals(str1, str2, StringComparison.CurrentCultureIgnoreCase);
         }
 
@@ -463,7 +457,7 @@ namespace Emby.Server.Implementations.Services
                 }
             }
 
-            withPathInfoParts = totalComponents.ToArray(totalComponents.Count);
+            withPathInfoParts = totalComponents.ToArray();
             return true;
         }
 

@@ -5,8 +5,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Results
 {
+    /// <summary>
+    /// 通用 HTTP 结果（等价旧 Emby.Server.Implementations.Services.HttpResult）。
+    /// </summary>
     public class HttpResult
         : IHttpResult, IAsyncStreamWriter
     {
@@ -57,7 +60,7 @@ namespace Emby.Server.Implementations.Services
                 return;
             }
 
-            await ResponseHelper.WriteObject(this.RequestContext, this.Response, response).ConfigureAwait(false);
+            await RequestResponse.ResponseWriter.WriteObject(this.RequestContext, this.Response, response).ConfigureAwait(false);
         }
     }
 }

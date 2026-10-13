@@ -5,12 +5,16 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Emby.Server.Implementations.HttpServer;
+using Emby.Server.HttpServer.Results;
 using MediaBrowser.Model.Services;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.RequestResponse
 {
-    public static class ResponseHelper
+    /// <summary>
+    /// 结果类型分派写出（等价旧 ResponseHelper.WriteToResponse）：
+    /// null → 204；IHttpResult/IHasHeaders/IAsyncStreamWriter/IStreamWriter/FileWriter/Stream/byte[]/string/DTO。
+    /// </summary>
+    public static class ResponseWriter
     {
         public static Task WriteToResponse(IResponse response, IRequest request, object result, CancellationToken cancellationToken)
         {
@@ -41,11 +45,6 @@ namespace Emby.Server.Implementations.Services
 
                 response.StatusCode = httpResult.Status;
                 response.StatusDescription = httpResult.StatusCode.ToString();
-                //if (string.IsNullOrEmpty(httpResult.ContentType))
-                //{
-                //    httpResult.ContentType = defaultContentType;
-                //}
-                //response.ContentType = httpResult.ContentType;
             }
 
             var responseOptions = result as IHasHeaders;
@@ -139,7 +138,7 @@ namespace Emby.Server.Implementations.Services
         public static async Task WriteObject(IRequest request, object result, IResponse response)
         {
             var contentType = request.ResponseContentType;
-            var serializer = RequestHelper.GetResponseWriter(HttpListenerHost.Instance, contentType);
+            var serializer = GetResponseWriter(contentType);
 
             using (var ms = new MemoryStream())
             {
@@ -156,8 +155,39 @@ namespace Emby.Server.Implementations.Services
                     await ms.CopyToAsync(response.OutputStream).ConfigureAwait(false);
                 }
             }
+        }
 
-            //serializer(result, outputStream);
+        /// <summary>
+        /// 响应序列化器（等价旧 RequestHelper.GetResponseWriter，经 KestrelHost.Instance 取宿主序列化委托）。
+        /// </summary>
+        public static Action<object, Stream> GetResponseWriter(string contentType)
+        {
+            var host = KestrelHost.Instance;
+            if (host == null)
+            {
+                throw new InvalidOperationException("KestrelHost.Instance is not initialized");
+            }
+
+            switch (GetContentTypeWithoutEncoding(contentType))
+            {
+                case "application/xml":
+                case "text/xml":
+                case "text/xml; charset=utf-8": //"text/xml; charset=utf-8" also matches xml
+                    return host.SerializeToXml;
+
+                case "application/json":
+                case "text/json":
+                    return host.SerializeToJson;
+            }
+
+            return host.SerializeToJson;
+        }
+
+        private static string GetContentTypeWithoutEncoding(string contentType)
+        {
+            return contentType == null
+                       ? null
+                       : contentType.Split(';')[0].ToLower().Trim();
         }
     }
 }

@@ -1,38 +1,29 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Routing
 {
     /// <summary>
-    /// Serializer cache of delegates required to create a type from a string map (e.g. for REST urls)
+    /// 序列化缓存委托：从字符串 map 创建/填充类型实例（等价旧 StringMapTypeDeserializer）。
     /// </summary>
     public class StringMapTypeDeserializer
     {
         internal class PropertySerializerEntry
         {
-            public PropertySerializerEntry(Action<object,object> propertySetFn, Func<string, object> propertyParseStringFn)
+            public PropertySerializerEntry(Action<object, object> propertySetFn, Func<string, object> propertyParseStringFn)
             {
                 PropertySetFn = propertySetFn;
                 PropertyParseStringFn = propertyParseStringFn;
             }
 
             public Action<object, object> PropertySetFn;
-            public Func<string,object> PropertyParseStringFn;
+            public Func<string, object> PropertyParseStringFn;
             public Type PropertyType;
         }
 
         private readonly Type type;
         private readonly Dictionary<string, PropertySerializerEntry> propertySetterMap
             = new Dictionary<string, PropertySerializerEntry>(StringComparer.OrdinalIgnoreCase);
-
-        public Func<string, object> GetParseFn(Type propertyType)
-        {
-            if (propertyType == typeof(string))
-                return s => s;
-
-            return _GetParseFn(propertyType);
-        }
 
         private readonly Func<Type, object> _CreateInstanceFn;
         private readonly Func<Type, Func<string, object>> _GetParseFn;
@@ -52,6 +43,14 @@ namespace Emby.Server.Implementations.Services
 
                 propertySetterMap[propertyInfo.Name] = propertySerializer;
             }
+        }
+
+        public Func<string, object> GetParseFn(Type propertyType)
+        {
+            if (propertyType == typeof(string))
+                return s => s;
+
+            return _GetParseFn(propertyType);
         }
 
         public object PopulateFromMap(object instance, IDictionary<string, string> keyValuePairs)
@@ -117,7 +116,7 @@ namespace Emby.Server.Implementations.Services
 
     internal class TypeAccessor
     {
-        public static Action<object, object> GetSetPropertyMethod(Type type, PropertyInfo propertyInfo)
+        public static Action<object, object> GetSetPropertyMethod(Type type, System.Reflection.PropertyInfo propertyInfo)
         {
             if (!propertyInfo.CanWrite || propertyInfo.GetIndexParameters().Length > 0) return null;
 

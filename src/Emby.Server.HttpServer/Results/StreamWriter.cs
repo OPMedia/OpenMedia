@@ -1,17 +1,16 @@
-﻿using MediaBrowser.Model.Logging;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 
-namespace Emby.Server.Implementations.HttpServer
+namespace Emby.Server.HttpServer.Results
 {
     /// <summary>
-    /// Class StreamWriter
+    /// 流/字节结果（等价旧 Emby.Server.Implementations.HttpServer.StreamWriter）。
     /// </summary>
     public class StreamWriter : IAsyncStreamWriter, IHasHeaders
     {
@@ -22,19 +21,12 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Gets or sets the source stream.
         /// </summary>
-        /// <value>The source stream.</value>
         private Stream SourceStream { get; set; }
 
         private byte[] SourceBytes { get; set; }
 
-        /// <summary>
-        /// The _options
-        /// </summary>
         private readonly IDictionary<string, string> _options = new Dictionary<string, string>();
-        /// <summary>
-        /// Gets the options.
-        /// </summary>
-        /// <value>The options.</value>
+
         public IDictionary<string, string> Headers
         {
             get { return _options; }
@@ -46,9 +38,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Initializes a new instance of the <see cref="StreamWriter" /> class.
         /// </summary>
-        /// <param name="source">The source.</param>
-        /// <param name="contentType">Type of the content.</param>
-        /// <param name="logger">The logger.</param>
         public StreamWriter(Stream source, string contentType, ILogger logger)
         {
             if (string.IsNullOrEmpty(contentType))
@@ -70,9 +59,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Initializes a new instance of the <see cref="StreamWriter"/> class.
         /// </summary>
-        /// <param name="source">The source.</param>
-        /// <param name="contentType">Type of the content.</param>
-        /// <param name="logger">The logger.</param>
         public StreamWriter(byte[] source, string contentType, int contentLength, ILogger logger)
         {
             if (string.IsNullOrEmpty(contentType))

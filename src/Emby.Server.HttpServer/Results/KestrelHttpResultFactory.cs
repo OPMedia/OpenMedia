@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
@@ -12,32 +12,27 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
-using Emby.Server.Implementations.Services;
+using Emby.Server.HttpServer.RequestResponse;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Services;
 using IRequest = MediaBrowser.Model.Services.IRequest;
 using MimeTypes = MediaBrowser.Model.Net.MimeTypes;
 
-namespace Emby.Server.Implementations.HttpServer
+namespace Emby.Server.HttpServer.Results
 {
     /// <summary>
-    /// Class HttpResultFactory
+    /// IHttpResultFactory 实现（等价旧 Emby.Server.Implementations.HttpServer.HttpResultFactory）：
+    /// GetResult/GetStaticResult/压缩/缓存头/ETag/304/范围请求。
     /// </summary>
-    public class HttpResultFactory : IHttpResultFactory
+    public class KestrelHttpResultFactory : IHttpResultFactory
     {
-        /// <summary>
-        /// The _logger
-        /// </summary>
         private readonly ILogger _logger;
         private readonly IFileSystem _fileSystem;
         private readonly IJsonSerializer _jsonSerializer;
 
         private IBrotliCompressor _brotliCompressor;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="HttpResultFactory" /> class.
-        /// </summary>
-        public HttpResultFactory(ILogManager logManager, IFileSystem fileSystem, IJsonSerializer jsonSerializer, IBrotliCompressor brotliCompressor)
+        public KestrelHttpResultFactory(ILogManager logManager, IFileSystem fileSystem, IJsonSerializer jsonSerializer, IBrotliCompressor brotliCompressor)
         {
             _fileSystem = fileSystem;
             _jsonSerializer = jsonSerializer;
@@ -45,13 +40,6 @@ namespace Emby.Server.Implementations.HttpServer
             _logger = logManager.GetLogger("HttpResultFactory");
         }
 
-        /// <summary>
-        /// Gets the result.
-        /// </summary>
-        /// <param name="content">The content.</param>
-        /// <param name="contentType">Type of the content.</param>
-        /// <param name="responseHeaders">The response headers.</param>
-        /// <returns>System.Object.</returns>
         public object GetResult(IRequest requestContext, byte[] content, string contentType, IDictionary<string, string> responseHeaders = null)
         {
             return GetHttpResult(requestContext, content, contentType, true, responseHeaders);
@@ -84,9 +72,6 @@ namespace Emby.Server.Implementations.HttpServer
             return result;
         }
 
-        /// <summary>
-        /// Gets the HTTP result.
-        /// </summary>
         private IHasHeaders GetHttpResult(IRequest requestContext, Stream content, string contentType, bool addCachePrevention, IDictionary<string, string> responseHeaders = null)
         {
             var result = new StreamWriter(content, contentType, _logger);
@@ -107,9 +92,6 @@ namespace Emby.Server.Implementations.HttpServer
             return result;
         }
 
-        /// <summary>
-        /// Gets the HTTP result.
-        /// </summary>
         private IHasHeaders GetHttpResult(IRequest requestContext, byte[] content, string contentType, bool addCachePrevention, IDictionary<string, string> responseHeaders = null)
         {
             IHasHeaders result;
@@ -150,9 +132,6 @@ namespace Emby.Server.Implementations.HttpServer
             return result;
         }
 
-        /// <summary>
-        /// Gets the HTTP result.
-        /// </summary>
         private IHasHeaders GetHttpResult(IRequest requestContext, string content, string contentType, bool addCachePrevention, IDictionary<string, string> responseHeaders = null)
         {
             IHasHeaders result;
@@ -195,10 +174,6 @@ namespace Emby.Server.Implementations.HttpServer
             return result;
         }
 
-        /// <summary>
-        /// Gets the optimized result.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
         public object GetResult<T>(IRequest requestContext, T result, IDictionary<string, string> responseHeaders = null)
             where T : class
         {
@@ -248,9 +223,6 @@ namespace Emby.Server.Implementations.HttpServer
 
             if (acceptEncoding != null)
             {
-                //if (_brotliCompressor != null && acceptEncoding.IndexOf("br", StringComparison.OrdinalIgnoreCase) != -1)
-                //    return "br";
-
                 if (acceptEncoding.IndexOf("deflate", StringComparison.OrdinalIgnoreCase) != -1)
                     return "deflate";
 
@@ -261,13 +233,6 @@ namespace Emby.Server.Implementations.HttpServer
             return null;
         }
 
-        /// <summary>
-        /// Returns the optimized result for the IRequestContext. 
-        /// Does not use or store results in any cache.
-        /// </summary>
-        /// <param name="request"></param>
-        /// <param name="dto"></param>
-        /// <returns></returns>
         public object ToOptimizedResult<T>(IRequest request, T dto)
         {
             return ToOptimizedResultInternal(request, dto);
@@ -294,7 +259,7 @@ namespace Emby.Server.Implementations.HttpServer
             var isHeadRequest = string.Equals(request.Verb, "head", StringComparison.OrdinalIgnoreCase);
 
             var ms = new MemoryStream();
-            var writerFn = RequestHelper.GetResponseWriter(HttpListenerHost.Instance, contentType);
+            var writerFn = ResponseWriter.GetResponseWriter(contentType);
 
             writerFn(dto, ms);
 
@@ -364,8 +329,6 @@ namespace Emby.Server.Implementations.HttpServer
 
         private byte[] Deflate(byte[] bytes)
         {
-            // In .NET FX incompat-ville, you can't access compressed bytes without closing DeflateStream
-            // Which means we must use MemoryStream since you have to use ToArray() on a closed Stream
             using (var ms = new MemoryStream())
             using (var zipStream = new DeflateStream(ms, CompressionMode.Compress))
             {
@@ -415,9 +378,6 @@ namespace Emby.Server.Implementations.HttpServer
             }
         }
 
-        /// <summary>
-        /// Pres the process optimized result.
-        /// </summary>
         private object GetCachedResult(IRequest requestContext, IDictionary<string, string> responseHeaders, Guid cacheKey, string cacheKeyString, DateTime? lastDateModified, TimeSpan? cacheDuration, string contentType)
         {
             responseHeaders["ETag"] = string.Format("\"{0}\"", cacheKeyString);
@@ -499,9 +459,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Gets the file stream.
         /// </summary>
-        /// <param name="path">The path.</param>
-        /// <param name="fileShare">The file share.</param>
-        /// <returns>Stream.</returns>
         private Stream GetFileStream(string path, FileShareMode fileShare)
         {
             return _fileSystem.GetFileStream(path, FileOpenMode.Open, FileAccessMode.Read, fileShare);
@@ -547,12 +504,9 @@ namespace Emby.Server.Implementations.HttpServer
                 }
             }
 
-            // TODO: We don't really need the option value
             var isHeadRequest = options.IsHeadRequest || string.Equals(requestContext.Verb, "HEAD", StringComparison.OrdinalIgnoreCase);
             var factoryFn = options.ContentFactory;
             var responseHeaders = options.ResponseHeaders;
-
-            //var requestedCompressionType = GetCompressionType(requestContext);
 
             var rangeHeader = requestContext.Headers.Get("Range");
 
@@ -673,8 +627,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Adds the age header.
         /// </summary>
-        /// <param name="responseHeaders">The responseHeaders.</param>
-        /// <param name="lastDateModified">The last date modified.</param>
         private void AddAgeHeader(IDictionary<string, string> responseHeaders, DateTime? lastDateModified)
         {
             if (lastDateModified.HasValue)
@@ -682,18 +634,12 @@ namespace Emby.Server.Implementations.HttpServer
                 responseHeaders["Age"] = Convert.ToInt64((DateTime.UtcNow - lastDateModified.Value).TotalSeconds).ToString(CultureInfo.InvariantCulture);
             }
         }
+
         /// <summary>
         /// Determines whether [is not modified] [the specified cache key].
         /// </summary>
-        /// <param name="requestContext">The request context.</param>
-        /// <param name="cacheKey">The cache key.</param>
-        /// <param name="lastDateModified">The last date modified.</param>
-        /// <param name="cacheDuration">Duration of the cache.</param>
-        /// <returns><c>true</c> if [is not modified] [the specified cache key]; otherwise, <c>false</c>.</returns>
         private bool IsNotModified(IRequest requestContext, Guid cacheKey, DateTime? lastDateModified, TimeSpan? cacheDuration)
         {
-            //var isNotModified = true;
-
             var ifModifiedSinceHeader = requestContext.Headers.Get("If-Modified-Since");
 
             if (!string.IsNullOrEmpty(ifModifiedSinceHeader))
@@ -735,10 +681,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Determines whether [is not modified] [the specified if modified since].
         /// </summary>
-        /// <param name="ifModifiedSince">If modified since.</param>
-        /// <param name="cacheDuration">Duration of the cache.</param>
-        /// <param name="dateModified">The date modified.</param>
-        /// <returns><c>true</c> if [is not modified] [the specified if modified since]; otherwise, <c>false</c>.</returns>
         private bool IsNotModified(DateTime ifModifiedSince, TimeSpan? cacheDuration, DateTime? dateModified)
         {
             if (dateModified.HasValue)
@@ -762,12 +704,9 @@ namespace Emby.Server.Implementations.HttpServer
             return false;
         }
 
-
         /// <summary>
         /// When the browser sends the IfModifiedDate, it's precision is limited to seconds, so this will account for that
         /// </summary>
-        /// <param name="date">The date.</param>
-        /// <returns>DateTime.</returns>
         private DateTime NormalizeDateForComparison(DateTime date)
         {
             return new DateTime(date.Year, date.Month, date.Day, date.Hour, date.Minute, date.Second, date.Kind);
@@ -776,8 +715,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Adds the response headers.
         /// </summary>
-        /// <param name="hasHeaders">The has options.</param>
-        /// <param name="responseHeaders">The response headers.</param>
         private void AddResponseHeaders(IHasHeaders hasHeaders, IEnumerable<KeyValuePair<string, string>> responseHeaders)
         {
             foreach (var item in responseHeaders)

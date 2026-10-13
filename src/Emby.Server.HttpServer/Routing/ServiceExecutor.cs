@@ -5,11 +5,10 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
-using MediaBrowser.Model.Extensions;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Routing
 {
-    public static class ServiceExecExtensions
+    public static class ServiceExecutorExtensions
     {
         public static string[] AllVerbs = new[] {
             "OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT", // RFC 2616
@@ -24,7 +23,7 @@ namespace Emby.Server.Implementations.Services
             "POLL",  "SUBSCRIBE", "UNSUBSCRIBE"
         };
 
-        public static HashSet<string> AllVerbsSet = new HashSet<string>(AllVerbs);
+        public static HashSet<string> AllVerbsSet = new HashSet<string>(AllVerbs, StringComparer.OrdinalIgnoreCase);
 
         public static List<MethodInfo> GetActions(this Type serviceType)
         {
@@ -56,9 +55,13 @@ namespace Emby.Server.Implementations.Services
         }
     }
 
-    internal static class ServiceExecGeneral
+    /// <summary>
+    /// 服务方法执行器（等价旧 ServiceExecGeneral）：Verb → Get/Post/Put/Delete/Any 方法调用，
+    /// 表达式编译强类型委托，Task 返回值解包。
+    /// </summary>
+    public static class ServiceExecutor
     {
-        private static Dictionary<string, ServiceMethod> execMap = new Dictionary<string, ServiceMethod>();
+        private static readonly Dictionary<string, ServiceMethod> execMap = new Dictionary<string, ServiceMethod>();
 
         public static void CreateServiceRunnersFor(Type requestType, List<ServiceMethod> actions)
         {
@@ -75,7 +78,7 @@ namespace Emby.Server.Implementations.Services
             var actionName = request.Verb ?? "POST";
 
             ServiceMethod actionContext;
-            if (ServiceExecGeneral.execMap.TryGetValue(ServiceMethod.Key(serviceType, actionName, requestName), out actionContext))
+            if (execMap.TryGetValue(ServiceMethod.Key(serviceType, actionName, requestName), out actionContext))
             {
                 if (actionContext.RequestFilters != null)
                 {
@@ -131,7 +134,7 @@ namespace Emby.Server.Implementations.Services
                 var result = resultProperty.GetValue(task);
 
                 // hack alert
-                if (result.GetType().Name.IndexOf("voidtaskresult", StringComparison.OrdinalIgnoreCase) != -1)
+                if (result != null && result.GetType().Name.IndexOf("voidtaskresult", StringComparison.OrdinalIgnoreCase) != -1)
                 {
                     return null;
                 }
@@ -165,7 +168,7 @@ namespace Emby.Server.Implementations.Services
                 }
                 catch
                 {
-                    //Potential problems with MONO, using reflection for fallback
+                    //Potential problems with expression compilation, using reflection for fallback
                     actionCtx.ServiceAction = (service, request) =>
                                               mi.Invoke(service, new[] { request });
                 }
@@ -181,7 +184,7 @@ namespace Emby.Server.Implementations.Services
                 }
 
                 if (reqFilters.Count > 0)
-                    actionCtx.RequestFilters = reqFilters.OrderBy(i => i.Priority).ToArray(reqFilters.Count);
+                    actionCtx.RequestFilters = reqFilters.OrderBy(i => i.Priority).ToArray();
 
                 actions.Add(actionCtx);
             }
@@ -218,6 +221,32 @@ namespace Emby.Server.Implementations.Services
                     return null;
                 };
             }
+        }
+    }
+
+    /// <summary>
+    /// 类型名辅助（等价旧 UrlExtensions.GetMethodName）。
+    /// </summary>
+    public static class UrlExtensions
+    {
+        public static string GetMethodName(this Type type)
+        {
+            var typeName = type.FullName != null //can be null, e.g. generic types
+                ? LeftPart(type.FullName, "[[")   //Generic Fullname
+                    .Replace(type.Namespace + ".", "") //Trim Namespaces
+                    .Replace("+", ".") //Convert nested into normal type
+                : type.Name;
+
+            return type.IsGenericParameter ? "'" + typeName : typeName;
+        }
+
+        private static string LeftPart(string strVal, string needle)
+        {
+            if (strVal == null) return null;
+            var pos = strVal.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+            return pos == -1
+                ? strVal
+                : strVal.Substring(0, pos);
         }
     }
 }

@@ -1,11 +1,14 @@
-﻿using MediaBrowser.Model.Logging;
 using System;
 using System.Globalization;
 using System.Text;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 
-namespace Emby.Server.Implementations.HttpServer
+namespace Emby.Server.HttpServer.RequestResponse
 {
+    /// <summary>
+    /// 响应过滤器（等价旧 ResponseFilter）：CORS 头、Server 头、Content-Length、异常错误码头。
+    /// </summary>
     public class ResponseFilter
     {
         private static readonly CultureInfo UsCulture = new CultureInfo("en-US");
@@ -19,13 +22,8 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Filters the response.
         /// </summary>
-        /// <param name="req">The req.</param>
-        /// <param name="res">The res.</param>
-        /// <param name="dto">The dto.</param>
         public void FilterResponse(IRequest req, IResponse res, object dto)
         {
-            // Try to prevent compatibility view
-            //res.AddHeader("X-UA-Compatible", "IE=Edge");
             res.AddHeader("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Cache-Control, Content-Disposition, Content-Encoding, Content-Language, Content-Length, Content-MD5, Content-Range, Content-Type, Date, Host, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, Origin, OriginToken, Pragma, Range, Slug, Transfer-Encoding, Want-Digest, X-MediaBrowser-Token, X-Emby-Authorization");
             res.AddHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
             res.AddHeader("Access-Control-Allow-Origin", "*");
@@ -52,10 +50,9 @@ namespace Emby.Server.Implementations.HttpServer
                 if (!hasHeaders.Headers.ContainsKey("Server"))
                 {
                     hasHeaders.Headers["Server"] = "Microsoft-NetCore/2.0, UPnP/1.0 DLNADOC/1.50";
-                    //hasHeaders.Headers["Server"] = "Mono-HTTPAPI/1.1";
                 }
 
-                // Content length has to be explicitly set on on HttpListenerResponse or it won't be happy
+                // Content length has to be explicitly set on on the response or it won't be happy
                 string contentLength;
 
                 if (hasHeaders.Headers.TryGetValue("Content-Length", out contentLength) && !string.IsNullOrEmpty(contentLength))
@@ -65,30 +62,15 @@ namespace Emby.Server.Implementations.HttpServer
                     if (length > 0)
                     {
                         res.SetContentLength(length);
-
-                        //var listenerResponse = res.OriginalResponse as HttpListenerResponse;
-
-                        //if (listenerResponse != null)
-                        //{
-                        //    // Disable chunked encoding. Technically this is only needed when using Content-Range, but
-                        //    // anytime we know the content length there's no need for it
-                        //    listenerResponse.SendChunked = false;
-                        //    return;
-                        //}
-
                         res.SendChunked = false;
                     }
                 }
             }
-
-            //res.KeepAlive = false;
         }
 
         /// <summary>
         /// Removes the control characters.
         /// </summary>
-        /// <param name="inString">The in string.</param>
-        /// <returns>System.String.</returns>
         public static string RemoveControlCharacters(string inString)
         {
             if (inString == null) return null;

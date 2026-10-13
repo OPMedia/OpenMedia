@@ -1,36 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
-using System.Threading;
 using System.Threading.Tasks;
-using Emby.Server.Implementations.HttpServer;
-using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Services;
 
-namespace Emby.Server.Implementations.Services
+namespace Emby.Server.HttpServer.Routing
 {
-    public class ServiceHandler
+    /// <summary>
+    /// DTO 绑定器（等价旧 ServiceHandler 的 CreateRequest / GetFlattenedRequestParams / GetSanitizedPathInfo）：
+    /// path 变量 + query + form + body(JSON/XML) → request DTO，优先级 path &lt; query &lt; form。
+    /// </summary>
+    public static class DtoBinder
     {
-        protected static Task<object> CreateContentTypeRequest(HttpListenerHost host, IRequest httpReq, Type requestType, string contentType)
-        {
-            if (!string.IsNullOrEmpty(contentType) && httpReq.ContentLength > 0)
-            {
-                var deserializer = RequestHelper.GetRequestReader(host, contentType);
-                if (deserializer != null)
-                {
-                    return deserializer(requestType, httpReq.InputStream);
-                }
-            }
-            return Task.FromResult(host.CreateInstance(requestType)); 
-        }
-
-        public static RestPath FindMatchingRestPath(string httpMethod, string pathInfo, ILogger logger, out string contentType)
-        {
-            pathInfo = GetSanitizedPathInfo(pathInfo, out contentType);
-
-            return ServiceController.Instance.GetRestPathForRequest(httpMethod, pathInfo, logger);
-        }
-
         public static string GetSanitizedPathInfo(string pathInfo, out string contentType)
         {
             contentType = null;
@@ -58,81 +40,73 @@ namespace Emby.Server.Implementations.Services
             return null;
         }
 
-        public RestPath GetRestPath(string httpMethod, string pathInfo)
+        public static bool RequiresRequestStream(Type requestType)
         {
-            if (this.RestPath == null)
-            {
-                string contentType;
-                this.RestPath = FindMatchingRestPath(httpMethod, pathInfo, new NullLogger(), out contentType);
-
-                if (contentType != null)
-                    ResponseContentType = contentType;
-            }
-            return this.RestPath;
+            var requiresRequestStreamTypeInfo = typeof(IRequiresRequestStream).GetTypeInfo();
+            return requiresRequestStreamTypeInfo.IsAssignableFrom(requestType.GetTypeInfo());
         }
 
-        public RestPath RestPath { get; set; }
-
-        // Set from SSHHF.GetHandlerForPathInfo()
-        public string ResponseContentType { get; set; }
-
-        public async Task ProcessRequestAsync(HttpListenerHost appHost, IRequest httpReq, IResponse httpRes, ILogger logger, string operationName, CancellationToken cancellationToken)
-        {
-            var restPath = GetRestPath(httpReq.Verb, httpReq.PathInfo);
-            if (restPath == null)
-            {
-                throw new NotSupportedException("No RestPath found for: " + httpReq.Verb + " " + httpReq.PathInfo);
-            }
-
-            SetRoute(httpReq, restPath);
-
-            if (ResponseContentType != null)
-                httpReq.ResponseContentType = ResponseContentType;
-
-            var request = httpReq.Dto = await CreateRequest(appHost, httpReq, restPath, logger).ConfigureAwait(false);
-
-            appHost.ApplyRequestFilters(httpReq, httpRes, request);
-
-            var response = await appHost.ServiceController.Execute(appHost, request, httpReq).ConfigureAwait(false);
-
-            // Apply response filters
-            foreach (var responseFilter in appHost.ResponseFilters)
-            {
-                responseFilter(httpReq, httpRes, response);
-            }
-
-            await ResponseHelper.WriteToResponse(httpRes, httpReq, response, cancellationToken).ConfigureAwait(false);
-        }
-
-        public static async Task<object> CreateRequest(HttpListenerHost host, IRequest httpReq, RestPath restPath, ILogger logger)
+        /// <summary>
+        /// 创建并填充 request DTO（等价旧 ServiceHandler.CreateRequest）。
+        /// </summary>
+        public static async Task<object> CreateRequest(
+            Func<Type, object> createInstanceFn,
+            Func<Type, Stream, Task<object>> deserializeJsonFn,
+            Func<Type, Stream, Task<object>> deserializeXmlFn,
+            IRequest httpReq,
+            RestPath restPath)
         {
             var requestType = restPath.RequestType;
 
-            if (RequireqRequestStream(requestType))
+            if (RequiresRequestStream(requestType))
             {
                 // Used by IRequiresRequestStream
                 var requestParams = await GetRequestParams(httpReq).ConfigureAwait(false);
-                var request = ServiceHandler.CreateRequest(httpReq, restPath, requestParams, host.CreateInstance(requestType));
+                var request = restPath.CreateRequest(httpReq.PathInfo, requestParams, createInstanceFn(requestType));
 
                 var rawReq = (IRequiresRequestStream)request;
                 rawReq.RequestStream = httpReq.InputStream;
-                return rawReq;
+                return request;
             }
             else
             {
                 var requestParams = await GetFlattenedRequestParams(httpReq).ConfigureAwait(false);
 
-                var requestDto = await CreateContentTypeRequest(host, httpReq, restPath.RequestType, httpReq.ContentType).ConfigureAwait(false);
+                var requestDto = await CreateContentTypeRequest(createInstanceFn, deserializeJsonFn, deserializeXmlFn, httpReq, restPath.RequestType, httpReq.ContentType).ConfigureAwait(false);
 
                 return CreateRequest(httpReq, restPath, requestParams, requestDto);
             }
         }
 
-        public static bool RequireqRequestStream(Type requestType)
+        private static async Task<object> CreateContentTypeRequest(
+            Func<Type, object> createInstanceFn,
+            Func<Type, Stream, Task<object>> deserializeJsonFn,
+            Func<Type, Stream, Task<object>> deserializeXmlFn,
+            IRequest httpReq,
+            Type requestType,
+            string contentType)
         {
-            var requiresRequestStreamTypeInfo = typeof(IRequiresRequestStream).GetTypeInfo();
+            if (!string.IsNullOrEmpty(contentType) && httpReq.ContentLength > 0)
+            {
+                var realContentType = GetRealContentType(contentType);
+                switch (realContentType)
+                {
+                    case "application/xml":
+                    case "text/xml":
+                        return await deserializeXmlFn(requestType, httpReq.InputStream).ConfigureAwait(false);
+                    case "application/json":
+                    case "text/json":
+                        return await deserializeJsonFn(requestType, httpReq.InputStream).ConfigureAwait(false);
+                }
+            }
+            return createInstanceFn(requestType);
+        }
 
-            return requiresRequestStreamTypeInfo.IsAssignableFrom(requestType.GetTypeInfo());
+        public static string GetRealContentType(string contentType)
+        {
+            return contentType == null
+                       ? null
+                       : contentType.Split(';')[0].ToLower().Trim();
         }
 
         public static object CreateRequest(IRequest httpReq, RestPath restPath, Dictionary<string, string> requestParams, object requestDto)
@@ -154,7 +128,7 @@ namespace Emby.Server.Implementations.Services
 
             foreach (var name in request.QueryString.Keys)
             {
-                if (name == null) continue; //thank you ASP.NET
+                if (name == null) continue;
 
                 var values = request.QueryString.GetValues(name);
                 if (values.Count == 1)
@@ -177,7 +151,7 @@ namespace Emby.Server.Implementations.Services
                 {
                     foreach (var name in formData.Keys)
                     {
-                        if (name == null) continue; //thank you ASP.NET
+                        if (name == null) continue;
 
                         var values = formData.GetValues(name);
                         if (values.Count == 1)
@@ -212,7 +186,7 @@ namespace Emby.Server.Implementations.Services
 
             foreach (var name in request.QueryString.Keys)
             {
-                if (name == null) continue; //thank you ASP.NET
+                if (name == null) continue;
                 map[name] = request.QueryString[name];
             }
 
@@ -223,7 +197,7 @@ namespace Emby.Server.Implementations.Services
                 {
                     foreach (var name in formData.Keys)
                     {
-                        if (name == null) continue; //thank you ASP.NET
+                        if (name == null) continue;
                         map[name] = formData[name];
                     }
                 }
@@ -231,18 +205,5 @@ namespace Emby.Server.Implementations.Services
 
             return map;
         }
-
-        private static void SetRoute(IRequest req, RestPath route)
-        {
-            req.Items["__route"] = route;
-        }
-
-        private static RestPath GetRoute(IRequest req)
-        {
-            object route;
-            req.Items.TryGetValue("__route", out route);
-            return route as RestPath;
-        }
     }
-
 }

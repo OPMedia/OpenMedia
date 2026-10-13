@@ -5,7 +5,6 @@ using Emby.Server.Implementations;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.System;
-using Emby.Server.Implementations.HttpServer;
 
 namespace MediaBrowser.Server.Mono
 {
@@ -41,28 +40,6 @@ namespace MediaBrowser.Server.Mono
         protected override void ShutdownInternal()
         {
             MainClass.Shutdown();
-        }
-
-        protected override bool SupportsDualModeSockets
-        {
-            get
-            {
-                return true;
-            }
-        }
-
-        protected override IHttpListener CreateHttpListener()
-        {
-            return new EmbyServer.SocketSharp.WebSocketSharpListener(LogManager.GetLogger("HttpServer"),
-                Certificate,
-                StreamHelper,
-                TextEncoding,
-                NetworkManager,
-                SocketFactory,
-                CryptographyProvider,
-                SupportsDualModeSockets,
-                FileSystemManager,
-                EnvironmentInfo);
         }
     }
 }

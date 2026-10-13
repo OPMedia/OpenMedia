@@ -16,6 +16,7 @@
     <ProjectReference Include="..\src\Emby.Naming\Emby.Naming.csproj" />
     <ProjectReference Include="..\src\Emby.XmlTv\Emby.XmlTv.csproj" />
     <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />
+    <ProjectReference Include="..\src\Emby.Server.HttpServer\Emby.Server.HttpServer.csproj" />
     <ProjectReference Include="..\Emby.Dlna\Emby.Dlna.csproj" />
     <ProjectReference Include="..\Emby.Drawing\Emby.Drawing.csproj" />
     <ProjectReference Include="..\Emby.Notifications\Emby.Notifications.csproj" />

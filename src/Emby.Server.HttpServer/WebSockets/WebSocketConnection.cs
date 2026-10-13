@@ -1,84 +1,46 @@
-﻿using System.Text;
+using System.Text;
 using MediaBrowser.Common.Events;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Serialization;
 using System;
+using System.Net.WebSockets;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
 using MediaBrowser.Model.Text;
-using System.Net.WebSockets;
-using Emby.Server.Implementations.Net;
 
-namespace Emby.Server.Implementations.HttpServer
+namespace Emby.Server.HttpServer.WebSockets
 {
     /// <summary>
-    /// Class WebSocketConnection
+    /// WebSocket 连接（等价旧 Emby.Server.Implementations.HttpServer.WebSocketConnection）：
+    /// JSON 文本消息协议 WebSocketMessage&lt;T&gt;，编码检测，OnReceive 分发。
     /// </summary>
     public class WebSocketConnection : IWebSocketConnection
     {
         public event EventHandler<EventArgs> Closed;
 
-        /// <summary>
-        /// The _socket
-        /// </summary>
         private readonly IWebSocket _socket;
 
-        /// <summary>
-        /// The _remote end point
-        /// </summary>
         public string RemoteEndPoint { get; private set; }
 
-        /// <summary>
-        /// The logger
-        /// </summary>
         private readonly ILogger _logger;
 
-        /// <summary>
-        /// The _json serializer
-        /// </summary>
         private readonly IJsonSerializer _jsonSerializer;
 
-        /// <summary>
-        /// Gets or sets the receive action.
-        /// </summary>
-        /// <value>The receive action.</value>
         public Func<WebSocketMessageInfo, Task> OnReceive { get; set; }
 
-        /// <summary>
-        /// Gets the last activity date.
-        /// </summary>
-        /// <value>The last activity date.</value>
         public DateTime LastActivityDate { get; private set; }
 
-        /// <summary>
-        /// Gets the id.
-        /// </summary>
-        /// <value>The id.</value>
         public Guid Id { get; private set; }
 
-        /// <summary>
-        /// Gets or sets the URL.
-        /// </summary>
-        /// <value>The URL.</value>
         public string Url { get; set; }
-        /// <summary>
-        /// Gets or sets the query string.
-        /// </summary>
-        /// <value>The query string.</value>
+
         public QueryParamCollection QueryString { get; set; }
+
         private readonly ITextEncoding _textEncoding;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="WebSocketConnection" /> class.
-        /// </summary>
-        /// <param name="socket">The socket.</param>
-        /// <param name="remoteEndPoint">The remote end point.</param>
-        /// <param name="jsonSerializer">The json serializer.</param>
-        /// <param name="logger">The logger.</param>
-        /// <exception cref="System.ArgumentNullException">socket</exception>
         public WebSocketConnection(IWebSocket socket, string remoteEndPoint, IJsonSerializer jsonSerializer, ILogger logger, ITextEncoding textEncoding)
         {
             if (socket == null)
@@ -103,12 +65,6 @@ namespace Emby.Server.Implementations.HttpServer
             _socket = socket;
             _socket.OnReceiveBytes = OnReceiveInternal;
 
-            var memorySocket = socket as IMemoryWebSocket;
-            if (memorySocket != null)
-            {
-                memorySocket.OnReceiveMemoryBytes = OnReceiveInternal;
-            }
-
             RemoteEndPoint = remoteEndPoint;
             _logger = logger;
             _textEncoding = textEncoding;
@@ -124,7 +80,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Called when [receive].
         /// </summary>
-        /// <param name="bytes">The bytes.</param>
         private void OnReceiveInternal(byte[] bytes)
         {
             LastActivityDate = DateTime.UtcNow;
@@ -134,7 +89,15 @@ namespace Emby.Server.Implementations.HttpServer
                 return;
             }
 
-            var charset = _textEncoding.GetDetectedEncodingName(bytes, bytes.Length, null, false);
+            string charset;
+            try
+            {
+                charset = _textEncoding.GetDetectedEncodingName(bytes, bytes.Length, null, false);
+            }
+            catch
+            {
+                charset = null;
+            }
 
             if (string.Equals(charset, "utf-8", StringComparison.OrdinalIgnoreCase))
             {
@@ -149,30 +112,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Called when [receive].
         /// </summary>
-        /// <param name="bytes">The bytes.</param>
-        private void OnReceiveInternal(Memory<byte> memory, int length)
-        {
-            LastActivityDate = DateTime.UtcNow;
-
-            if (OnReceive == null)
-            {
-                return;
-            }
-
-            var bytes = memory.Slice(0, length).ToArray();
-
-            var charset = _textEncoding.GetDetectedEncodingName(bytes, bytes.Length, null, false);
-
-            if (string.Equals(charset, "utf-8", StringComparison.OrdinalIgnoreCase))
-            {
-                OnReceiveInternal(Encoding.UTF8.GetString(bytes, 0, bytes.Length));
-            }
-            else
-            {
-                OnReceiveInternal(_textEncoding.GetASCIIEncoding().GetString(bytes, 0, bytes.Length));
-            }
-        }
-
         private void OnReceiveInternal(string message)
         {
             LastActivityDate = DateTime.UtcNow;
@@ -180,7 +119,6 @@ namespace Emby.Server.Implementations.HttpServer
             if (!message.StartsWith("{", StringComparison.OrdinalIgnoreCase))
             {
                 // This info is useful sometimes but also clogs up the log
-                //_logger.Error("Received web socket message that is not a json structure: " + message);
                 return;
             }
 
@@ -211,11 +149,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Sends a message asynchronously.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="message">The message.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
-        /// <exception cref="System.ArgumentNullException">message</exception>
         public Task SendAsync<T>(WebSocketMessage<T> message, CancellationToken cancellationToken)
         {
             if (message == null)
@@ -231,9 +164,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Sends a message asynchronously.
         /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
         public Task SendAsync(byte[] buffer, CancellationToken cancellationToken)
         {
             if (buffer == null)
@@ -261,7 +191,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Gets the state.
         /// </summary>
-        /// <value>The state.</value>
         public WebSocketState State
         {
             get { return _socket.State; }
@@ -278,7 +207,6 @@ namespace Emby.Server.Implementations.HttpServer
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.
         /// </summary>
-        /// <param name="dispose"><c>true</c> to release both managed and unmanaged resources; <c>false</c> to release only unmanaged resources.</param>
         protected virtual void Dispose(bool dispose)
         {
             if (dispose)
