@@ -231,7 +231,7 @@ namespace Emby.Server.PgData
                     return null;
                 }
 
-                var id = (long)result;
+                var id = Convert.ToInt64(result);
                 _guidToIdMap[guid] = id;
                 return id;
             }
@@ -733,7 +733,7 @@ namespace Emby.Server.PgData
                         : DBNull.Value
                 });
 
-                var id = (long)cmd.ExecuteScalar();
+                var id = Convert.ToInt64(cmd.ExecuteScalar());
                 _guidToIdMap[item.Id] = id;
             }
         }
@@ -782,7 +782,7 @@ namespace Emby.Server.PgData
                 connection, transaction))
             {
                 cmd.Parameters.Add(new NpgsqlParameter("user_data_key", NpgsqlDbType.Text) { Value = key });
-                return (int)cmd.ExecuteScalar();
+                return Convert.ToInt32(cmd.ExecuteScalar());
             }
         }
 
@@ -809,7 +809,7 @@ namespace Emby.Server.PgData
                     var result = cmd.ExecuteScalar();
                     if (result != null && result != DBNull.Value)
                     {
-                        internalId = (long)result;
+                        internalId = Convert.ToInt64(result);
                     }
                 }
 

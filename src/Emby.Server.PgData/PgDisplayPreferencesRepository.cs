@@ -242,7 +242,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId });
 
                 var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (int?)null : (int)result;
+                return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
             }
         }
 
@@ -253,7 +253,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId });
 
                 var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (int?)null : (int)result;
+                return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
             }
         }
     }

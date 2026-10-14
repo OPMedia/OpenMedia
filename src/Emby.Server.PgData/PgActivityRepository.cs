@@ -278,7 +278,7 @@ namespace Emby.Server.PgData
                 connection, transaction))
             {
                 cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = name ?? string.Empty });
-                return (int)cmd.ExecuteScalar();
+                return Convert.ToInt32(cmd.ExecuteScalar());
             }
         }
 
@@ -301,7 +301,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
 
                 var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (long?)null : (long)result;
+                return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
             }
         }
 
@@ -322,7 +322,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId });
 
                 var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (int?)null : (int)result;
+                return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
             }
         }
     }

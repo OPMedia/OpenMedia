@@ -150,7 +150,7 @@ namespace Emby.Server.PgData
                 connection, transaction))
             {
                 cmd.Parameters.Add(new NpgsqlParameter("user_data_key", NpgsqlDbType.Text) { Value = key });
-                return (int)cmd.ExecuteScalar();
+                return Convert.ToInt32(cmd.ExecuteScalar());
             }
         }
 
@@ -163,7 +163,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("user_data_key", NpgsqlDbType.Text) { Value = key });
 
                 var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (int?)null : (int)result;
+                return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
             }
         }
 

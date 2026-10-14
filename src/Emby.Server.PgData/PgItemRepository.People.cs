@@ -371,7 +371,7 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("sort_name", NpgsqlDbType.Text) { Value = (object)name ?? DBNull.Value });
                 cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Text) { Value = (object)GetPathToSave(GetPersonPath(name)) ?? DBNull.Value });
 
-                var id = (long)cmd.ExecuteScalar();
+                var id = Convert.ToInt64(cmd.ExecuteScalar());
                 _guidToIdMap[guid] = id;
                 return id;
             }
