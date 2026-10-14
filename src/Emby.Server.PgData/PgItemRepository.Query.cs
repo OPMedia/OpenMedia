@@ -35,54 +35,58 @@ namespace Emby.Server.PgData
         // 类型短名 → 完整类型名映射（旧 GetTypeMapDictionary）
         // ===========================================================
 
-        private static readonly string[] KnownTypeNames =
+        private static readonly Type[] KnownTypes =
         {
-            typeof(LiveTvProgram).Name,
-            typeof(LiveTvChannel).Name,
-            typeof(Series).Name,
-            typeof(Audio).Name,
-            typeof(MusicAlbum).Name,
-            typeof(MusicArtist).Name,
-            typeof(MusicGenre).Name,
-            typeof(MusicVideo).Name,
-            typeof(Movie).Name,
-            typeof(Playlist).Name,
-            typeof(AudioBook).Name,
-            typeof(Trailer).Name,
-            typeof(BoxSet).Name,
-            typeof(Episode).Name,
-            typeof(Season).Name,
-            typeof(Book).Name,
-            typeof(CollectionFolder).Name,
-            typeof(Folder).Name,
-            typeof(MediaBrowser.Controller.Entities.Game).Name,
-            typeof(GameGenre).Name,
-            typeof(GameSystem).Name,
-            typeof(Genre).Name,
-            typeof(Person).Name,
-            typeof(Photo).Name,
-            typeof(PhotoAlbum).Name,
-            typeof(Studio).Name,
-            typeof(UserRootFolder).Name,
-            typeof(UserView).Name,
-            typeof(Video).Name,
-            typeof(Year).Name,
-            typeof(Channel).Name,
-            typeof(AggregateFolder).Name
+            typeof(LiveTvProgram),
+            typeof(LiveTvChannel),
+            typeof(Series),
+            typeof(Audio),
+            typeof(MusicAlbum),
+            typeof(MusicArtist),
+            typeof(MusicGenre),
+            typeof(MusicVideo),
+            typeof(Movie),
+            typeof(Playlist),
+            typeof(AudioBook),
+            typeof(Trailer),
+            typeof(BoxSet),
+            typeof(Episode),
+            typeof(Season),
+            typeof(Book),
+            typeof(CollectionFolder),
+            typeof(Folder),
+            typeof(MediaBrowser.Controller.Entities.Game),
+            typeof(GameGenre),
+            typeof(GameSystem),
+            typeof(Genre),
+            typeof(Person),
+            typeof(Photo),
+            typeof(PhotoAlbum),
+            typeof(Studio),
+            typeof(UserRootFolder),
+            typeof(UserView),
+            typeof(Video),
+            typeof(Year),
+            typeof(Channel),
+            typeof(AggregateFolder)
         };
 
         private static Dictionary<string, string[]> GetTypeMapDictionary()
         {
             var dict = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var t in KnownTypeNames)
+            // 短名 → FullName：AddTypeFilter/BuildTypeCodeClause 以 FullName 查
+            // TypeFullNameToCode 得分区码（A.type IN），未命中才退回 type_name 匹配
+            // （type_name 列存 FullName）。旧实现短名→短名恒等映射，导致已登记类型
+            // 全部落入 type_name IN ('Series') 短名分支，与全名列值永不匹配。
+            foreach (var t in KnownTypes)
             {
-                dict[t] = new[] { t };
+                dict[t.Name] = new[] { t.FullName };
             }
 
             // 旧别名
-            dict["Program"] = new[] { typeof(LiveTvProgram).Name };
-            dict["TvChannel"] = new[] { typeof(LiveTvChannel).Name };
+            dict["Program"] = new[] { typeof(LiveTvProgram).FullName };
+            dict["TvChannel"] = new[] { typeof(LiveTvChannel).FullName };
 
             return dict;
         }
