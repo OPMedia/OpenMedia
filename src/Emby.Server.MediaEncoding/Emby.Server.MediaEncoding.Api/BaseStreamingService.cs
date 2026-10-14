@@ -258,6 +258,12 @@ public abstract class BaseStreamingService : BaseApiService
 		process.Exited -= onExited;
 		if (hasProcessExited && !processStarted)
 		{
+			// BUG-23：短视频（如 8s 素材 remux ~90ms 完成）可能在 50ms 轮询窗口内跑完退出，
+			// 但输出文件已真实落盘——退出后补一次文件检查，避免误判"启动失败"。
+			processStarted = ValidateProcessStarted(state, outputPath);
+		}
+		if (hasProcessExited && !processStarted)
+		{
 			try
 			{
 				((IDisposable)process).Dispose();
@@ -276,10 +282,22 @@ public abstract class BaseStreamingService : BaseApiService
 		Logger.Info("ffmpeg successfully started", Array.Empty<object>());
 		TranscodingJob transcodingJob = ApiEntryPoint.Instance.OnTranscodeBeginning(outputPath, state.Request.PlaySessionId, ((EncodingJobInfo)state).MediaSource.LiveStreamId, transcodingId, TranscodingJobType, process, ((BaseEncodingJobOptions)state.Request).DeviceId, state, cancellationTokenSource);
 		state.TranscodingJob = transcodingJob;
+		bool exitHandled = false;
 		process.Exited += (object sender, EventArgs args) =>
 		{
-			OnFfMpegProcessExited(process, transcodingJob, state);
+			if (!exitHandled)
+			{
+				exitHandled = true;
+				OnFfMpegProcessExited(process, transcodingJob, state);
+			}
 		};
+		if (hasProcessExited && !exitHandled)
+		{
+			// BUG-23 后半：进程在挂接 Exited 前已退出时事件不会补发，
+			// 直接执行退出处理（置 HasExited/释放资源），保证 job 状态与清理链正确。
+			exitHandled = true;
+			OnFfMpegProcessExited(process, transcodingJob, state);
+		}
 		if (((EncodingJobInfo)state).IsInputVideo && (int)transcodingJob.Type == 0 && !transcodingJob.HasExited)
 		{
 			await Task.Delay(1000, cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
