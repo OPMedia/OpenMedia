@@ -1,48 +1,32 @@
 ﻿{
-    "runAt":  "2026-10-14 20:22:24",
-    "baseUrl":  "http://127.0.0.1:8096",
-    "apiBase":  "http://127.0.0.1:8096/emby",
-    "serverId":  "6225572626f94ea0b6e469c9ac63ef6f",
+    "runAt":  "2026-10-14 23:25:41",
+    "baseUrl":  "http://localhost:8096",
+    "apiBase":  "http://localhost:8096/emby",
+    "serverId":  "980f922f49e84b8b8c7c9631964fa1c1",
     "serverVersion":  "3.5.3.0",
     "token":  "acquired",
     "summary":  {
-                    "pass":  22,
-                    "fail":  2,
-                    "skip":  0,
-                    "total":  24
+                    "pass":  21,
+                    "fail":  0,
+                    "skip":  1,
+                    "total":  22
                 },
     "results":  [
                     {
                         "section":  "S0-预检",
                         "name":  "GET /System/Info/Public",
                         "expected":  "200 + JSON",
-                        "actual":  "status=200 id=6225572626f94ea0b6e469c9ac63ef6f ver=3.5.3.0",
+                        "actual":  "status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0",
                         "status":  "PASS",
                         "notes":  "Id 为 32 位无连字符 hex"
                     },
                     {
                         "section":  "S1-启动向导",
                         "name":  "GET /Startup/Configuration（无 token）",
-                        "expected":  "200（向导未完成，免认证放行）",
-                        "actual":  "status=200 body={\"UICulture\":\"en-us\",\"MetadataCountryCode\":\"US\",\"PreferredMetadataLanguage\":\"en\"}",
+                        "expected":  "401（向导已完成，需认证）",
+                        "actual":  "status=401",
                         "status":  "PASS",
-                        "notes":  ""
-                    },
-                    {
-                        "section":  "S1-启动向导",
-                        "name":  "POST /Startup/User {\"Name\":\"admin\"}",
-                        "expected":  "200/204（设置初始用户名）",
-                        "actual":  "status=200",
-                        "status":  "PASS",
-                        "notes":  ""
-                    },
-                    {
-                        "section":  "S1-启动向导",
-                        "name":  "POST /Startup/Complete",
-                        "expected":  "200/204",
-                        "actual":  "status=204",
-                        "status":  "PASS",
-                        "notes":  ""
+                        "notes":  "向导已完成，跳过向导步骤（幂等）"
                     },
                     {
                         "section":  "S2-认证",
@@ -88,16 +72,16 @@
                         "section":  "S3-媒体库",
                         "name":  "GET /Library/VirtualFolders",
                         "expected":  "200",
-                        "actual":  "status=200 文件夹数=5（OpenMediaTests 存在=False）",
+                        "actual":  "status=200 文件夹数=7（OpenMediaTests 存在=True）",
                         "status":  "PASS",
                         "notes":  ""
                     },
                     {
                         "section":  "S3-媒体库",
-                        "name":  "POST /Library/VirtualFolders（添加 OpenMediaTests → D:\\Dev\\OpenMedia\\tests\\media）",
-                        "expected":  "200/204",
-                        "actual":  "status=204",
-                        "status":  "PASS",
+                        "name":  "POST /Library/VirtualFolders（添加 OpenMediaTests）",
+                        "expected":  "—",
+                        "actual":  "已存在，跳过（幂等）",
+                        "status":  "SKIP",
                         "notes":  ""
                     },
                     {
@@ -112,7 +96,7 @@
                         "section":  "S3-媒体库",
                         "name":  "扫描出 2 部电影（轮询 /Items?Recursive=true）",
                         "expected":  "≥2 个 Movie 条目（≤120s）",
-                        "actual":  "count=2，耗时 0s",
+                        "actual":  "count=2，耗时 0.1s",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -120,16 +104,16 @@
                         "section":  "S3-媒体库",
                         "name":  "Movie1 元数据（nfo title/year）",
                         "expected":  "Name=Movie1, ProductionYear=2020",
-                        "actual":  "Name=Movie1, Year=, Id=c3f6962891668fc8365e3dfaa24bb3ea",
-                        "status":  "FAIL",
+                        "actual":  "Name=Movie1, Year=2020, Id=c3f6962891668fc8365e3dfaa24bb3ea",
+                        "status":  "PASS",
                         "notes":  "nfo 解析（title/year）"
                     },
                     {
                         "section":  "S3-媒体库",
                         "name":  "Movie2 元数据（nfo title/year）",
                         "expected":  "Name=Movie2, ProductionYear=2021",
-                        "actual":  "Name=Movie2, Year=",
-                        "status":  "FAIL",
+                        "actual":  "Name=Movie2, Year=2021",
+                        "status":  "PASS",
                         "notes":  ""
                     },
                     {
@@ -200,7 +184,7 @@
                         "section":  "S5-静态资源",
                         "name":  "GET /Videos/{Movie1}/stream?static=true + Range",
                         "expected":  "206 + Content-Range（R3）",
-                        "actual":  "status=206 content-range=bytes 0-99/262144 type=video/x-matroska 100B",
+                        "actual":  "status=206 content-range=bytes 0-99/157280 type=video/x-matroska 100B",
                         "status":  "PASS",
                         "notes":  ""
                     }

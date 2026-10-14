@@ -1,0 +1,1671 @@
+ֹͣ��ʱ����.
+=== BRANCH-01: 基线-类型过滤+排序+分页（/Items 列表页）
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..28.71 rows=100 width=56) (actual time=0.026..0.118 rows=100.00 loops=1)
+   Buffers: shared hit=27
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=56) (actual time=0.026..0.111 rows=100.00 loops=1)
+         Filter: (type = 2)
+         Index Searches: 1
+         Buffers: shared hit=27
+ Planning:
+   Buffers: shared hit=859
+ Planning Time: 1.758 ms
+ Execution Time: 0.139 ms
+(10 �м�¼)
+
+=== BRANCH-02: 基线-水合路径（列表页取 data jsonb 全量）
+                                                                                 QUERY PLAN                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..28.71 rows=100 width=1579) (actual time=0.010..0.088 rows=100.00 loops=1)
+   Buffers: shared hit=27
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=1579) (actual time=0.010..0.077 rows=100.00 loops=1)
+         Filter: (type = 2)
+         Index Searches: 1
+         Buffers: shared hit=27
+ Planning:
+   Buffers: shared hit=8
+ Planning Time: 0.315 ms
+ Execution Time: 0.116 ms
+(10 �м�¼)
+
+=== BRANCH-03: DISTINCT ON 包装（GroupByPresentationUniqueKey）
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3814.20..3814.45 rows=100 width=32) (actual time=17.429..17.437 rows=100.00 loops=1)
+   Buffers: shared hit=2503
+   ->  Sort  (cost=3814.20..3838.82 rows=9847 width=32) (actual time=17.429..17.432 rows=100.00 loops=1)
+         Sort Key: grouped.__sort0
+         Sort Method: top-N heapsort  Memory: 32kB
+         Buffers: shared hit=2503
+         ->  Subquery Scan on grouped  (cost=3289.39..3437.86 rows=9847 width=32) (actual time=11.384..13.679 rows=10000.00 loops=1)
+               Buffers: shared hit=2500
+               ->  Unique  (cost=3289.39..3339.39 rows=9847 width=43) (actual time=11.383..12.948 rows=10000.00 loops=1)
+                     Buffers: shared hit=2500
+                     ->  Sort  (cost=3289.39..3314.39 rows=10000 width=43) (actual time=11.382..11.671 rows=10000.00 loops=1)
+                           Sort Key: a.presentation_unique_key, a.sort_name
+                           Sort Method: quicksort  Memory: 1010kB
+                           Buffers: shared hit=2500
+                           ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=10000 width=43) (actual time=0.008..7.965 rows=10000.00 loops=1)
+                                 Filter: (type = 2)
+                                 Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=11
+ Planning Time: 0.201 ms
+ Execution Time: 17.562 ms
+(21 �м�¼)
+
+=== BRANCH-04: COUNT-DISTINCT（TotalRecordCount）
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=3339.39..3339.40 rows=1 width=8) (actual time=6.886..6.887 rows=1.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=3289.39..3314.39 rows=10000 width=11) (actual time=5.871..6.305 rows=10000.00 loops=1)
+         Sort Key: a.presentation_unique_key
+         Sort Method: quicksort  Memory: 385kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=10000 width=11) (actual time=0.017..3.083 rows=10000.00 loops=1)
+               Filter: (type = 2)
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=8
+ Planning Time: 0.331 ms
+ Execution Time: 6.956 ms
+(13 �м�¼)
+
+=== BRANCH-05: user_datas join（EnableJoinUserData 基础形态）
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..28.71 rows=100 width=32) (actual time=0.011..0.068 rows=100.00 loops=1)
+   Buffers: shared hit=27
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=32) (actual time=0.009..0.059 rows=100.00 loops=1)
+         Filter: (type = 2)
+         Index Searches: 1
+         Buffers: shared hit=27
+ Planning:
+   Buffers: shared hit=220
+ Planning Time: 0.708 ms
+ Execution Time: 0.088 ms
+(10 �м�¼)
+
+=== BRANCH-06: MinCommunityRating
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..133.26 rows=100 width=20) (actual time=0.021..0.138 rows=100.00 loops=1)
+   Buffers: shared hit=128
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2867.28 rows=2156 width=20) (actual time=0.020..0.133 rows=100.00 loops=1)
+         Filter: ((community_rating >= '8'::double precision) AND (type = 2))
+         Rows Removed by Filter: 399
+         Index Searches: 1
+         Buffers: shared hit=128
+ Planning:
+   Buffers: shared hit=25
+ Planning Time: 0.172 ms
+ Execution Time: 0.147 ms
+(11 �м�¼)
+
+=== BRANCH-07: Years IN
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..332.23 rows=100 width=20) (actual time=0.011..0.337 rows=100.00 loops=1)
+   Buffers: shared hit=290
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2904.78 rows=875 width=20) (actual time=0.011..0.332 rows=100.00 loops=1)
+         Filter: ((type = 2) AND (production_year = ANY ('{2000,2005,2010,2015,2020}'::integer[])))
+         Rows Removed by Filter: 1033
+         Index Searches: 1
+         Buffers: shared hit=290
+ Planning:
+   Buffers: shared hit=31
+ Planning Time: 0.178 ms
+ Execution Time: 0.349 ms
+(11 �м�¼)
+
+=== BRANCH-08: MinWidth/MaxHeight
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..80.80 rows=100 width=20) (actual time=0.129..0.259 rows=100.00 loops=1)
+   Buffers: shared hit=210
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2892.28 rows=3592 width=20) (actual time=0.128..0.253 rows=100.00 loops=1)
+         Filter: ((width >= 1000) AND (height <= 720) AND (type = 2))
+         Rows Removed by Filter: 718
+         Index Searches: 1
+         Buffers: shared hit=210
+ Planning:
+   Buffers: shared hit=22
+ Planning Time: 0.309 ms
+ Execution Time: 0.270 ms
+(11 �м�¼)
+
+=== BRANCH-09: MinIndexNumber / ParentIndexNumber
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2671.69..2671.71 rows=8 width=32) (actual time=1.956..1.957 rows=0.00 loops=1)
+   Buffers: shared hit=2514
+   ->  Sort  (cost=2671.69..2671.71 rows=8 width=32) (actual time=1.955..1.956 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2514
+         ->  Append  (cost=0.00..2671.57 rows=8 width=32) (actual time=1.950..1.951 rows=0.00 loops=1)
+               Buffers: shared hit=2514
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=17) (actual time=0.022..0.022 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Seq Scan on media_items_movies a_2  (cost=0.00..2650.00 rows=1 width=20) (actual time=1.827..1.827 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+                     Rows Removed by Filter: 10000
+                     Buffers: shared hit=2500
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.008..0.008 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+               ->  Seq Scan on media_items_other a_8  (cost=0.00..20.52 rows=1 width=18) (actual time=0.076..0.076 rows=0.00 loops=1)
+                     Filter: ((index_number >= 2) AND (parent_index_number = 1))
+                     Rows Removed by Filter: 501
+                     Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=2548
+ Planning Time: 7.224 ms
+ Execution Time: 1.986 ms
+(34 �м�¼)
+
+=== BRANCH-10: IsMovie/IsFolder/IsVirtualItem
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1.43..32.45 rows=100 width=20) (actual time=0.205..0.253 rows=100.00 loops=1)
+   Buffers: shared hit=49 read=1
+   ->  Merge Append  (cost=1.43..3106.17 rows=10007 width=20) (actual time=0.205..0.248 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Buffers: shared hit=49 read=1
+         ->  Index Scan using media_items_folders_sort_name_idx on media_items_folders a_1  (cost=0.12..8.14 rows=1 width=17) (actual time=0.078..0.078 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Rows Removed by Filter: 1
+               Index Searches: 1
+               Buffers: shared hit=1 read=1
+         ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a_2  (cost=0.29..2817.28 rows=10000 width=20) (actual time=0.007..0.045 rows=100.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=27
+         ->  Index Scan using media_items_series_sort_name_idx on media_items_series a_3  (cost=0.12..8.14 rows=1 width=40) (actual time=0.010..0.010 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_seasons_sort_name_idx on media_items_seasons a_4  (cost=0.12..8.14 rows=1 width=40) (actual time=0.001..0.001 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_episodes_sort_name_idx on media_items_episodes a_5  (cost=0.12..8.14 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_audio_sort_name_idx on media_items_audio a_6  (cost=0.12..8.14 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_books_sort_name_idx on media_items_books a_7  (cost=0.12..8.14 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_other_sort_name_idx on media_items_other a_8  (cost=0.27..39.79 rows=1 width=18) (actual time=0.101..0.101 rows=0.00 loops=1)
+               Filter: (is_movie AND (NOT is_virtual_item) AND (NOT is_folder))
+               Rows Removed by Filter: 501
+               Index Searches: 1
+               Buffers: shared hit=16
+ Planning:
+   Buffers: shared hit=161
+ Planning Time: 0.876 ms
+ Execution Time: 0.303 ms
+(43 �м�¼)
+
+=== BRANCH-11: IsLocked
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.00..2619.06 rows=8 width=8) (actual time=2.025..2.026 rows=0.00 loops=1)
+   Buffers: shared hit=2514
+   ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.010..0.010 rows=0.00 loops=1)
+         Filter: is_locked
+         Rows Removed by Filter: 1
+         Buffers: shared hit=1
+   ->  Seq Scan on media_items_movies a_2  (cost=0.00..2600.00 rows=1 width=8) (actual time=1.936..1.936 rows=0.00 loops=1)
+         Filter: is_locked
+         Rows Removed by Filter: 10000
+         Buffers: shared hit=2500
+   ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.012..0.012 rows=0.00 loops=1)
+         Filter: is_locked
+   ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+         Filter: is_locked
+   ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+         Filter: is_locked
+   ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+         Filter: is_locked
+   ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+         Filter: is_locked
+   ->  Seq Scan on media_items_other a_8  (cost=0.00..18.01 rows=1 width=8) (actual time=0.046..0.046 rows=0.00 loops=1)
+         Filter: is_locked
+         Rows Removed by Filter: 501
+         Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 1.047 ms
+ Execution Time: 2.052 ms
+(28 �м�¼)
+
+=== BRANCH-12: NameContains（clean_name LIKE %x% OR original_title LIKE %x%）
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2675.01..2675.02 rows=1 width=20) (actual time=3.768..3.769 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2675.01..2675.02 rows=1 width=20) (actual time=3.768..3.768 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2675.00 rows=1 width=20) (actual time=3.764..3.764 rows=0.00 loops=1)
+               Filter: ((type = 2) AND ((clean_name ~~ '%movie-123%'::text) OR (original_title ~~ '%movie-123%'::text)))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=10
+ Planning Time: 0.220 ms
+ Execution Time: 3.777 ms
+(14 �м�¼)
+
+=== BRANCH-13: NameStartsWith（sort_name LIKE x%）
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2650.01..2650.02 rows=1 width=20) (actual time=2.262..2.263 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2650.01..2650.02 rows=1 width=20) (actual time=2.262..2.262 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2650.00 rows=1 width=20) (actual time=2.259..2.260 rows=0.00 loops=1)
+               Filter: ((sort_name ~~ 'movie-12%'::text) AND (type = 2))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=6 read=3
+ Planning Time: 0.309 ms
+ Execution Time: 2.270 ms
+(14 �м�¼)
+
+=== BRANCH-14: SortName 范围（>= / <）
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..29.93 rows=100 width=20) (actual time=0.113..0.142 rows=100.00 loops=1)
+   Buffers: shared hit=28
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..296.79 rows=1000 width=20) (actual time=0.112..0.137 rows=100.00 loops=1)
+         Index Cond: ((sort_name >= 'movie-05000'::text) AND (sort_name < 'movie-06000'::text))
+         Filter: (type = 2)
+         Index Searches: 1
+         Buffers: shared hit=28
+ Planning:
+   Buffers: shared hit=22
+ Planning Time: 0.220 ms
+ Execution Time: 0.151 ms
+(11 �м�¼)
+
+=== BRANCH-15: Name 精确（clean_name =）
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.00..17.52 rows=8 width=8) (actual time=0.041..0.042 rows=0.00 loops=1)
+   Buffers: shared hit=4
+   ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.006..0.006 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+         Rows Removed by Filter: 1
+         Buffers: shared hit=1
+   ->  Index Scan using media_items_movies_clean_name_type_idx on media_items_movies a_2  (cost=0.29..8.30 rows=1 width=8) (actual time=0.012..0.012 rows=0.00 loops=1)
+         Index Cond: (clean_name = 'Movie-01234'::text)
+         Index Searches: 1
+         Buffers: shared hit=2
+   ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+   ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.002..0.002 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+   ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+   ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+   ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: (clean_name = 'Movie-01234'::text)
+   ->  Index Scan using media_items_other_clean_name_type_idx on media_items_other a_8  (cost=0.15..8.17 rows=1 width=8) (actual time=0.007..0.007 rows=0.00 loops=1)
+         Index Cond: (clean_name = 'Movie-01234'::text)
+         Index Searches: 1
+         Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=120
+ Planning Time: 0.850 ms
+ Execution Time: 0.055 ms
+(28 �м�¼)
+
+=== BRANCH-16: MinDateCreated
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..266.19 rows=100 width=20) (actual time=0.006..0.049 rows=100.00 loops=1)
+   Buffers: shared hit=27
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2917.28 rows=1097 width=20) (actual time=0.005..0.044 rows=100.00 loops=1)
+         Filter: ((type = 2) AND (date_created >= (now() - '365 days'::interval)))
+         Index Searches: 1
+         Buffers: shared hit=27
+ Planning:
+   Buffers: shared hit=20
+ Planning Time: 0.184 ms
+ Execution Time: 0.058 ms
+(10 �м�¼)
+
+=== BRANCH-17: PremiereDate 范围
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..72.26 rows=100 width=20) (actual time=1.442..1.476 rows=100.00 loops=1)
+   Buffers: shared hit=1491
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2892.28 rows=4018 width=20) (actual time=1.442..1.471 rows=100.00 loops=1)
+         Filter: ((premiere_date >= '2000-01-01 00:00:00+08'::timestamp with time zone) AND (premiere_date <= '2010-12-31 00:00:00+08'::timestamp with time zone) AND (type = 2))
+         Rows Removed by Filter: 5766
+         Index Searches: 1
+         Buffers: shared hit=1491
+ Planning:
+   Buffers: shared hit=38
+ Planning Time: 0.182 ms
+ Execution Time: 1.485 ms
+(11 �м�¼)
+
+=== BRANCH-18: MinDateLastSaved（IS NOT NULL AND >=）
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.00..2702.27 rows=898 width=8) (actual time=0.010..3.781 rows=839.00 loops=1)
+   Buffers: shared hit=2514
+   ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.02 rows=1 width=8) (actual time=0.006..0.006 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+         Rows Removed by Filter: 1
+         Buffers: shared hit=1
+   ->  Seq Scan on media_items_movies a_2  (cost=0.00..2675.00 rows=891 width=8) (actual time=0.003..3.635 rows=839.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+         Rows Removed by Filter: 9161
+         Buffers: shared hit=2500
+   ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.017..0.017 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+   ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+   ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+   ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+   ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+   ->  Seq Scan on media_items_other a_8  (cost=0.00..21.77 rows=1 width=8) (actual time=0.068..0.068 rows=0.00 loops=1)
+         Filter: ((date_last_saved IS NOT NULL) AND (date_last_saved >= (now() - '30 days'::interval)))
+         Rows Removed by Filter: 501
+         Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 0.786 ms
+ Execution Time: 3.816 ms
+(28 �м�¼)
+
+=== BRANCH-19: IsPlayed（ud.played = TRUE）
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.57..892.28 rows=100 width=32) (actual time=0.044..1.444 rows=100.00 loops=1)
+   Buffers: shared hit=2544
+   ->  Nested Loop  (cost=0.57..8881.97 rows=996 width=32) (actual time=0.044..1.439 rows=100.00 loops=1)
+         Buffers: shared hit=2544
+         ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=36) (actual time=0.006..0.484 rows=995.00 loops=1)
+               Filter: (type = 2)
+               Index Searches: 1
+               Buffers: shared hit=254
+         ->  Index Scan using user_datas_p5_pkey on user_datas_p5 ud  (cost=0.29..0.59 rows=1 width=4) (actual time=0.001..0.001 rows=0.10 loops=995)
+               Index Cond: ((user_data_key_id = a.user_data_key_id) AND (user_id = 5))
+               Filter: played
+               Rows Removed by Filter: 0
+               Index Searches: 995
+               Buffers: shared hit=2290
+ Planning:
+   Buffers: shared hit=180
+ Planning Time: 1.128 ms
+ Execution Time: 1.458 ms
+(18 �м�¼)
+
+=== BRANCH-20: IsPlayed OR-NULL 形态（ud.played IS NULL OR ud.played = FALSE）
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.57..133.67 rows=100 width=32) (actual time=0.009..0.149 rows=100.00 loops=1)
+   Buffers: shared hit=285
+   ->  Nested Loop Left Join  (cost=0.57..8881.97 rows=6673 width=32) (actual time=0.009..0.143 rows=100.00 loops=1)
+         Filter: ((ud.played IS NULL) OR (NOT ud.played))
+         Rows Removed by Filter: 11
+         Buffers: shared hit=285
+         ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=36) (actual time=0.006..0.048 rows=111.00 loops=1)
+               Filter: (type = 2)
+               Index Searches: 1
+               Buffers: shared hit=30
+         ->  Index Scan using user_datas_p5_pkey on user_datas_p5 ud  (cost=0.29..0.59 rows=1 width=5) (actual time=0.001..0.001 rows=0.30 loops=111)
+               Index Cond: ((user_data_key_id = a.user_data_key_id) AND (user_id = 5))
+               Index Searches: 111
+               Buffers: shared hit=255
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.232 ms
+ Execution Time: 0.162 ms
+(18 �м�¼)
+
+=== BRANCH-21: IsFavorite
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2774.51..2774.76 rows=100 width=32) (actual time=4.319..4.328 rows=100.00 loops=1)
+   Buffers: shared hit=2546
+   ->  Sort  (cost=2774.51..2774.95 rows=178 width=32) (actual time=4.319..4.322 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 37kB
+         Buffers: shared hit=2546
+         ->  Hash Join  (cost=116.60..2767.86 rows=178 width=32) (actual time=0.383..4.240 rows=176.00 loops=1)
+               Hash Cond: (a.user_data_key_id = ud.user_data_key_id)
+               Buffers: shared hit=2546
+               ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=10000 width=36) (actual time=0.007..3.411 rows=10000.00 loops=1)
+                     Filter: (type = 2)
+                     Buffers: shared hit=2500
+               ->  Hash  (cost=114.33..114.33 rows=181 width=4) (actual time=0.359..0.360 rows=176.00 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 15kB
+                     Buffers: shared hit=46
+                     ->  Index Scan using user_datas_p5_user_id_idx on user_datas_p5 ud  (cost=0.29..114.33 rows=181 width=4) (actual time=0.022..0.341 rows=176.00 loops=1)
+                           Index Cond: (user_id = 5)
+                           Filter: is_favorite
+                           Rows Removed by Filter: 2824
+                           Index Searches: 1
+                           Buffers: shared hit=46
+ Planning:
+   Buffers: shared hit=11
+ Planning Time: 0.232 ms
+ Execution Time: 4.345 ms
+(25 �м�¼)
+
+=== BRANCH-22: UserRating >=
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2773.19..2773.20 rows=1 width=32) (actual time=0.230..0.231 rows=0.00 loops=1)
+   Buffers: shared hit=48
+   ->  Sort  (cost=2773.19..2773.20 rows=1 width=32) (actual time=0.230..0.230 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=48
+         ->  Hash Join  (cost=121.92..2773.18 rows=1 width=32) (actual time=0.228..0.229 rows=0.00 loops=1)
+               Hash Cond: (a.user_data_key_id = ud.user_data_key_id)
+               Buffers: shared hit=48
+               ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=10000 width=36) (actual time=0.007..0.007 rows=1.00 loops=1)
+                     Filter: (type = 2)
+                     Buffers: shared hit=2
+               ->  Hash  (cost=121.91..121.91 rows=1 width=4) (actual time=0.216..0.217 rows=0.00 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 8kB
+                     Buffers: shared hit=46
+                     ->  Index Scan using user_datas_p5_user_id_idx on user_datas_p5 ud  (cost=0.29..121.91 rows=1 width=4) (actual time=0.216..0.216 rows=0.00 loops=1)
+                           Index Cond: (user_id = 5)
+                           Filter: (rating >= '7'::double precision)
+                           Rows Removed by Filter: 3000
+                           Index Searches: 1
+                           Buffers: shared hit=46
+ Planning:
+   Buffers: shared hit=26
+ Planning Time: 0.294 ms
+ Execution Time: 0.242 ms
+(25 �м�¼)
+
+=== BRANCH-23: 恢复播放（playback_position_ticks > 0）
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2823.22..2823.47 rows=100 width=28) (actual time=4.490..4.498 rows=100.00 loops=1)
+   Buffers: shared hit=2549
+   ->  Sort  (cost=2823.22..2825.67 rows=983 width=28) (actual time=4.490..4.493 rows=100.00 loops=1)
+         Sort Key: ud.last_played_date DESC
+         Sort Method: top-N heapsort  Memory: 32kB
+         Buffers: shared hit=2549
+         ->  Hash Join  (cost=134.39..2785.65 rows=983 width=28) (actual time=0.372..4.389 rows=1000.00 loops=1)
+               Hash Cond: (a.user_data_key_id = ud.user_data_key_id)
+               Buffers: shared hit=2546
+               ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=10000 width=24) (actual time=0.007..3.379 rows=10000.00 loops=1)
+                     Filter: (type = 2)
+                     Buffers: shared hit=2500
+               ->  Hash  (cost=121.91..121.91 rows=998 width=12) (actual time=0.362..0.362 rows=1000.00 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 44kB
+                     Buffers: shared hit=46
+                     ->  Index Scan using user_datas_p5_user_id_idx on user_datas_p5 ud  (cost=0.29..121.91 rows=998 width=12) (actual time=0.003..0.288 rows=1000.00 loops=1)
+                           Index Cond: (user_id = 5)
+                           Filter: (playback_position_ticks > 0)
+                           Rows Removed by Filter: 2000
+                           Index Searches: 1
+                           Buffers: shared hit=46
+ Planning:
+   Buffers: shared hit=36
+ Planning Time: 0.259 ms
+ Execution Time: 4.515 ms
+(25 �м�¼)
+
+=== BRANCH-24: GenreIds（IN 子查询，clean_value 精确）
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1962.98..1963.23 rows=100 width=20) (actual time=2.818..2.825 rows=100.00 loops=1)
+   Buffers: shared hit=2167
+   ->  Sort  (cost=1962.98..1963.94 rows=384 width=20) (actual time=2.818..2.821 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: top-N heapsort  Memory: 36kB
+         Buffers: shared hit=2167
+         ->  Nested Loop  (cost=312.15..1948.30 rows=384 width=20) (actual time=0.647..1.863 rows=667.00 loops=1)
+               Buffers: shared hit=2167
+               ->  HashAggregate  (cost=311.86..315.65 rows=379 width=8) (actual time=0.637..0.689 rows=667.00 loops=1)
+                     Group Key: iv.item_id
+                     Batches: 1  Memory Usage: 73kB
+                     Buffers: shared hit=166
+                     ->  Bitmap Heap Scan on item_extradata iv  (cost=8.23..310.90 rows=384 width=8) (actual time=0.060..0.542 rows=667.00 loops=1)
+                           Recheck Cond: ((extradata_type_id = 2) AND (clean_value = 'genre5'::text))
+                           Heap Blocks: exact=164
+                           Buffers: shared hit=166
+                           ->  Bitmap Index Scan on idx_item_extradata_type_clean_value  (cost=0.00..8.13 rows=384 width=0) (actual time=0.032..0.032 rows=667.00 loops=1)
+                                 Index Cond: ((extradata_type_id = 2) AND (clean_value = 'genre5'::text))
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+               ->  Index Scan using media_items_movies_pkey on media_items_movies a  (cost=0.29..4.45 rows=1 width=20) (actual time=0.002..0.002 rows=1.00 loops=667)
+                     Index Cond: ((id = iv.item_id) AND (type = 2))
+                     Index Searches: 667
+                     Buffers: shared hit=2001
+ Planning:
+   Buffers: shared hit=184
+ Planning Time: 0.640 ms
+ Execution Time: 2.848 ms
+(28 �м�¼)
+
+=== BRANCH-25: Genres 名称（相关子查询：x IN (SELECT clean_value ... WHERE item_id = A.id)）
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..1304.00 rows=100 width=20) (actual time=0.015..2.409 rows=100.00 loops=1)
+   Buffers: shared hit=6311
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..65186.00 rows=5000 width=20) (actual time=0.015..2.403 rows=100.00 loops=1)
+         Filter: ((type = 2) AND (ANY ('genre5'::text = (SubPlan 1).col1)))
+         Rows Removed by Filter: 1395
+         Index Searches: 1
+         Buffers: shared hit=6311
+         SubPlan 1
+           ->  Index Scan using idx_item_extradata_item_type on item_extradata  (cost=0.29..12.17 rows=2 width=7) (actual time=0.001..0.001 rows=1.97 loops=1495)
+                 Index Cond: ((item_id = a.id) AND (extradata_type_id = 2))
+                 Index Searches: 1495
+                 Buffers: shared hit=5930
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.178 ms
+ Execution Time: 2.422 ms
+(16 �м�¼)
+
+=== BRANCH-26: Tags
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..917.88 rows=100 width=20) (actual time=0.022..5.742 rows=100.00 loops=1)
+   Buffers: shared hit=13644
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..45879.79 rows=5000 width=20) (actual time=0.022..5.737 rows=100.00 loops=1)
+         Filter: ((type = 2) AND (ANY ('tag7'::text = (SubPlan 1).col1)))
+         Rows Removed by Filter: 4854
+         Index Searches: 1
+         Buffers: shared hit=13644
+         SubPlan 1
+           ->  Index Scan using idx_item_extradata_item_type on item_extradata  (cost=0.29..8.31 rows=1 width=7) (actual time=0.001..0.001 rows=0.50 loops=4954)
+                 Index Cond: ((item_id = a.id) AND (extradata_type_id = 4))
+                 Index Searches: 4954
+                 Buffers: shared hit=12385
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.161 ms
+ Execution Time: 5.756 ms
+(16 �м�¼)
+
+=== BRANCH-27: Studios
+                                                                                       QUERY PLAN                                                                                       
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=971.88..972.13 rows=100 width=20) (actual time=1.936..1.947 rows=100.00 loops=1)
+   Buffers: shared hit=1584
+   ->  Sort  (cost=971.88..972.24 rows=143 width=20) (actual time=1.936..1.937 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: top-N heapsort  Memory: 36kB
+         Buffers: shared hit=1584
+         ->  Nested Loop  (cost=211.85..966.76 rows=143 width=20) (actual time=0.333..1.169 rows=500.00 loops=1)
+               Buffers: shared hit=1584
+               ->  HashAggregate  (cost=211.57..212.99 rows=142 width=8) (actual time=0.326..0.363 rows=500.00 loops=1)
+                     Group Key: iv.item_id
+                     Batches: 1  Memory Usage: 73kB
+                     Buffers: shared hit=84
+                     ->  Index Scan using idx_item_extradata_type_clean_value on item_extradata iv  (cost=0.29..211.21 rows=143 width=8) (actual time=0.021..0.258 rows=500.00 loops=1)
+                           Index Cond: ((extradata_type_id = 3) AND (clean_value = 'studio3'::text))
+                           Index Searches: 1
+                           Buffers: shared hit=84
+               ->  Index Scan using media_items_movies_pkey on media_items_movies a  (cost=0.29..5.37 rows=1 width=20) (actual time=0.001..0.001 rows=1.00 loops=500)
+                     Index Cond: ((id = iv.item_id) AND (type = 2))
+                     Index Searches: 500
+                     Buffers: shared hit=1500
+ Planning:
+   Buffers: shared hit=11
+ Planning Time: 0.412 ms
+ Execution Time: 1.963 ms
+(24 �м�¼)
+
+=== BRANCH-28: ExcludeTag NOT IN 相关子查询
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..917.88 rows=100 width=20) (actual time=0.009..0.140 rows=100.00 loops=1)
+   Buffers: shared hit=283
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..45879.79 rows=5000 width=20) (actual time=0.009..0.134 rows=100.00 loops=1)
+         Filter: ((type = 2) AND (NOT (ANY ('tag7'::text = (SubPlan 1).col1))))
+         Rows Removed by Filter: 2
+         Index Searches: 1
+         Buffers: shared hit=283
+         SubPlan 1
+           ->  Index Scan using idx_item_extradata_item_type on item_extradata  (cost=0.29..8.31 rows=1 width=7) (actual time=0.001..0.001 rows=0.50 loops=102)
+                 Index Cond: ((item_id = a.id) AND (extradata_type_id = 4))
+                 Index Searches: 102
+                 Buffers: shared hit=255
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.172 ms
+ Execution Time: 0.165 ms
+(16 �м�¼)
+
+=== BRANCH-29: PersonIds（IN 子查询）
+                                                                              QUERY PLAN                                                                              
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=548.39..548.53 rows=54 width=20) (actual time=0.108..0.109 rows=0.00 loops=1)
+   Buffers: shared hit=19
+   ->  Sort  (cost=548.39..548.53 rows=54 width=20) (actual time=0.108..0.109 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=19
+         ->  Nested Loop  (cost=181.57..546.84 rows=54 width=20) (actual time=0.103..0.104 rows=0.00 loops=1)
+               Buffers: shared hit=19
+               ->  HashAggregate  (cost=181.29..181.83 rows=54 width=8) (actual time=0.103..0.104 rows=0.00 loops=1)
+                     Group Key: ip.item_id
+                     Batches: 1  Memory Usage: 32kB
+                     Buffers: shared hit=19
+                     ->  Append  (cost=4.33..181.15 rows=54 width=8) (actual time=0.102..0.103 rows=0.00 loops=1)
+                           Buffers: shared hit=19
+                           ->  Bitmap Heap Scan on item_people_p0 ip_1  (cost=4.33..20.95 rows=6 width=8) (actual time=0.030..0.030 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=5
+                                 ->  Bitmap Index Scan on item_people_p0_person_id_idx  (cost=0.00..4.33 rows=6 width=0) (actual time=0.022..0.022 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=5
+                           ->  Bitmap Heap Scan on item_people_p1 ip_2  (cost=4.33..23.16 rows=7 width=8) (actual time=0.012..0.013 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p1_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.006..0.006 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p2 ip_3  (cost=4.33..23.29 rows=7 width=8) (actual time=0.010..0.010 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p2_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.006..0.006 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p3 ip_4  (cost=4.33..20.84 rows=6 width=8) (actual time=0.011..0.011 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p3_person_id_idx  (cost=0.00..4.33 rows=6 width=0) (actual time=0.009..0.009 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p4 ip_5  (cost=4.33..23.16 rows=7 width=8) (actual time=0.010..0.010 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p4_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.007..0.007 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p5 ip_6  (cost=4.33..23.16 rows=7 width=8) (actual time=0.009..0.009 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p5_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.006..0.006 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p6 ip_7  (cost=4.33..23.16 rows=7 width=8) (actual time=0.009..0.010 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p6_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+                           ->  Bitmap Heap Scan on item_people_p7 ip_8  (cost=4.33..23.16 rows=7 width=8) (actual time=0.010..0.010 rows=0.00 loops=1)
+                                 Recheck Cond: (person_id = 123)
+                                 Buffers: shared hit=2
+                                 ->  Bitmap Index Scan on item_people_p7_person_id_idx  (cost=0.00..4.33 rows=7 width=0) (actual time=0.007..0.007 rows=0.00 loops=1)
+                                       Index Cond: (person_id = 123)
+                                       Index Searches: 1
+                                       Buffers: shared hit=2
+               ->  Index Scan using media_items_movies_pkey on media_items_movies a  (cost=0.29..6.75 rows=1 width=20) (never executed)
+                     Index Cond: ((id = ip.item_id) AND (type = 2))
+                     Index Searches: 0
+ Planning:
+   Buffers: shared hit=956
+ Planning Time: 2.291 ms
+ Execution Time: 0.216 ms
+(77 �м�¼)
+
+=== BRANCH-30: PersonName（join + name 过滤）
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=880.58..880.64 rows=23 width=20) (actual time=5.225..5.229 rows=20.00 loops=1)
+   Buffers: shared hit=352
+   ->  Sort  (cost=880.58..880.64 rows=23 width=20) (actual time=5.225..5.228 rows=20.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 26kB
+         Buffers: shared hit=352
+         ->  Nested Loop  (cost=865.05..880.06 rows=23 width=20) (actual time=5.151..5.203 rows=20.00 loops=1)
+               Buffers: shared hit=352
+               ->  HashAggregate  (cost=864.77..865.00 rows=23 width=8) (actual time=5.141..5.144 rows=20.00 loops=1)
+                     Group Key: ip.item_id
+                     Batches: 1  Memory Usage: 32kB
+                     Buffers: shared hit=292
+                     ->  Hash Join  (cost=17.75..864.71 rows=23 width=8) (actual time=0.279..5.136 rows=26.00 loops=1)
+                           Hash Cond: (ip.person_id = p.id)
+                           Buffers: shared hit=292
+                           ->  Append  (cost=0.00..734.59 rows=29906 width=16) (actual time=0.013..3.794 rows=29906.00 loops=1)
+                                 Buffers: shared hit=286
+                                 ->  Seq Scan on item_people_p0 ip_1  (cost=0.00..72.01 rows=3701 width=16) (actual time=0.013..0.322 rows=3701.00 loops=1)
+                                       Buffers: shared hit=35
+                                 ->  Seq Scan on item_people_p1 ip_2  (cost=0.00..74.01 rows=3801 width=16) (actual time=0.008..0.306 rows=3801.00 loops=1)
+                                       Buffers: shared hit=36
+                                 ->  Seq Scan on item_people_p2 ip_3  (cost=0.00..75.60 rows=3860 width=16) (actual time=0.008..0.312 rows=3860.00 loops=1)
+                                       Buffers: shared hit=37
+                                 ->  Seq Scan on item_people_p3 ip_4  (cost=0.00..69.82 rows=3582 width=16) (actual time=0.007..0.311 rows=3582.00 loops=1)
+                                       Buffers: shared hit=34
+                                 ->  Seq Scan on item_people_p4 ip_5  (cost=0.00..73.37 rows=3737 width=16) (actual time=0.007..0.296 rows=3737.00 loops=1)
+                                       Buffers: shared hit=36
+                                 ->  Seq Scan on item_people_p5 ip_6  (cost=0.00..73.55 rows=3755 width=16) (actual time=0.007..0.295 rows=3755.00 loops=1)
+                                       Buffers: shared hit=36
+                                 ->  Seq Scan on item_people_p6 ip_7  (cost=0.00..73.10 rows=3710 width=16) (actual time=0.007..0.298 rows=3710.00 loops=1)
+                                       Buffers: shared hit=36
+                                 ->  Seq Scan on item_people_p7 ip_8  (cost=0.00..73.60 rows=3760 width=16) (actual time=0.007..0.309 rows=3760.00 loops=1)
+                                       Buffers: shared hit=36
+                           ->  Hash  (cost=17.64..17.64 rows=8 width=8) (actual time=0.057..0.058 rows=1.00 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                 Buffers: shared hit=6
+                                 ->  Append  (cost=0.00..17.64 rows=8 width=8) (actual time=0.052..0.053 rows=1.00 loops=1)
+                                       Buffers: shared hit=6
+                                       ->  Seq Scan on media_items_folders p_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.004..0.005 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                             Rows Removed by Filter: 1
+                                             Buffers: shared hit=1
+                                       ->  Index Scan using media_items_movies_name_idx on media_items_movies p_2  (cost=0.29..8.30 rows=1 width=8) (actual time=0.015..0.015 rows=0.00 loops=1)
+                                             Index Cond: (name = 'Person-001'::text)
+                                             Index Searches: 1
+                                             Buffers: shared hit=2
+                                       ->  Seq Scan on media_items_series p_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                       ->  Seq Scan on media_items_seasons p_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                       ->  Seq Scan on media_items_episodes p_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                       ->  Seq Scan on media_items_audio p_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                       ->  Seq Scan on media_items_books p_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+                                             Filter: (name = 'Person-001'::text)
+                                       ->  Index Scan using media_items_other_name_idx on media_items_other p_8  (cost=0.27..8.29 rows=1 width=8) (actual time=0.014..0.014 rows=1.00 loops=1)
+                                             Index Cond: (name = 'Person-001'::text)
+                                             Index Searches: 1
+                                             Buffers: shared hit=3
+               ->  Index Scan using media_items_movies_pkey on media_items_movies a  (cost=0.29..0.64 rows=1 width=20) (actual time=0.003..0.003 rows=1.00 loops=20)
+                     Index Cond: ((id = ip.item_id) AND (type = 2))
+                     Index Searches: 20
+                     Buffers: shared hit=60
+ Planning:
+   Buffers: shared hit=128
+ Planning Time: 1.580 ms
+ Execution Time: 5.296 ms
+(68 �м�¼)
+
+=== BRANCH-31: AncestorId（ancestor_ids 闭包表）
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2.77..284.36 rows=100 width=20) (actual time=0.073..0.463 rows=100.00 loops=1)
+   Buffers: shared hit=269
+   InitPlan 1
+     ->  Limit  (cost=0.00..2.21 rows=1 width=8) (actual time=0.013..0.013 rows=1.00 loops=1)
+           Buffers: shared hit=1
+           ->  Append  (cost=0.00..17.64 rows=8 width=8) (actual time=0.012..0.013 rows=1.00 loops=1)
+                 Buffers: shared hit=1
+                 ->  Seq Scan on media_items_folders media_items_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.012..0.012 rows=1.00 loops=1)
+                       Filter: (name = 'perf-lib'::text)
+                       Buffers: shared hit=1
+                 ->  Index Scan using media_items_movies_name_idx on media_items_movies media_items_2  (cost=0.29..8.30 rows=1 width=8) (never executed)
+                       Index Cond: (name = 'perf-lib'::text)
+                       Index Searches: 0
+                 ->  Seq Scan on media_items_series media_items_3  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_seasons media_items_4  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_episodes media_items_5  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_audio media_items_6  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_books media_items_7  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Index Scan using media_items_other_name_idx on media_items_other media_items_8  (cost=0.27..8.29 rows=1 width=8) (never executed)
+                       Index Cond: (name = 'perf-lib'::text)
+                       Index Searches: 0
+   ->  Nested Loop  (cost=0.56..28160.03 rows=10000 width=20) (actual time=0.072..0.456 rows=100.00 loops=1)
+         Buffers: shared hit=269
+         ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2842.28 rows=10000 width=20) (actual time=0.012..0.063 rows=100.00 loops=1)
+               Filter: (type = 2)
+               Index Searches: 1
+               Buffers: shared hit=27
+         ->  Append  (cost=0.28..2.45 rows=8 width=8) (actual time=0.004..0.004 rows=1.00 loops=100)
+               Buffers: shared hit=242
+               ->  Index Only Scan using ancestor_ids_p0_pkey on ancestor_ids_p0 ancestor_ids_1  (cost=0.28..0.30 rows=1 width=8) (actual time=0.002..0.002 rows=1.00 loops=16)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 16
+                     Index Searches: 16
+                     Buffers: shared hit=48
+               ->  Index Only Scan using ancestor_ids_p1_pkey on ancestor_ids_p1 ancestor_ids_2  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=17)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 0
+                     Index Searches: 17
+                     Buffers: shared hit=35
+               ->  Index Only Scan using ancestor_ids_p2_pkey on ancestor_ids_p2 ancestor_ids_3  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=11)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 0
+                     Index Searches: 11
+                     Buffers: shared hit=23
+               ->  Index Only Scan using ancestor_ids_p3_pkey on ancestor_ids_p3 ancestor_ids_4  (cost=0.28..0.30 rows=1 width=8) (actual time=0.008..0.008 rows=1.00 loops=6)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 6
+                     Index Searches: 6
+                     Buffers: shared hit=18
+               ->  Index Only Scan using ancestor_ids_p4_pkey on ancestor_ids_p4 ancestor_ids_5  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=11)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 0
+                     Index Searches: 11
+                     Buffers: shared hit=23
+               ->  Index Only Scan using ancestor_ids_p5_pkey on ancestor_ids_p5 ancestor_ids_6  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=14)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 0
+                     Index Searches: 14
+                     Buffers: shared hit=29
+               ->  Index Only Scan using ancestor_ids_p6_pkey on ancestor_ids_p6 ancestor_ids_7  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=14)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 14
+                     Index Searches: 14
+                     Buffers: shared hit=42
+               ->  Index Only Scan using ancestor_ids_p7_pkey on ancestor_ids_p7 ancestor_ids_8  (cost=0.28..0.30 rows=1 width=8) (actual time=0.003..0.003 rows=1.00 loops=11)
+                     Index Cond: ((item_id = a.id) AND (ancestor_id = (InitPlan 1).col1))
+                     Heap Fetches: 0
+                     Index Searches: 11
+                     Buffers: shared hit=23
+ Planning:
+   Buffers: shared hit=612
+ Planning Time: 2.769 ms
+ Execution Time: 0.566 ms
+(78 �м�¼)
+
+=== BRANCH-32: ParentId
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3.63..34.92 rows=100 width=20) (actual time=0.097..0.136 rows=100.00 loops=1)
+   Buffers: shared hit=51
+   InitPlan 1
+     ->  Limit  (cost=0.00..2.21 rows=1 width=8) (actual time=0.007..0.008 rows=1.00 loops=1)
+           Buffers: shared hit=1
+           ->  Append  (cost=0.00..17.64 rows=8 width=8) (actual time=0.007..0.008 rows=1.00 loops=1)
+                 Buffers: shared hit=1
+                 ->  Seq Scan on media_items_folders media_items_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.007..0.007 rows=1.00 loops=1)
+                       Filter: (name = 'perf-lib'::text)
+                       Buffers: shared hit=1
+                 ->  Index Scan using media_items_movies_name_idx on media_items_movies media_items_2  (cost=0.29..8.30 rows=1 width=8) (never executed)
+                       Index Cond: (name = 'perf-lib'::text)
+                       Index Searches: 0
+                 ->  Seq Scan on media_items_series media_items_3  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_seasons media_items_4  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_episodes media_items_5  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_audio media_items_6  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Seq Scan on media_items_books media_items_7  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                       Filter: (name = 'perf-lib'::text)
+                 ->  Index Scan using media_items_other_name_idx on media_items_other media_items_8  (cost=0.27..8.29 rows=1 width=8) (never executed)
+                       Index Cond: (name = 'perf-lib'::text)
+                       Index Searches: 0
+   ->  Merge Append  (cost=1.43..3132.44 rows=10007 width=20) (actual time=0.097..0.131 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Buffers: shared hit=51
+         ->  Index Scan using media_items_folders_sort_name_idx on media_items_folders a_1  (cost=0.12..8.14 rows=1 width=17) (actual time=0.014..0.014 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Rows Removed by Filter: 1
+               Index Searches: 1
+               Buffers: shared hit=3
+         ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a_2  (cost=0.29..2842.28 rows=10000 width=20) (actual time=0.009..0.038 rows=100.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=27
+         ->  Index Scan using media_items_series_sort_name_idx on media_items_series a_3  (cost=0.12..8.14 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_seasons_sort_name_idx on media_items_seasons a_4  (cost=0.12..8.14 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_episodes_sort_name_idx on media_items_episodes a_5  (cost=0.12..8.14 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_audio_sort_name_idx on media_items_audio a_6  (cost=0.12..8.14 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_books_sort_name_idx on media_items_books a_7  (cost=0.12..8.14 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Index Searches: 1
+               Buffers: shared hit=1
+         ->  Index Scan using media_items_other_sort_name_idx on media_items_other a_8  (cost=0.27..41.04 rows=1 width=18) (actual time=0.053..0.053 rows=0.00 loops=1)
+               Filter: (parent_id = (InitPlan 1).col1)
+               Rows Removed by Filter: 501
+               Index Searches: 1
+               Buffers: shared hit=16
+ Planning:
+   Buffers: shared hit=243
+ Planning Time: 1.461 ms
+ Execution Time: 0.185 ms
+(67 �м�¼)
+
+=== BRANCH-33: ItemIds（guid = OR guid =）
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.00..41.99 rows=12 width=8) (actual time=0.052..0.052 rows=0.00 loops=1)
+   Buffers: shared hit=5
+   ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.02 rows=1 width=8) (actual time=0.007..0.007 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+         Rows Removed by Filter: 1
+         Buffers: shared hit=1
+   ->  Bitmap Heap Scan on media_items_movies a_2  (cost=12.88..24.62 rows=3 width=8) (actual time=0.016..0.016 rows=0.00 loops=1)
+         Recheck Cond: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+         Buffers: shared hit=2
+         ->  Bitmap Index Scan on media_items_movies_guid_type_idx  (cost=0.00..12.88 rows=3 width=0) (actual time=0.012..0.012 rows=0.00 loops=1)
+               Index Cond: (guid = ANY ('{00000000-0000-0000-0000-000000000001,00000000-0000-0000-0000-000000000002,00000000-0000-0000-0000-000000000003}'::uuid[]))
+               Index Searches: 1
+               Buffers: shared hit=2
+   ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+   ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+   ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+   ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+   ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+         Filter: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+   ->  Bitmap Heap Scan on media_items_other a_8  (cost=8.56..16.29 rows=3 width=8) (actual time=0.011..0.011 rows=0.00 loops=1)
+         Recheck Cond: ((guid = '00000000-0000-0000-0000-000000000001'::uuid) OR (guid = '00000000-0000-0000-0000-000000000002'::uuid) OR (guid = '00000000-0000-0000-0000-000000000003'::uuid))
+         Buffers: shared hit=2
+         ->  Bitmap Index Scan on media_items_other_guid_type_idx  (cost=0.00..8.56 rows=3 width=0) (actual time=0.008..0.008 rows=0.00 loops=1)
+               Index Cond: (guid = ANY ('{00000000-0000-0000-0000-000000000001,00000000-0000-0000-0000-000000000002,00000000-0000-0000-0000-000000000003}'::uuid[]))
+               Index Searches: 1
+               Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=173
+ Planning Time: 1.336 ms
+ Execution Time: 0.079 ms
+(34 �м�¼)
+
+=== BRANCH-34: HasNoAudioTrackWithLanguage（相关标量子查询）
+                                                                                                              QUERY PLAN                                                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..48592.29 rows=50 width=20) (actual time=19.224..19.225 rows=0.00 loops=1)
+   Buffers: shared hit=22548
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..48592.29 rows=50 width=20) (actual time=19.224..19.224 rows=0.00 loops=1)
+         Filter: ((type = 2) AND ((SubPlan 1) IS NULL))
+         Rows Removed by Filter: 10000
+         Index Searches: 1
+         Buffers: shared hit=22548
+         SubPlan 1
+           ->  Limit  (cost=0.28..4.58 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=10000)
+                 Buffers: shared hit=20008
+                 ->  Append  (cost=0.28..34.64 rows=8 width=4) (actual time=0.001..0.001 rows=1.00 loops=10000)
+                       Buffers: shared hit=20008
+                       ->  Index Only Scan using media_streams_p0_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p0 media_streams_1  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1237)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1237
+                             Buffers: shared hit=2475
+                       ->  Index Only Scan using media_streams_p1_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p1 media_streams_2  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1271)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1271
+                             Buffers: shared hit=2543
+                       ->  Index Only Scan using media_streams_p2_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p2 media_streams_3  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1291)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1291
+                             Buffers: shared hit=2583
+                       ->  Index Only Scan using media_streams_p3_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p3 media_streams_4  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1200)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1200
+                             Buffers: shared hit=2401
+                       ->  Index Only Scan using media_streams_p4_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p4 media_streams_5  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1251)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1251
+                             Buffers: shared hit=2503
+                       ->  Index Only Scan using media_streams_p5_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p5 media_streams_6  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1256)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1256
+                             Buffers: shared hit=2513
+                       ->  Index Only Scan using media_streams_p6_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p6 media_streams_7  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1238)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1238
+                             Buffers: shared hit=2477
+                       ->  Index Only Scan using media_streams_p7_item_id_stream_index_stream_type_codec_lan_idx on media_streams_p7 media_streams_8  (cost=0.28..4.33 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1256)
+                             Index Cond: (item_id = a.id)
+                             Filter: ((stream_type = 1) AND (language = 'eng'::text))
+                             Rows Removed by Filter: 1
+                             Heap Fetches: 0
+                             Index Searches: 1256
+                             Buffers: shared hit=2513
+ Planning:
+   Buffers: shared hit=966
+ Planning Time: 2.193 ms
+ Execution Time: 19.311 ms
+(72 �м�¼)
+
+=== BRANCH-35: HasSubtitles（media_streams stream_type=2 EXISTS 形态）
+                                                                                             QUERY PLAN                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=101.16..101.18 rows=8 width=20) (actual time=0.088..0.089 rows=0.00 loops=1)
+   Buffers: shared hit=19
+   ->  Sort  (cost=101.16..101.18 rows=8 width=20) (actual time=0.088..0.089 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=19
+         ->  Nested Loop  (cost=34.73..101.04 rows=8 width=20) (actual time=0.083..0.084 rows=0.00 loops=1)
+               Buffers: shared hit=19
+               ->  HashAggregate  (cost=34.44..34.52 rows=8 width=8) (actual time=0.083..0.083 rows=0.00 loops=1)
+                     Group Key: media_streams.item_id
+                     Batches: 1  Memory Usage: 32kB
+                     Buffers: shared hit=19
+                     ->  Append  (cost=0.28..34.42 rows=8 width=8) (actual time=0.082..0.082 rows=0.00 loops=1)
+                           Buffers: shared hit=19
+                           ->  Index Scan using media_streams_p0_stream_type_idx on media_streams_p0 media_streams_1  (cost=0.28..4.30 rows=1 width=8) (actual time=0.026..0.027 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=5
+                           ->  Index Scan using media_streams_p1_stream_type_idx on media_streams_p1 media_streams_2  (cost=0.28..4.30 rows=1 width=8) (actual time=0.006..0.007 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p2_stream_type_idx on media_streams_p2 media_streams_3  (cost=0.28..4.30 rows=1 width=8) (actual time=0.007..0.007 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p3_stream_type_idx on media_streams_p3 media_streams_4  (cost=0.28..4.30 rows=1 width=8) (actual time=0.009..0.009 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p4_stream_type_idx on media_streams_p4 media_streams_5  (cost=0.28..4.30 rows=1 width=8) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p5_stream_type_idx on media_streams_p5 media_streams_6  (cost=0.28..4.30 rows=1 width=8) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p6_stream_type_idx on media_streams_p6 media_streams_7  (cost=0.28..4.30 rows=1 width=8) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+                           ->  Index Scan using media_streams_p7_stream_type_idx on media_streams_p7 media_streams_8  (cost=0.28..4.30 rows=1 width=8) (actual time=0.008..0.008 rows=0.00 loops=1)
+                                 Index Cond: (stream_type = 2)
+                                 Index Searches: 1
+                                 Buffers: shared hit=2
+               ->  Index Scan using media_items_movies_pkey on media_items_movies a  (cost=0.29..8.30 rows=1 width=20) (never executed)
+                     Index Cond: ((id = media_streams.item_id) AND (type = 2))
+                     Index Searches: 0
+ Planning:
+   Buffers: shared hit=14
+ Planning Time: 1.034 ms
+ Execution Time: 0.143 ms
+(53 �м�¼)
+
+=== BRANCH-36: VideoType（A.data::text LIKE）
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2775.01..2775.02 rows=2 width=20) (actual time=65.521..65.522 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2775.01..2775.02 rows=2 width=20) (actual time=65.520..65.520 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2775.00 rows=2 width=20) (actual time=65.516..65.517 rows=0.00 loops=1)
+               Filter: ((type = 2) AND (((data)::text ~~ '%"VideoType":"Bluray"%'::text) OR ((data)::text ~~ '%"VideoType":"Dvd"%'::text)))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=11
+ Planning Time: 0.194 ms
+ Execution Time: 65.534 ms
+(14 �м�¼)
+
+=== BRANCH-37: SeriesStatus（A.data::text LIKE）
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2700.01..2700.02 rows=1 width=20) (actual time=34.690..34.690 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2700.01..2700.02 rows=1 width=20) (actual time=34.688..34.688 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2700.00 rows=1 width=20) (actual time=34.681..34.681 rows=0.00 loops=1)
+               Filter: ((type = 2) AND ((data)::text ~~ '%"Status":"Continuing"%'::text))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.349 ms
+ Execution Time: 34.706 ms
+(14 �м�¼)
+
+=== BRANCH-38: ProviderIds jsonb（->>Imdb IS NOT NULL）
+                                                                              QUERY PLAN                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..29.10 rows=100 width=20) (actual time=3.127..3.127 rows=0.00 loops=1)
+   Buffers: shared hit=2540
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2867.28 rows=9950 width=20) (actual time=3.126..3.126 rows=0.00 loops=1)
+         Filter: (((provider_ids ->> 'Imdb'::text) IS NOT NULL) AND (type = 2))
+         Rows Removed by Filter: 10000
+         Index Searches: 1
+         Buffers: shared hit=2540
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.217 ms
+ Execution Time: 3.136 ms
+(11 �м�¼)
+
+=== BRANCH-39: Images LIKE（A.images::text LIKE %Primary%）
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2700.01..2700.02 rows=1 width=20) (actual time=2.845..2.845 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2700.01..2700.02 rows=1 width=20) (actual time=2.844..2.844 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2700.00 rows=1 width=20) (actual time=2.841..2.841 rows=0.00 loops=1)
+               Filter: ((type = 2) AND ((images)::text ~~ '%Primary%'::text))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.172 ms
+ Execution Time: 2.852 ms
+(14 �м�¼)
+
+=== BRANCH-40: similarity_score 表达式（Similar 端点 ORDER BY）
+                                                                                                                                          QUERY PLAN                                                                                                                                           
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=406658.76..406658.81 rows=20 width=40) (actual time=71.369..71.374 rows=20.00 loops=1)
+   Buffers: shared hit=57513
+   ->  Sort  (cost=406658.76..406683.76 rows=10000 width=40) (actual time=71.369..71.372 rows=20.00 loops=1)
+         Sort Key: ((((CASE WHEN (a.official_rating IS NULL) THEN 10 ELSE 0 END + CASE WHEN (abs((COALESCE(a.production_year, 0) - 2000)) < 10) THEN 10 ELSE 0 END) + CASE WHEN (abs((COALESCE(a.production_year, 0) - 2000)) < 5) THEN 5 ELSE 0 END) + ((SubPlan 2) * 10))) DESC, a.sort_name
+         Sort Method: top-N heapsort  Memory: 27kB
+         Buffers: shared hit=57513
+         ->  Seq Scan on media_items_movies a  (cost=0.00..406392.67 rows=10000 width=40) (actual time=0.077..69.763 rows=10000.00 loops=1)
+               Filter: (type = 2)
+               Buffers: shared hit=57510
+               SubPlan 2
+                 ->  Aggregate  (cost=40.34..40.35 rows=1 width=8) (actual time=0.006..0.006 rows=1.00 loops=10000)
+                       Buffers: shared hit=55010
+                       InitPlan 1
+                         ->  Limit  (cost=0.00..2.21 rows=1 width=8) (actual time=0.024..0.026 rows=1.00 loops=1)
+                               Buffers: shared hit=4
+                               ->  Append  (cost=0.00..17.64 rows=8 width=8) (actual time=0.024..0.025 rows=1.00 loops=1)
+                                     Buffers: shared hit=4
+                                     ->  Seq Scan on media_items_folders media_items_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+                                           Filter: (name = 'Movie-01234'::text)
+                                           Rows Removed by Filter: 1
+                                           Buffers: shared hit=1
+                                     ->  Index Scan using media_items_movies_name_idx on media_items_movies media_items_2  (cost=0.29..8.30 rows=1 width=8) (actual time=0.018..0.018 rows=1.00 loops=1)
+                                           Index Cond: (name = 'Movie-01234'::text)
+                                           Index Searches: 1
+                                           Buffers: shared hit=3
+                                     ->  Seq Scan on media_items_series media_items_3  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                                           Filter: (name = 'Movie-01234'::text)
+                                     ->  Seq Scan on media_items_seasons media_items_4  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                                           Filter: (name = 'Movie-01234'::text)
+                                     ->  Seq Scan on media_items_episodes media_items_5  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                                           Filter: (name = 'Movie-01234'::text)
+                                     ->  Seq Scan on media_items_audio media_items_6  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                                           Filter: (name = 'Movie-01234'::text)
+                                     ->  Seq Scan on media_items_books media_items_7  (cost=0.00..0.00 rows=1 width=8) (never executed)
+                                           Filter: (name = 'Movie-01234'::text)
+                                     ->  Index Scan using media_items_other_name_idx on media_items_other media_items_8  (cost=0.27..8.29 rows=1 width=8) (never executed)
+                                           Index Cond: (name = 'Movie-01234'::text)
+                                           Index Searches: 0
+                       ->  Nested Loop Semi Join  (cost=8.64..38.13 rows=1 width=0) (actual time=0.006..0.006 rows=0.20 loops=10000)
+                             Join Filter: (item_extradata.clean_value = item_extradata_1.clean_value)
+                             Rows Removed by Join Filter: 13
+                             Buffers: shared hit=55010
+                             ->  Bitmap Heap Scan on item_extradata  (cost=4.32..18.94 rows=4 width=7) (actual time=0.002..0.003 rows=3.50 loops=10000)
+                                   Recheck Cond: (item_id = a.id)
+                                   Heap Blocks: exact=35000
+                                   Buffers: shared hit=55000
+                                   ->  Bitmap Index Scan on idx_item_extradata_item_type  (cost=0.00..4.32 rows=4 width=0) (actual time=0.001..0.001 rows=3.50 loops=10000)
+                                         Index Cond: (item_id = a.id)
+                                         Index Searches: 10000
+                                         Buffers: shared hit=20000
+                             ->  Materialize  (cost=4.32..18.96 rows=4 width=7) (actual time=0.000..0.000 rows=3.89 loops=35000)
+                                   Storage: Memory  Maximum Storage: 17kB
+                                   Buffers: shared hit=10
+                                   ->  Bitmap Heap Scan on item_extradata item_extradata_1  (cost=4.32..18.94 rows=4 width=7) (actual time=0.037..0.040 rows=4.00 loops=1)
+                                         Recheck Cond: (item_id = (InitPlan 1).col1)
+                                         Heap Blocks: exact=4
+                                         Buffers: shared hit=10
+                                         ->  Bitmap Index Scan on idx_item_extradata_item_type  (cost=0.00..4.32 rows=4 width=0) (actual time=0.032..0.032 rows=4.00 loops=1)
+                                               Index Cond: (item_id = (InitPlan 1).col1)
+                                               Index Searches: 1
+                                               Buffers: shared hit=6
+ Planning:
+   Buffers: shared hit=119
+ Planning Time: 1.379 ms
+ Execution Time: 71.529 ms
+(65 �м�¼)
+
+=== BRANCH-41: search_score 布尔过滤（SearchTerm）
+                                                                                                                                                               QUERY PLAN                                                                                                                                                               
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..90.05 rows=100 width=20) (actual time=5.276..5.277 rows=0.00 loops=1)
+   Buffers: shared hit=2540
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2992.28 rows=3333 width=20) (actual time=5.274..5.275 rows=0.00 loops=1)
+         Filter: ((type = 2) AND ((CASE WHEN ((clean_name ~~ 'movie-12%'::text) OR ((original_title IS NOT NULL) AND (original_title ~~ 'movie-12%'::text))) THEN 10 ELSE 0 END + CASE WHEN ((clean_name ~~ '%movie-12%'::text) OR ((original_title IS NOT NULL) AND (original_title ~~ '%movie-12%'::text))) THEN 10 ELSE 0 END) > 0))
+         Rows Removed by Filter: 10000
+         Index Searches: 1
+         Buffers: shared hit=2540
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.357 ms
+ Execution Time: 5.296 ms
+(11 �м�¼)
+
+=== BRANCH-42: MediaTypes
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=17.46..17.48 rows=8 width=32) (actual time=0.045..0.046 rows=0.00 loops=1)
+   Buffers: shared hit=5
+   ->  Sort  (cost=17.46..17.48 rows=8 width=32) (actual time=0.045..0.045 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=5
+         ->  Append  (cost=0.00..17.34 rows=8 width=32) (actual time=0.041..0.042 rows=0.00 loops=1)
+               Buffers: shared hit=5
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=17) (actual time=0.011..0.011 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Index Scan using media_items_movies_media_type_idx on media_items_movies a_2  (cost=0.12..8.14 rows=1 width=20) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Index Cond: (media_type = 'Video'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=2
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+                     Filter: (media_type = 'Video'::text)
+               ->  Index Scan using media_items_other_media_type_idx on media_items_other a_8  (cost=0.12..8.14 rows=1 width=18) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Index Cond: (media_type = 'Video'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 1.046 ms
+ Execution Time: 0.072 ms
+(34 �м�¼)
+
+=== BRANCH-43: OfficialRating
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2671.69..2671.71 rows=8 width=32) (actual time=1.974..1.975 rows=0.00 loops=1)
+   Buffers: shared hit=2514
+   ->  Sort  (cost=2671.69..2671.71 rows=8 width=32) (actual time=1.973..1.974 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2514
+         ->  Append  (cost=0.00..2671.57 rows=8 width=32) (actual time=1.972..1.972 rows=0.00 loops=1)
+               Buffers: shared hit=2514
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=17) (actual time=0.007..0.007 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Seq Scan on media_items_movies a_2  (cost=0.00..2650.00 rows=1 width=20) (actual time=1.883..1.883 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+                     Rows Removed by Filter: 10000
+                     Buffers: shared hit=2500
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.015..0.015 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+               ->  Seq Scan on media_items_other a_8  (cost=0.00..20.52 rows=1 width=18) (actual time=0.052..0.052 rows=0.00 loops=1)
+                     Filter: ((official_rating = 'PG'::text) OR (official_rating = 'PG-13'::text))
+                     Rows Removed by Filter: 501
+                     Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=120
+ Planning Time: 0.930 ms
+ Execution Time: 1.989 ms
+(34 �м�¼)
+
+=== BRANCH-44: HasOverview（overview IS NOT NULL）
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2625.01..2625.02 rows=1 width=20) (actual time=1.868..1.868 rows=0.00 loops=1)
+   Buffers: shared hit=2500
+   ->  Sort  (cost=2625.01..2625.02 rows=1 width=20) (actual time=1.867..1.867 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2500
+         ->  Seq Scan on media_items_movies a  (cost=0.00..2625.00 rows=1 width=20) (actual time=1.865..1.865 rows=0.00 loops=1)
+               Filter: ((overview IS NOT NULL) AND (type = 2))
+               Rows Removed by Filter: 10000
+               Buffers: shared hit=2500
+ Planning:
+   Buffers: shared hit=8
+ Planning Time: 0.169 ms
+ Execution Time: 1.874 ms
+(14 �м�¼)
+
+=== BRANCH-45: AncestorWithPresentationUniqueKey
+                                                                                                          QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=275.19..275.21 rows=8 width=20) (actual time=118.359..118.376 rows=100.00 loops=1)
+   Buffers: shared hit=60068 read=2
+   ->  Sort  (cost=275.19..275.21 rows=8 width=20) (actual time=118.358..118.370 rows=100.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: top-N heapsort  Memory: 36kB
+         Buffers: shared hit=60068 read=2
+         ->  Nested Loop  (cost=260.08..275.07 rows=8 width=20) (actual time=3.950..112.483 rows=10000.00 loops=1)
+               Buffers: shared hit=60068 read=2
+               ->  HashAggregate  (cost=259.96..260.04 rows=8 width=8) (actual time=3.910..5.503 rows=10000.00 loops=1)
+                     Group Key: ancestor_ids.item_id
+                     Batches: 1  Memory Usage: 561kB
+                     Buffers: shared hit=69 read=1
+                     ->  Hash Semi Join  (cost=17.60..259.94 rows=8 width=8) (actual time=0.109..2.466 rows=10000.00 loops=1)
+                           Hash Cond: (ancestor_ids.ancestor_id = media_items.id)
+                           Buffers: shared hit=69 read=1
+                           ->  Append  (cost=0.00..216.00 rows=10000 width=16) (actual time=0.010..1.299 rows=10000.00 loops=1)
+                                 Buffers: shared hit=66
+                                 ->  Seq Scan on ancestor_ids_p0 ancestor_ids_1  (cost=0.00..20.37 rows=1237 width=16) (actual time=0.010..0.111 rows=1237.00 loops=1)
+                                       Buffers: shared hit=8
+                                 ->  Seq Scan on ancestor_ids_p1 ancestor_ids_2  (cost=0.00..21.71 rows=1271 width=16) (actual time=0.009..0.103 rows=1271.00 loops=1)
+                                       Buffers: shared hit=9
+                                 ->  Seq Scan on ancestor_ids_p2 ancestor_ids_3  (cost=0.00..21.91 rows=1291 width=16) (actual time=0.008..0.099 rows=1291.00 loops=1)
+                                       Buffers: shared hit=9
+                                 ->  Seq Scan on ancestor_ids_p3 ancestor_ids_4  (cost=0.00..20.00 rows=1200 width=16) (actual time=0.007..0.090 rows=1200.00 loops=1)
+                                       Buffers: shared hit=8
+                                 ->  Seq Scan on ancestor_ids_p4 ancestor_ids_5  (cost=0.00..20.51 rows=1251 width=16) (actual time=0.006..0.088 rows=1251.00 loops=1)
+                                       Buffers: shared hit=8
+                                 ->  Seq Scan on ancestor_ids_p5 ancestor_ids_6  (cost=0.00..20.56 rows=1256 width=16) (actual time=0.008..0.092 rows=1256.00 loops=1)
+                                       Buffers: shared hit=8
+                                 ->  Seq Scan on ancestor_ids_p6 ancestor_ids_7  (cost=0.00..20.38 rows=1238 width=16) (actual time=0.006..0.137 rows=1238.00 loops=1)
+                                       Buffers: shared hit=8
+                                 ->  Seq Scan on ancestor_ids_p7 ancestor_ids_8  (cost=0.00..20.56 rows=1256 width=16) (actual time=0.013..0.109 rows=1256.00 loops=1)
+                                       Buffers: shared hit=8
+                           ->  Hash  (cost=17.50..17.50 rows=8 width=8) (actual time=0.085..0.088 rows=1.00 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                 Buffers: shared hit=3 read=1
+                                 ->  Append  (cost=0.00..17.50 rows=8 width=8) (actual time=0.005..0.084 rows=1.00 loops=1)
+                                       Buffers: shared hit=3 read=1
+                                       ->  Seq Scan on media_items_folders media_items_1  (cost=0.00..1.01 rows=1 width=8) (actual time=0.005..0.005 rows=1.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                             Buffers: shared hit=1
+                                       ->  Index Scan using media_items_movies_presentation_unique_key_idx on media_items_movies media_items_2  (cost=0.29..8.30 rows=1 width=8) (actual time=0.021..0.021 rows=0.00 loops=1)
+                                             Index Cond: (presentation_unique_key = 'perf-lib'::text)
+                                             Index Searches: 1
+                                             Buffers: shared hit=2
+                                       ->  Seq Scan on media_items_series media_items_3  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                       ->  Seq Scan on media_items_seasons media_items_4  (cost=0.00..0.00 rows=1 width=8) (actual time=0.005..0.005 rows=0.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                       ->  Seq Scan on media_items_episodes media_items_5  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                       ->  Seq Scan on media_items_audio media_items_6  (cost=0.00..0.00 rows=1 width=8) (actual time=0.004..0.004 rows=0.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                       ->  Seq Scan on media_items_books media_items_7  (cost=0.00..0.00 rows=1 width=8) (actual time=0.003..0.003 rows=0.00 loops=1)
+                                             Filter: (presentation_unique_key = 'perf-lib'::text)
+                                       ->  Index Scan using media_items_other_presentation_unique_key_idx on media_items_other media_items_8  (cost=0.12..8.14 rows=1 width=8) (actual time=0.036..0.036 rows=0.00 loops=1)
+                                             Index Cond: (presentation_unique_key = 'perf-lib'::text)
+                                             Index Searches: 1
+                                             Buffers: shared read=1
+               ->  Append  (cost=0.12..1.80 rows=8 width=20) (actual time=0.002..0.010 rows=1.00 loops=10000)
+                     Buffers: shared hit=59999 read=1
+                     ->  Index Scan using media_items_folders_pkey on media_items_folders a_1  (cost=0.12..0.14 rows=1 width=17) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Index Cond: (id = ancestor_ids.item_id)
+                           Index Searches: 10000
+                           Buffers: shared hit=9999 read=1
+                     ->  Index Scan using media_items_movies_pkey on media_items_movies a_2  (cost=0.29..1.32 rows=1 width=20) (actual time=0.001..0.001 rows=1.00 loops=10000)
+                           Index Cond: (id = ancestor_ids.item_id)
+                           Index Searches: 10000
+                           Buffers: shared hit=30000
+                     ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Filter: (ancestor_ids.item_id = id)
+                     ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Filter: (ancestor_ids.item_id = id)
+                     ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Filter: (ancestor_ids.item_id = id)
+                     ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Filter: (ancestor_ids.item_id = id)
+                     ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.000..0.000 rows=0.00 loops=10000)
+                           Filter: (ancestor_ids.item_id = id)
+                     ->  Index Scan using media_items_other_pkey on media_items_other a_8  (cost=0.27..0.30 rows=1 width=18) (actual time=0.001..0.001 rows=0.00 loops=10000)
+                           Index Cond: (id = ancestor_ids.item_id)
+                           Index Searches: 10000
+                           Buffers: shared hit=20000
+ Planning:
+   Buffers: shared hit=224
+ Planning Time: 1.962 ms
+ Execution Time: 118.542 ms
+(87 �м�¼)
+
+=== BRANCH-46: SeriesPresentationUniqueKey
+                                                                                             QUERY PLAN                                                                                             
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=17.46..17.48 rows=8 width=32) (actual time=0.053..0.053 rows=0.00 loops=1)
+   Buffers: shared hit=5
+   ->  Sort  (cost=17.46..17.48 rows=8 width=32) (actual time=0.052..0.053 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=5
+         ->  Append  (cost=0.00..17.34 rows=8 width=32) (actual time=0.044..0.045 rows=0.00 loops=1)
+               Buffers: shared hit=5
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=17) (actual time=0.010..0.010 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Index Scan using media_items_movies_series_presentation_unique_key_idx on media_items_movies a_2  (cost=0.12..8.14 rows=1 width=20) (actual time=0.011..0.011 rows=0.00 loops=1)
+                     Index Cond: (series_presentation_unique_key = 'perf-series-1'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=2
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.005..0.005 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: (series_presentation_unique_key = 'perf-series-1'::text)
+               ->  Index Scan using media_items_other_series_presentation_unique_key_idx on media_items_other a_8  (cost=0.12..8.14 rows=1 width=18) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Index Cond: (series_presentation_unique_key = 'perf-series-1'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 1.370 ms
+ Execution Time: 0.084 ms
+(34 �м�¼)
+
+=== BRANCH-47: TopParentId
+                                                                                    QUERY PLAN                                                                                     
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=17.64..17.66 rows=8 width=32) (actual time=0.035..0.035 rows=0.00 loops=1)
+   Buffers: shared hit=4
+   ->  Sort  (cost=17.64..17.66 rows=8 width=32) (actual time=0.034..0.035 rows=0.00 loops=1)
+         Sort Key: a.sort_name
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=4
+         ->  Append  (cost=0.00..17.52 rows=8 width=32) (actual time=0.033..0.034 rows=0.00 loops=1)
+               Buffers: shared hit=4
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.01 rows=1 width=17) (actual time=0.007..0.007 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Index Scan using media_items_movies_top_parent_id_idx on media_items_movies a_2  (cost=0.29..8.30 rows=1 width=20) (actual time=0.011..0.011 rows=0.00 loops=1)
+                     Index Cond: (top_parent_id = '3'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=2
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=40) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=40) (actual time=0.002..0.002 rows=0.00 loops=1)
+                     Filter: (top_parent_id = '3'::text)
+               ->  Index Scan using media_items_other_top_parent_id_idx on media_items_other a_8  (cost=0.15..8.17 rows=1 width=18) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Index Cond: (top_parent_id = '3'::text)
+                     Index Searches: 1
+                     Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=123
+ Planning Time: 0.906 ms
+ Execution Time: 0.050 ms
+(34 �м�¼)
+
+=== BRANCH-48: MinEndDate/MaxStartDate（LiveTv 形态）
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2776.71..2776.73 rows=8 width=16) (actual time=2.344..2.344 rows=0.00 loops=1)
+   Buffers: shared hit=2514
+   ->  Sort  (cost=2776.71..2776.73 rows=8 width=16) (actual time=2.343..2.344 rows=0.00 loops=1)
+         Sort Key: a.start_date
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=2514
+         ->  Append  (cost=0.00..2776.59 rows=8 width=16) (actual time=2.341..2.342 rows=0.00 loops=1)
+               Buffers: shared hit=2514
+               ->  Seq Scan on media_items_folders a_1  (cost=0.00..1.02 rows=1 width=16) (actual time=0.011..0.011 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+                     Rows Removed by Filter: 1
+                     Buffers: shared hit=1
+               ->  Seq Scan on media_items_movies a_2  (cost=0.00..2750.00 rows=1 width=16) (actual time=2.237..2.237 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+                     Rows Removed by Filter: 10000
+                     Buffers: shared hit=2500
+               ->  Seq Scan on media_items_series a_3  (cost=0.00..0.00 rows=1 width=16) (actual time=0.004..0.004 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+               ->  Seq Scan on media_items_seasons a_4  (cost=0.00..0.00 rows=1 width=16) (actual time=0.002..0.002 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+               ->  Seq Scan on media_items_episodes a_5  (cost=0.00..0.00 rows=1 width=16) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+               ->  Seq Scan on media_items_audio a_6  (cost=0.00..0.00 rows=1 width=16) (actual time=0.003..0.003 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+               ->  Seq Scan on media_items_books a_7  (cost=0.00..0.00 rows=1 width=16) (actual time=0.004..0.005 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+               ->  Seq Scan on media_items_other a_8  (cost=0.00..25.52 rows=1 width=16) (actual time=0.076..0.076 rows=0.00 loops=1)
+                     Filter: ((start_date >= (now() - '1 day'::interval)) AND (end_date <= (now() + '1 day'::interval)))
+                     Rows Removed by Filter: 501
+                     Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=142
+ Planning Time: 1.376 ms
+ Execution Time: 2.368 ms
+(34 �м�¼)
+
+=== BRANCH-49: ExcludeProviderIds jsonb（->> IS DISTINCT FROM）
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..29.21 rows=100 width=20) (actual time=0.006..0.058 rows=100.00 loops=1)
+   Buffers: shared hit=27
+   ->  Index Scan using media_items_movies_sort_name_idx on media_items_movies a  (cost=0.29..2892.28 rows=10000 width=20) (actual time=0.005..0.053 rows=100.00 loops=1)
+         Filter: ((type = 2) AND ((provider_ids IS NULL) OR ((provider_ids ->> 'Tmdb'::text) IS DISTINCT FROM '12345'::text)))
+         Index Searches: 1
+         Buffers: shared hit=27
+ Planning:
+   Buffers: shared hit=8
+ Planning Time: 0.166 ms
+ Execution Time: 0.068 ms
+(10 �м�¼)
+
+=== BRANCH-50: 未看过的 Series 聚合（MAX(udb.last_played_date) 相关子查询）
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.29..22.07 rows=1 width=40) (actual time=0.008..0.008 rows=0.00 loops=1)
+   ->  Nested Loop Anti Join  (cost=0.29..22.07 rows=1 width=40) (actual time=0.007..0.008 rows=0.00 loops=1)
+         ->  Seq Scan on media_items_series a  (cost=0.00..0.00 rows=1 width=72) (actual time=0.007..0.007 rows=0.00 loops=1)
+               Filter: (type = 3)
+         ->  Nested Loop  (cost=0.29..22.06 rows=1 width=32) (never executed)
+               ->  Append  (cost=0.00..17.34 rows=8 width=36) (never executed)
+                     ->  Seq Scan on media_items_folders b_1  (cost=0.00..1.01 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Index Scan using media_items_movies_series_presentation_unique_key_idx on media_items_movies b_2  (cost=0.12..8.14 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                           Index Searches: 0
+                     ->  Seq Scan on media_items_series b_3  (cost=0.00..0.00 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Seq Scan on media_items_seasons b_4  (cost=0.00..0.00 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Seq Scan on media_items_episodes b_5  (cost=0.00..0.00 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Seq Scan on media_items_audio b_6  (cost=0.00..0.00 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Seq Scan on media_items_books b_7  (cost=0.00..0.00 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                     ->  Index Scan using media_items_other_series_presentation_unique_key_idx on media_items_other b_8  (cost=0.12..8.14 rows=1 width=36) (never executed)
+                           Filter: (series_presentation_unique_key = a.presentation_unique_key)
+                           Index Searches: 0
+               ->  Index Scan using user_datas_p5_pkey on user_datas_p5 udb  (cost=0.29..0.58 rows=1 width=4) (never executed)
+                     Index Cond: ((user_data_key_id = b.user_data_key_id) AND (user_id = 5))
+                     Filter: played
+                     Index Searches: 0
+ Planning:
+   Buffers: shared hit=140
+ Planning Time: 1.146 ms
+ Execution Time: 0.051 ms
+(32 �м�¼)
+

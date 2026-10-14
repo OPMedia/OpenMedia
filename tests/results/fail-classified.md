@@ -1,7 +1,28 @@
-﻿# OpenMedia API 矩阵失败分类（第二轮·最终：83 个 FAIL）
+# OpenMedia API 矩阵失败分类（第二轮·最终：83 个 FAIL）
 
 > 运行：2026-10-14 20:18:40　受测：PID 25272（Debug 构建，ServerId 62255726…）　上下文 ItemId=Movie1（真实）
 > 汇总：① 服务器 bug 22　② ffmpeg 未安装 11　③ 预期差异 6　④ 测试脚本/计划 12　⑤ 环境/fixture 32
+
+## ⑥ 二期新增 bug（T3.2/T2/T4 测试发现，2026-10-14 22:30-23:20，受测 PID 6748）
+
+> 编号接一期 BUG-19；Similar 500（similarity_score 列缺失，Developer 处理中）未占号。证据：`D:\OpenMedia\ProgramData-Server\logs\`（server.txt + ffmpeg-*.txt）与 tests/results/retest-ffmpeg-latest.json
+
+| 编号 | 端点/路径 | 现象 | 根因（代码证据） |
+|------|-----------|------|------------------|
+| BUG-20 | `GET /Users/{uid}/Items?IncludeItemTypes=Movie` | 返回空（TotalRecordCount=0），同参数 `/Items`（无 UserId）正常返回 2 部 | 用户作用域查询 + IncludeItemTypes 分支组合失效（查询层，ExcludeItemTypes/MediaTypes 正常） |
+| BUG-21 | `GET /Videos/{Id}/live.m3u8`（无 SegmentContainer） | 500 "Error starting ffmpeg" | BaseHlsService.cs:176 `text5=SegmentContainer` 为空 → 命令行 `-segment_format ` 空值 → ffmpeg 参数移位（`-segment_list_entry_prefix` 被吞，输出 URL 变 `hls/xxx/`）→ "Output file does not contain any stream" |
+| BUG-22 | `GET /Videos/{Id}/live.m3u8`（真实参数） | 请求挂起（客户端 20s/120s 超时，服务器侧无限等待） | ffmpeg 9 播放列表用 `.tmp`+rename 原子写；服务器 WaitForMinimumSegmentCount（BaseHlsService.cs:124）轮询打开 `.m3u8` 无 FILE_SHARE_DELETE → rename 失败（日志 "failed to rename ... Operation not permitted"）→ 播放列表停在 2 条 < MinSegments=3 → while 循环无超时死等 |
+| BUG-23 | `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.ts`（分片首取） | 首次 500 "Error starting ffmpeg"，2s 后重试 200 | StartFfMpeg 轮询（BaseStreamingService.cs:255-270）50ms 周期错过短视频（8s）分片文件存在窗口（ffmpeg ~90ms 跑完退出，`while(!hasProcessExited)` 先退出且未观测到文件）→ 误判启动失败；失败路径不注册 TranscodingJob → 后续 DELETE ActiveEncodings 无 job 可杀 → 文件泄漏 |
+| BUG-24 | 分片重启路径（seek 后取分片，如 segment 1 首次缺失） | 确定性 500 | 命令行 `-segment_time_delta -6` 负值被 ffmpeg 9 拒绝（"out of range [0 - …]"→"Could not write header"→Conversion failed）。旧 ffmpeg 接受负值。T4 并发中 50% 分片请求因此 500 |
+| BUG-25 | transcoding-temp 临时文件 | progressive remux（/stream）与 HLS 会话结束后文件不清理（3 个 .mkv 残留 35min+；T4 会话 6 文件 70s+ 后仍在） | ffmpeg 先于 kill timer 退出 → PingTimer（ApiEntryPoint.cs:346）`if (job.HasExited) { StopKillTimer; return; }` → 永不触发 KillTranscodingJob(delete:true)；BUG-23 失败路径则根本无 job |
+| BUG-26 | `GET /Videos/{Id}/stream?static=true` + 越界 Range | `Content-Length: 1048576` 但实际发送 809,858B（RFC 7233 违例：应按文件尾截断 Content-Range/Content-Length） | 严格 HTTP 客户端（Python urllib）IncompleteRead；curl 容忍。L3 负载首跑 100% 失败即此因 |
+
+**T3.2 复测结果**（② 类 11 端点，tests/results/retest-ffmpeg-latest.json）：
+- 转绿 4：Audio stream ×2、Video stream ×2 → 200（真实 remux 字节）
+- 转 400 共 4（Developer T1.1 FormatException→400 映射已生效）：subtitles.m3u8(test)、Audio/Video hls1(test/test.test)、Subtitles StartPositionTicks(test)
+- 仍 500 共 2：live.m3u8?Container=mkv（BUG-21）、Subtitles/0/Stream.original（① 类 First()，无字幕流 fixture）
+- 合理 404 共 1：legacy /hls/（无活跃会话）
+- 端到端（web 播放器实际链路 master→main→分片）：PlaybackInfo 200（h264 640x360+aac）、master/main 200、segment 0 重试后 200（889KB 真实 TS）、segment 1 因 BUG-24 失败、DELETE ActiveEncodings 204 但清理链因 BUG-23 断裂
 
 ## ① 服务器 bug（代码缺陷）
 

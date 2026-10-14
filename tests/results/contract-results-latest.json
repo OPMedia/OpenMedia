@@ -1,7 +1,7 @@
 ﻿{
-    "runAt":  "2026-10-14 20:21:50",
-    "baseUrl":  "http://127.0.0.1:8096",
-    "apiBase":  "http://127.0.0.1:8096/emby",
+    "runAt":  "2026-10-14 23:28:39",
+    "baseUrl":  "http://localhost:8096",
+    "apiBase":  "http://localhost:8096/emby",
     "summary":  {
                     "pass":  16,
                     "fail":  2,
@@ -26,7 +26,7 @@
                    {
                        "endpoint":  "/System/Info/Public",
                        "rule":  "Id = 32 位无连字符 hex（Guid N 格式）",
-                       "result":  "Id=6225572626f94ea0b6e469c9ac63ef6f",
+                       "result":  "Id=980f922f49e84b8b8c7c9631964fa1c1",
                        "status":  "PASS",
                        "detail":  ""
                    },
@@ -61,21 +61,21 @@
                    {
                        "endpoint":  "/Items",
                        "rule":  "HTTP 200 + QueryResult{Items,TotalRecordCount}",
-                       "result":  "Items=4 TotalRecordCount=4",
+                       "result":  "Items=20 TotalRecordCount=29",
                        "status":  "PASS",
                        "detail":  ""
                    },
                    {
                        "endpoint":  "/Items",
                        "rule":  "Type 为枚举字符串（非数字）",
-                       "result":  "前 5 个 Type: Folder,Movie,Movie,PlaylistsFolder",
+                       "result":  "前 5 个 Type: Folder,Movie,Movie,Folder,Folder",
                        "status":  "PASS",
                        "detail":  ""
                    },
                    {
                        "endpoint":  "/Items",
                        "rule":  "无 null 值字段（序列化应省略 null）",
-                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId",
+                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId",
                        "status":  "FAIL",
                        "detail":  ""
                    },
@@ -131,7 +131,7 @@
                    {
                        "endpoint":  "/System/Info",
                        "rule":  "Id = Guid N 格式",
-                       "result":  "Id=6225572626f94ea0b6e469c9ac63ef6f",
+                       "result":  "Id=980f922f49e84b8b8c7c9631964fa1c1",
                        "status":  "PASS",
                        "detail":  ""
                    }

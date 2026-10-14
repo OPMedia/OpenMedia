@@ -1,21 +1,19 @@
 ﻿# OpenMedia 功能场景测试报告
 
-> 运行时间：2026-10-14 20:22:24　基址：http://127.0.0.1:8096/emby　ServerId：6225572626f94ea0b6e469c9ac63ef6f　版本：3.5.3.0
+> 运行时间：2026-10-14 23:25:41　基址：http://localhost:8096/emby　ServerId：980f922f49e84b8b8c7c9631964fa1c1　版本：3.5.3.0
 
-**结果：PASS 22 / FAIL 2 / SKIP 0（共 24）**
+**结果：PASS 21 / FAIL 0 / SKIP 1（共 22）**
 
 ## S0-预检
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| GET /System/Info/Public | 200 + JSON | status=200 id=6225572626f94ea0b6e469c9ac63ef6f ver=3.5.3.0 | **PASS** | Id 为 32 位无连字符 hex |
+| GET /System/Info/Public | 200 + JSON | status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0 | **PASS** | Id 为 32 位无连字符 hex |
 ## S1-启动向导
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| GET /Startup/Configuration（无 token） | 200（向导未完成，免认证放行） | status=200 body={"UICulture":"en-us","MetadataCountryCode":"US","PreferredMetadataLanguage":"en"} | **PASS** |  |
-| POST /Startup/User {"Name":"admin"} | 200/204（设置初始用户名） | status=200 | **PASS** |  |
-| POST /Startup/Complete | 200/204 | status=204 | **PASS** |  |
+| GET /Startup/Configuration（无 token） | 401（向导已完成，需认证） | status=401 | **PASS** | 向导已完成，跳过向导步骤（幂等） |
 ## S2-认证
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
@@ -29,12 +27,12 @@
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
 | 测试媒体就绪（Movie1/Movie2 mkv+nfo+poster） | 文件存在 | 就绪 | **PASS** |  |
-| GET /Library/VirtualFolders | 200 | status=200 文件夹数=5（OpenMediaTests 存在=False） | **PASS** |  |
-| POST /Library/VirtualFolders（添加 OpenMediaTests → D:\Dev\OpenMedia\tests\media） | 200/204 | status=204 | **PASS** |  |
+| GET /Library/VirtualFolders | 200 | status=200 文件夹数=7（OpenMediaTests 存在=True） | **PASS** |  |
+| POST /Library/VirtualFolders（添加 OpenMediaTests） | — | 已存在，跳过（幂等） | **SKIP** |  |
 | POST /Library/Refresh（触发扫描） | 200/204 | status=204 | **PASS** |  |
-| 扫描出 2 部电影（轮询 /Items?Recursive=true） | ≥2 个 Movie 条目（≤120s） | count=2，耗时 0s | **PASS** |  |
-| Movie1 元数据（nfo title/year） | Name=Movie1, ProductionYear=2020 | Name=Movie1, Year=, Id=c3f6962891668fc8365e3dfaa24bb3ea | **FAIL** | nfo 解析（title/year） |
-| Movie2 元数据（nfo title/year） | Name=Movie2, ProductionYear=2021 | Name=Movie2, Year= | **FAIL** |  |
+| 扫描出 2 部电影（轮询 /Items?Recursive=true） | ≥2 个 Movie 条目（≤120s） | count=2，耗时 0.1s | **PASS** |  |
+| Movie1 元数据（nfo title/year） | Name=Movie1, ProductionYear=2020 | Name=Movie1, Year=2020, Id=c3f6962891668fc8365e3dfaa24bb3ea | **PASS** | nfo 解析（title/year） |
+| Movie2 元数据（nfo title/year） | Name=Movie2, ProductionYear=2021 | Name=Movie2, Year=2021 | **PASS** |  |
 | GET /Items/{Movie1}/Images/Primary（poster.jpg） | 200 + image/* | status=200 type=image/jpeg 633B | **PASS** |  |
 ## S4-WebSocket
 
@@ -51,4 +49,4 @@
 | GET /favicon.ico | 200 | status=200 type=image/vnd.microsoft.icon | **PASS** |  |
 | GET /robots.txt | 200 | status=200 type=text/plain | **PASS** |  |
 | GET /emby/System/Ping | 200 | status=200 body=Emby Server | **PASS** |  |
-| GET /Videos/{Movie1}/stream?static=true + Range | 206 + Content-Range（R3） | status=206 content-range=bytes 0-99/262144 type=video/x-matroska 100B | **PASS** |  |
+| GET /Videos/{Movie1}/stream?static=true + Range | 206 + Content-Range（R3） | status=206 content-range=bytes 0-99/157280 type=video/x-matroska 100B | **PASS** |  |

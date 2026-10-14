@@ -1,34 +1,36 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-14 20:18:50　基址：http://127.0.0.1:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-14 23:27:14　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
 
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
-| P0 | 14 | 10 | 4 | — | 0 |
-| P1 | 252 | 137 | 79 | 36 | 0 |
+| P0 | 14 | 11 | 3 | — | 0 |
+| P1 | 252 | 143 | 73 | 36 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：63.9%**（147 / 230）
+**通过率（PASS / (PASS+FAIL)）：67%**（154 / 230）
 
 ### 失败清单
 
 | 级别 | 操作 | 状态码 | 备注 |
 |------|------|--------|------|
+| P1 | `GET /Artists` | 500 | 500 Internal Server Error：Field not found in row: item_types |
 | P0 | `GET /Users` | 200 | 非数组 |
+| P1 | `GET /Artists/AlbumArtists` | 500 | 500 Internal Server Error：Field not found in row: item_types |
 | P1 | `GET /Artists/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Environment/DirectoryContents` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Games/SystemSummaries` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Images/Remote` | 500 | 500 Internal Server Error：Invalid URI: The format of the URI could not be determined. |
+| P1 | `GET /Images/Remote` | 400 | 400：Invalid ImageUrl: test |
 | P1 | `GET /Items/File` | 400 | 400：Value cannot be null. (Parameter 'path') |
-| P1 | `GET /LiveTv/ChannelMappings` | 500 | 500 Internal Server Error：Sequence contains no matching element |
-| P1 | `GET /LiveTv/ChannelMappingOptions` | 500 | 500 Internal Server Error：Sequence contains no matching element |
+| P1 | `GET /LiveTv/ChannelMappings` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /LiveTv/ChannelMappingOptions` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Movies/Recommendations` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /MusicGenres/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Packages/{Name}` | 400 | 400：Value cannot be null. (Parameter 'result') |
-| P1 | `GET /Playback/BitrateTest` | 500 | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| P1 | `GET /Packages/{Name}` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /Playback/BitrateTest` | 400 | 400：The input string 'test' was not in a correct format. |
 | P1 | `GET /ScheduledTasks/{Id}` | 404 | 404：不在 B6 暂缓清单 |
 | P0 | `GET /Users/Public` | 200 | 非数组 |
 | P1 | `POST /Users/AuthenticateByName` | 400 | 400：Value cannot be null. (Parameter 'username') |
@@ -36,58 +38,49 @@
 | P1 | `GET /Albums/{Id}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/universal.{Container}` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/universal` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Audio/{Id}/stream.{Container}` | 500 | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
-| P1 | `GET /Audio/{Id}/stream` | 500 | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
 | P1 | `GET /Audio/{Id}/master.m3u8` | 400 | 400：MediaSourceId is required |
-| P1 | `GET /Channels/{Id}/Items` | 500 | 500 Internal Server Error：Unrecognized Guid format. |
-| P1 | `GET /Dlna/icons/{Filename}` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
-| P1 | `GET /Dlna/Profiles/{Id}` | 500 | 500 Internal Server Error：Sequence contains no matching element |
+| P1 | `GET /Channels/{Id}/Items` | 400 | 400：Unrecognized Guid format. |
+| P1 | `GET /Dlna/icons/{Filename}` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /Dlna/Profiles/{Id}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Items/RemoteSearch/Image` | 400 | 400：Search provider not found. |
 | P1 | `GET /Items/{Id}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Items/{Id}/PlaybackInfo` | 500 | 500 Internal Server Error：23503: 插入或更新表 "item_extradata" 违反外键约束 "item_extradata_fixed_extradata_type_id_fkey1" DETAIL: Detail redacted as it may c… |
-| P0 | `POST /Items/{Id}/PlaybackInfo` | 500 | status=500 Internal Server Error |
-| P1 | `GET /LiveTv/Recordings/Folders` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | P1 | `GET /LiveTv/ListingProviders/Lineups` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /LiveTv/Channels/{Id}` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /LiveTv/Programs/Recommended` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /LiveTv/Recordings/{Id}` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /LiveTv/Timers/{Id}` | 400 | 400：Value cannot be null. (Parameter 'result') |
-| P1 | `GET /LiveTv/SeriesTimers/{Id}` | 400 | 400：Value cannot be null. (Parameter 'result') |
+| P1 | `GET /LiveTv/Timers/{Id}` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /LiveTv/SeriesTimers/{Id}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /MusicGenres/{Name}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Playlists/{Id}/Items` | 500 | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Playlists… |
-| P1 | `GET /Playlists/{Id}/InstantMix` | 500 | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Playlists… |
-| P1 | `GET /Plugins/{Id}/Thumb` | 500 | 500 Internal Server Error：Sequence contains no matching element |
-| P1 | `GET /Plugins/{Id}/Configuration` | 500 | 500 Internal Server Error：Sequence contains no matching element |
+| P1 | `GET /Playlists/{Id}/Items` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /Playlists/{Id}/InstantMix` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /Plugins/{Id}/Thumb` | 404 | 404：不在 B6 暂缓清单 |
+| P1 | `GET /Plugins/{Id}/Configuration` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Shows/{Id}/Seasons` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Shows/{Id}/Episodes` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Songs/{Id}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /System/Configuration/{Key}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /System/Logs/Log` | 500 | 500 Internal Server Error：Sequence contains no matching element |
-| P0 | `GET /Users/{UserId}/Views` | 500 | status=500 Internal Server Error |
-| P1 | `GET /Videos/{Id}/index.bif` | 500 | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 500 |
-| P1 | `GET /Videos/{Id}/stream.{Container}` | 500 | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
-| P1 | `GET /Videos/{Id}/stream` | 500 | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
+| P1 | `GET /System/Logs/Log` | 404 | 404：不在 B6 暂缓清单 |
+| P0 | `GET /Users/{UserId}/Views` | 400 | status=400 Bad Request |
+| P1 | `GET /Videos/{Id}/index.bif` | 400 | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 400 |
 | P1 | `GET /Videos/{Id}/master.m3u8` | 400 | 400：MediaSourceId is required |
-| P1 | `GET /Videos/{Id}/subtitles.m3u8` | 500 | 500 Internal Server Error：The input string 'test' was not in a correct format. |
-| P1 | `GET /Videos/{Id}/live.m3u8` | 500 | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
+| P1 | `GET /Videos/{Id}/subtitles.m3u8` | 400 | 400：The input string 'test' was not in a correct format. |
+| P1 | `GET /Videos/{Id}/live.m3u8` | 500 | 500 Internal Server Error：Error starting ffmpeg |
 | P1 | `GET /Artists/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Dlna/{UuId}/icons/{Filename}` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
+| P1 | `GET /Dlna/{UuId}/icons/{Filename}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /GameGenres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Genres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Images/General/{Name}/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Images/Ratings/{Theme}/{Name}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Images/MediaInfo/{Theme}/{Name}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /LiveTv/LiveRecordings/{Id}/stream` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
+| P1 | `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /LiveTv/Recordings/Groups/{Id}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /MusicGenres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Persons/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Providers/Subtitles/Subtitles/{Id}` | 500 | 500 Internal Server Error：Sequence contains no matching element |
+| P1 | `GET /Providers/Subtitles/Subtitles/{Id}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Studios/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Users/{UserId}/Items/{Id}` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | P1 | `GET /Users/{Id}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Artists/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Audio/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 500 | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| P1 | `GET /Audio/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 400 | 400：The input string 'test' was not in a correct format. |
 | P1 | `GET /GameGenres/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Genres/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /MusicGenres/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
@@ -96,10 +89,10 @@
 | P1 | `GET /Users/{UserId}/Items/{Id}/SpecialFeatures` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | P1 | `GET /Users/{UserId}/Items/{Id}/LocalTrailers` | 500 | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | P1 | `GET /Users/{Id}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 500 | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| P1 | `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 400 | 400：The input string 'test' was not in a correct format. |
 | P1 | `GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | 500 | 500 Internal Server Error：Sequence contains no matching element |
-| P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | 500 | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | 400 | 400：The input string 'test' was not in a correct format. |
 
 ## 明细矩阵（按域分组）
 
@@ -114,12 +107,12 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Artists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
+| `GET /Artists` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Field not found in row: item_types |
 | `GET /Artists/{Id}/Similar` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
 | `GET /Artists/{Name}/Images/{Type}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Artists/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Artists/AlbumArtists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
+| `GET /Artists/AlbumArtists` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Field not found in row: item_types |
 | `GET /Artists/InstantMix` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
 | `GET /Artists/Prefixes` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 
@@ -127,11 +120,11 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Audio/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| `GET /Audio/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
 | `GET /Audio/{Id}/main.m3u8` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Audio/{Id}/master.m3u8` | P1 | 400 | — |  | **FAIL** | 400：MediaSourceId is required |
-| `GET /Audio/{Id}/stream` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
-| `GET /Audio/{Id}/stream.{Container}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
+| `GET /Audio/{Id}/stream` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Audio/{Id}/stream.{Container}` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Audio/{Id}/universal` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
 | `GET /Audio/{Id}/universal.{Container}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
 
@@ -161,7 +154,7 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Channels` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /Channels/{Id}/Items` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Unrecognized Guid format. |
+| `GET /Channels/{Id}/Items` | P1 | 400 | — |  | **FAIL** | 400：Unrecognized Guid format. |
 | `GET /Channels/Items/Latest` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 
 ### 域：Connect（2）
@@ -202,10 +195,10 @@
 | `GET /Dlna/{UuId}/contentdirectory/contentdirectory.xml` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Dlna/{UuId}/description` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Dlna/{UuId}/description.xml` | P1 | 200 | — |  | **PASS** |  |
-| `GET /Dlna/{UuId}/icons/{Filename}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
-| `GET /Dlna/icons/{Filename}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
+| `GET /Dlna/{UuId}/icons/{Filename}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Dlna/icons/{Filename}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Dlna/ProfileInfos` | P1 | 200 | PascalCase ✓ | Id,Name,Type | **PASS** |  |
-| `GET /Dlna/Profiles/{Id}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /Dlna/Profiles/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Dlna/Profiles/Default` | P1 | 200 | PascalCase ✓ | Name,Manufacturer,ManufacturerUrl,ModelName,ModelDescription… | **PASS** |  |
 
 ### 域：Encoding（2）
@@ -261,7 +254,7 @@
 | `GET /Images/MediaInfo/{Theme}/{Name}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Images/Ratings` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /Images/Ratings/{Theme}/{Name}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Images/Remote` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Invalid URI: The format of the URI could not be determined. |
+| `GET /Images/Remote` | P1 | 400 | — |  | **FAIL** | 400：Invalid ImageUrl: test |
 
 ### 域：Items（29）
 
@@ -279,7 +272,7 @@
 | `GET /Items/{Id}/Images/{Type}/{Index}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
 | `GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
 | `GET /Items/{Id}/InstantMix` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
-| `GET /Items/{Id}/PlaybackInfo` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：23503: 插入或更新表 "item_extradata" 违反外键约束 "item_extradata_fixed_extradata_type_id_fkey1" DETAIL: Detail redacted as it may c… |
+| `GET /Items/{Id}/PlaybackInfo` | P1 | 200 | PascalCase ✓ | MediaSources,PlaySessionId | **PASS** |  |
 | `GET /Items/{Id}/RemoteImages` | P1 | 200 | PascalCase ✓ | Images,TotalRecordCount,Providers | **PASS** |  |
 | `GET /Items/{Id}/RemoteImages/Providers` | P1 | 200 | PascalCase ✓ | Name,SupportedImages | **PASS** |  |
 | `GET /Items/{Id}/RemoteSearch/Subtitles/{Language}` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
@@ -295,7 +288,7 @@
 | `GET /Items/Filters2` | P1 | 200 | PascalCase ✓ | Genres,Tags,Studios | **PASS** |  |
 | `GET /Items/Prefixes` | P1 | 200 | PascalCase ✓ | Name,Value | **PASS** |  |
 | `GET /Items/RemoteSearch/Image` | P1 | 400 | — |  | **FAIL** | 400：Search provider not found. |
-| `POST /Items/{Id}/PlaybackInfo` | P0 | 500 | — |  | **FAIL** | status=500 Internal Server Error |
+| `POST /Items/{Id}/PlaybackInfo` | P0 | 200 | PascalCase ✓ | MediaSources,PlaySessionId | **PASS** |  |
 
 ### 域：Libraries（1）
 
@@ -316,10 +309,10 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /LiveTv/ChannelMappingOptions` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
-| `GET /LiveTv/ChannelMappings` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /LiveTv/ChannelMappingOptions` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /LiveTv/ChannelMappings` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Channels` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /LiveTv/Channels/{Id}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
+| `GET /LiveTv/Channels/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
 | `GET /LiveTv/GuideInfo` | P1 | 200 | PascalCase ✓ | StartDate,EndDate | **PASS** |  |
 | `GET /LiveTv/Info` | P1 | 200 | PascalCase ✓ | Services,IsEnabled,EnabledUsers | **PASS** |  |
 | `GET /LiveTv/ListingProviders` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
@@ -328,20 +321,20 @@
 | `GET /LiveTv/ListingProviders/Lineups` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/ListingProviders/SchedulesDirect/Countries` | P1 | 200 | ✗ North America,Latin America | North America,Europe,Latin America,Caribbean,Oceania | **PASS** | 键名风格: North America,Latin America |
 | `GET /LiveTv/LiveRecordings/{Id}/stream` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
+| `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Programs` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Programs/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
 | `GET /LiveTv/Programs/Recommended` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
 | `GET /LiveTv/Recordings` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /LiveTv/Recordings/{Id}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
-| `GET /LiveTv/Recordings/Folders` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
+| `GET /LiveTv/Recordings/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
+| `GET /LiveTv/Recordings/Folders` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Recordings/Groups` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Recordings/Groups/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Recordings/Series` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/SeriesTimers` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /LiveTv/SeriesTimers/{Id}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'result') |
+| `GET /LiveTv/SeriesTimers/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Timers` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /LiveTv/Timers/{Id}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'result') |
+| `GET /LiveTv/Timers/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Timers/Defaults` | P1 | 200 | PascalCase ✓ | RecordAnyTime,SkipEpisodesInLibrary,RecordAnyChannel,KeepUpT… | **PASS** |  |
 | `GET /LiveTv/TunerHosts` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /LiveTv/TunerHosts/Types` | P1 | 200 | PascalCase ✓ | Name,Id | **PASS** |  |
@@ -415,7 +408,7 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Packages` | P1 | 200 | ✗ id,name,shortDescription,overview,isPremium,adult,richDescUrl,thumbImage,previewImage,type,targetFilename,category,tileColor,featureId,regInfo,price,targetSystem,guid,avgRating,isRegistered,expDate,versions,enableInAppStore,installs | id,name,shortDescription,overview,isPremium,adult,richDescUr… | **PASS** | 键名风格: id,name,shortDescription,overview,isPremium,adult,richDescUrl,thumbImage,previewImage,type,targetFilename,category,tileColor,featureId,regInfo,price,targetSystem,guid,avgRating,isRegistered,expDate,versions,enableInAppStore,installs |
-| `GET /Packages/{Name}` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'result') |
+| `GET /Packages/{Name}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Packages/Updates` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 
 ### 域：Persons（4）
@@ -431,28 +424,28 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Playback/BitrateTest` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| `GET /Playback/BitrateTest` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
 
 ### 域：Playlists（2）
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Playlists/{Id}/InstantMix` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Playlists… |
-| `GET /Playlists/{Id}/Items` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Playlists… |
+| `GET /Playlists/{Id}/InstantMix` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Playlists/{Id}/Items` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 
 ### 域：Plugins（3）
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Plugins` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
-| `GET /Plugins/{Id}/Configuration` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
-| `GET /Plugins/{Id}/Thumb` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /Plugins/{Id}/Configuration` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Plugins/{Id}/Thumb` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 
 ### 域：Providers（1）
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Providers/Subtitles/Subtitles/{Id}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /Providers/Subtitles/Subtitles/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 
 ### 域：Reports（4）
 
@@ -549,7 +542,7 @@
 | `GET /System/Info` | P1 | 200 | PascalCase ✓ | SystemUpdateLevel,OperatingSystemDisplayName,HasPendingResta… | **PASS** |  |
 | `GET /System/Info/Public` | P0 | 200 | PascalCase ✓ | LocalAddress,ServerName,Version,OperatingSystem,Id | **PASS** |  |
 | `GET /System/Logs` | P1 | 200 | PascalCase ✓ | DateCreated,DateModified,Size,Name | **PASS** |  |
-| `GET /System/Logs/Log` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /System/Logs/Log` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /System/Ping` | P0 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /System/WakeOnLanInfo` | P1 | 200 | PascalCase ✓ | MacAddress,Port | **PASS** |  |
 
@@ -602,11 +595,11 @@
 | `GET /Users/{UserId}/Items/{Id}/Intros` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/{Id}/LocalTrailers` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | `GET /Users/{UserId}/Items/{Id}/SpecialFeatures` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
-| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,ChannelId,IsFolder,ParentId,Type,UserData,C… | **PASS** |  |
+| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,ChannelId,ProductionYear,IsFolder,ParentId,… | **PASS** |  |
 | `GET /Users/{UserId}/Items/Resume` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/Root` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Supp… | **PASS** |  |
 | `GET /Users/{UserId}/Suggestions` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /Users/{UserId}/Views` | P0 | 500 | — |  | **FAIL** | status=500 Internal Server Error |
+| `GET /Users/{UserId}/Views` | P0 | 400 | — |  | **FAIL** | status=400 Bad Request |
 | `GET /Users/Public` | P0 | 200 | PascalCase ✓ | Name,ServerId,Id,HasPassword,HasConfiguredPassword,HasConfig… | **FAIL** | 非数组 |
 | `POST /Users/AuthenticateByName` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'username') |
 
@@ -620,18 +613,18 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
 | `GET /Videos/{Id}/AdditionalParts` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：The input string 'test' was not in a correct format. |
-| `GET /Videos/{Id}/index.bif` | P1 | 500 | — |  | **FAIL** | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 500 |
-| `GET /Videos/{Id}/live.m3u8` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
+| `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
+| `GET /Videos/{Id}/index.bif` | P1 | 400 | — |  | **FAIL** | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 400 |
+| `GET /Videos/{Id}/live.m3u8` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Error starting ffmpeg |
 | `GET /Videos/{Id}/main.m3u8` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Videos/{Id}/master.m3u8` | P1 | 400 | — |  | **FAIL** | 400：MediaSourceId is required |
-| `GET /Videos/{Id}/stream` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
-| `GET /Videos/{Id}/stream.{Container}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Cannot start process because a file name has not been provided. |
-| `GET /Videos/{Id}/subtitles.m3u8` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：The input string 'test' was not in a correct format. |
+| `GET /Videos/{Id}/stream` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Videos/{Id}/stream.{Container}` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Videos/{Id}/subtitles.m3u8` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
 
 ### 域：web（5）
 

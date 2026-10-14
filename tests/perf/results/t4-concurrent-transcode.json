@@ -1,0 +1,21 @@
+{
+  "runAt": "2026-10-14 23:20:20",
+  "scenario": "T4 转码并发 3 路 × 60s（动态 HLS 链路）",
+  "durationS": 60.6,
+  "stats": {
+    "seg200": 150,
+    "seg500": 149,
+    "segOther": 0,
+    "master200": 3,
+    "main200": 3
+  },
+  "serverPid": 6748,
+  "handlesBefore": -1,
+  "handlesAfter": -1,
+  "handleDelta": null,
+  "ffmpegBefore": 0,
+  "ffmpegAfter": 0,
+  "transcodeTempFiles": 6,
+  "transcodeTempKB": 2606,
+  "serverAliveAtEnd": true
+}
