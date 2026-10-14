@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Dto;
@@ -215,6 +215,12 @@ namespace MediaBrowser.Api.Images
         /// <returns>System.Object.</returns>
         public async Task<object> Get(GetRemoteImage request)
         {
+            Uri requestUri;
+            if (string.IsNullOrEmpty(request.ImageUrl) || !Uri.TryCreate(request.ImageUrl, UriKind.Absolute, out requestUri))
+            {
+                throw new ArgumentException(string.Format("Invalid ImageUrl: {0}", request.ImageUrl));
+            }
+
             var urlHash = request.ImageUrl.GetMD5();
             var pointerCachePath = GetFullCachePath(urlHash.ToString());
 

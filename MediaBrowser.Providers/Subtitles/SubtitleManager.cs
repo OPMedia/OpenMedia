@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Events;
+using MediaBrowser.Common.Events;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -306,7 +306,14 @@ namespace MediaBrowser.Providers.Subtitles
 
         private ISubtitleProvider GetProvider(string id)
         {
-            return _subtitleProviders.First(i => string.Equals(id, GetProviderId(i.Name)));
+            var provider = _subtitleProviders.FirstOrDefault(i => string.Equals(id, GetProviderId(i.Name)));
+
+            if (provider == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Subtitle provider {0} not found", id));
+            }
+
+            return provider;
         }
 
         public Task DeleteSubtitles(BaseItem item, int index)

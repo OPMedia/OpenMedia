@@ -1,4 +1,5 @@
-﻿using System.Linq;
+using System.Linq;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
@@ -169,7 +170,13 @@ namespace MediaBrowser.Api
 
         public object Get(GetPlaylistItems request)
         {
-            var playlist = (Playlist)_libraryManager.GetItemById(request.Id);
+            var playlist = _libraryManager.GetItemById(request.Id) as Playlist;
+
+            if (playlist == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Playlist with Id {0} not found", request.Id));
+            }
+
             var user = !request.UserId.Equals(Guid.Empty) ? _userManager.GetUserById(request.UserId) : null;
 
             var items = playlist.GetManageableItems().ToArray();

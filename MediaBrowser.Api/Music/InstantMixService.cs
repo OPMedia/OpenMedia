@@ -1,4 +1,5 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Common.Extensions;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -141,7 +142,12 @@ namespace MediaBrowser.Api.Music
 
         public object Get(GetInstantMixFromPlaylist request)
         {
-            var playlist = (Playlist)_libraryManager.GetItemById(request.Id);
+            var playlist = _libraryManager.GetItemById(request.Id) as Playlist;
+
+            if (playlist == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Playlist with Id {0} not found", request.Id));
+            }
 
             var user = _userManager.GetUserById(request.UserId);
 

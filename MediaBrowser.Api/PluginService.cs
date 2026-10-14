@@ -1,4 +1,5 @@
 using MediaBrowser.Common;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Common.Updates;
@@ -259,15 +260,32 @@ namespace MediaBrowser.Api
         public object Get(GetPluginConfiguration request)
         {
             var guid = new Guid(request.Id);
-            var plugin = _appHost.Plugins.First(p => p.Id == guid) as IHasPluginConfiguration;
+            var plugin = _appHost.Plugins.FirstOrDefault(p => p.Id == guid);
 
-            return ToOptimizedResult(plugin.Configuration);
+            if (plugin == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Plugin with Id {0} not found", request.Id));
+            }
+
+            var configPlugin = plugin as IHasPluginConfiguration;
+
+            if (configPlugin == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Plugin {0} does not have a configuration", plugin.Name));
+            }
+
+            return ToOptimizedResult(configPlugin.Configuration);
         }
 
         public object Get(GetPluginThumb request)
         {
             var guid = new Guid(request.Id);
-            var plugin = _appHost.Plugins.First(p => p.Id == guid);
+            var plugin = _appHost.Plugins.FirstOrDefault(p => p.Id == guid);
+
+            if (plugin == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Plugin with Id {0} not found", request.Id));
+            }
 
             var assembly = plugin.GetType().Assembly;
             var resourceNames = assembly.GetManifestResourceNames();
@@ -331,7 +349,7 @@ namespace MediaBrowser.Api
             // https://code.google.com/p/servicestack/source/browse/trunk/Common/ServiceStack.Text/ServiceStack.Text/Controller/PathInfo.cs
             var id = new Guid(GetPathValue(1));
 
-            var plugin = _appHost.Plugins.First(p => p.Id == id) as IHasPluginConfiguration;
+            var plugin = _appHost.Plugins.FirstOrDefault(p => p.Id == id) as IHasPluginConfiguration;
 
             if (plugin == null)
             {
@@ -350,7 +368,12 @@ namespace MediaBrowser.Api
         public void Delete(UninstallPlugin request)
         {
             var guid = new Guid(request.Id);
-            var plugin = _appHost.Plugins.First(p => p.Id == guid);
+            var plugin = _appHost.Plugins.FirstOrDefault(p => p.Id == guid);
+
+            if (plugin == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Plugin with Id {0} not found", request.Id));
+            }
 
             _installationManager.UninstallPlugin(plugin);
         }

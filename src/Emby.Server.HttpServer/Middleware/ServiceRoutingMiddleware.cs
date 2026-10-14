@@ -386,7 +386,10 @@ namespace Emby.Server.HttpServer.Middleware
                 {typeof (FileNotFoundException), 404},
                 {typeof (SecurityException), 401},
                 {typeof (PaymentRequiredException), 402},
-                {typeof (ArgumentException), 400}
+                {typeof (ArgumentException), 400},
+                // 二期 T1.1：用户输入解析失败（int/long/Uri/bool TryParse 之外的漏网点）兜底 400；
+                // IOE/NRE/InvalidCastException 保持 500 作回归探测器（docs/phase2-design.md §1.2）
+                {typeof (FormatException), 400}
             };
 
         private Exception GetActualException(Exception ex)

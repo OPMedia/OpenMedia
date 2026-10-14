@@ -2495,7 +2495,13 @@ namespace Emby.Server.Implementations.LiveTv
                 result.Name = tunerChannel.Number + " " + result.Name;
             }
 
-            var providerChannel = EmbyTV.EmbyTV.Current.GetEpgChannelFromTunerChannel(mappings, tunerChannel, epgChannels);
+            ChannelInfo providerChannel = null;
+
+            // EmbyTV 为插件服务，未加载时 Current 为空（无 EPG 映射能力）
+            if (EmbyTV.EmbyTV.Current != null)
+            {
+                providerChannel = EmbyTV.EmbyTV.Current.GetEpgChannelFromTunerChannel(mappings, tunerChannel, epgChannels);
+            }
 
             if (providerChannel != null)
             {
@@ -2562,14 +2568,38 @@ namespace Emby.Server.Implementations.LiveTv
 
         public Task<List<ChannelInfo>> GetChannelsForListingsProvider(string id, CancellationToken cancellationToken)
         {
-            var info = GetConfiguration().ListingProviders.First(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+            var info = GetConfiguration().ListingProviders.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            if (info == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Listing provider with Id {0} not found", id));
+            }
+
+            // EmbyTV 为插件服务，未加载时 Current 为空（无录制/调谐器能力）
+            if (EmbyTV.EmbyTV.Current == null)
+            {
+                return Task.FromResult(new List<ChannelInfo>());
+            }
+
             return EmbyTV.EmbyTV.Current.GetChannelsForListingsProvider(info, cancellationToken);
         }
 
         public Task<List<ChannelInfo>> GetChannelsFromListingsProviderData(string id, CancellationToken cancellationToken)
         {
-            var info = GetConfiguration().ListingProviders.First(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-            var provider = _listingProviders.First(i => string.Equals(i.Type, info.Type, StringComparison.OrdinalIgnoreCase));
+            var info = GetConfiguration().ListingProviders.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            if (info == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Listing provider with Id {0} not found", id));
+            }
+
+            var provider = _listingProviders.FirstOrDefault(i => string.Equals(i.Type, info.Type, StringComparison.OrdinalIgnoreCase));
+
+            if (provider == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Listing provider of type {0} not found", info.Type));
+            }
+
             return provider.GetChannels(info, cancellationToken);
         }
 
@@ -2590,20 +2620,26 @@ namespace Emby.Server.Implementations.LiveTv
 
         private List<BaseItem> GetRecordingFolders(User user, bool refreshChannels)
         {
-            var folders = EmbyTV.EmbyTV.Current.GetRecordingFolders()
-                .SelectMany(i => i.Locations)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(i => _libraryManager.FindByPath(i, true))
-                .Where(i => i != null)
-                .Where(i => i.IsVisibleStandalone(user))
-                .SelectMany(i => _libraryManager.GetCollectionFolders(i))
-                .DistinctBy(i => i.Id)
-                .OrderBy(i => i.SortName)
-                .ToList();
+            var folders = new List<BaseItem>();
+
+            // EmbyTV 为插件服务，未加载时 Current 为空（无录制文件夹）
+            if (EmbyTV.EmbyTV.Current != null)
+            {
+                folders.AddRange(EmbyTV.EmbyTV.Current.GetRecordingFolders()
+                    .SelectMany(i => i.Locations)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Select(i => _libraryManager.FindByPath(i, true))
+                    .Where(i => i != null)
+                    .Where(i => i.IsVisibleStandalone(user))
+                    .SelectMany(i => _libraryManager.GetCollectionFolders(i))
+                    .DistinctBy(i => i.Id)
+                    .OrderBy(i => i.SortName)
+                    .ToList());
+            }
 
             folders.AddRange(_channelManager().GetChannelsInternal(new MediaBrowser.Model.Channels.ChannelQuery
             {
-                UserId = user.Id,
+                UserId = user != null ? user.Id : Guid.Empty,
                 IsRecordingsFolder = true,
                 RefreshLatestChannelItems = refreshChannels
 

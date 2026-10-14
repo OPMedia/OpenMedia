@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Dlna;
@@ -337,7 +337,12 @@ namespace Emby.Dlna
                 throw new ArgumentNullException("id");
             }
 
-            var info = GetProfileInfosInternal().First(i => string.Equals(i.Info.Id, id, StringComparison.OrdinalIgnoreCase));
+            var info = GetProfileInfosInternal().FirstOrDefault(i => string.Equals(i.Info.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            if (info == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Dlna profile with Id {0} not found", id));
+            }
 
             return ParseProfileFile(info.Path, info.Info.Type);
         }
@@ -523,10 +528,17 @@ namespace Emby.Dlna
 
             var resource = GetType().Namespace + ".Images." + filename.ToLower();
 
+            var stream = _assemblyInfo.GetManifestResourceStream(GetType(), resource);
+
+            if (stream == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Dlna icon {0} not found", filename));
+            }
+
             return new ImageStream
             {
                 Format = format,
-                Stream = _assemblyInfo.GetManifestResourceStream(GetType(), resource)
+                Stream = stream
             };
         }
     }

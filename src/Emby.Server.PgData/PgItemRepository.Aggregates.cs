@@ -352,7 +352,8 @@ namespace Emby.Server.PgData
                 " FROM media_items A" + joinText + whereText,
                 "A.presentation_unique_key",
                 orderByExpressions,
-                pagingText);
+                pagingText,
+                query);
 
             var isReturningZeroItems = query.Limit.HasValue && query.Limit <= 0;
 

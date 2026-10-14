@@ -1,4 +1,5 @@
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
@@ -788,6 +789,11 @@ namespace MediaBrowser.Api.LiveTv
 
             var directStreamProvider = liveStreamInfo;
 
+            if (directStreamProvider == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Live stream file with Id {0} not found", request.Id));
+            }
+
             var outputHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             outputHeaders["Content-Type"] = Model.Net.MimeTypes.GetMimeType("file." + request.Container);
@@ -818,9 +824,19 @@ namespace MediaBrowser.Api.LiveTv
         {
             var config = GetConfiguration();
 
-            var listingsProviderInfo = config.ListingProviders.First(i => string.Equals(request.ProviderId, i.Id, StringComparison.OrdinalIgnoreCase));
+            var listingsProviderInfo = config.ListingProviders.FirstOrDefault(i => string.Equals(request.ProviderId, i.Id, StringComparison.OrdinalIgnoreCase));
 
-            var listingsProviderName = _liveTvManager.ListingProviders.First(i => string.Equals(i.Type, listingsProviderInfo.Type, StringComparison.OrdinalIgnoreCase)).Name;
+            if (listingsProviderInfo == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Listing provider with Id {0} not found", request.ProviderId));
+            }
+
+            var listingsProvider = _liveTvManager.ListingProviders.FirstOrDefault(i => string.Equals(i.Type, listingsProviderInfo.Type, StringComparison.OrdinalIgnoreCase));
+
+            if (listingsProvider == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Listing provider of type {0} not found", listingsProviderInfo.Type));
+            }
 
             var tunerChannels = await _liveTvManager.GetChannelsForListingsProvider(request.ProviderId, CancellationToken.None)
                         .ConfigureAwait(false);
@@ -843,7 +859,7 @@ namespace MediaBrowser.Api.LiveTv
 
                 Mappings = mappings,
 
-                ProviderName = listingsProviderName
+                ProviderName = listingsProvider.Name
             };
 
             return ToOptimizedResult(result);
@@ -999,9 +1015,14 @@ namespace MediaBrowser.Api.LiveTv
 
         public object Get(GetChannel request)
         {
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
+
+            if (item == null)
+            {
+                throw new ResourceNotFoundException(string.Format("LiveTv channel with Id {0} not found", request.Id));
+            }
 
             var dtoOptions = GetDtoOptions(_authContext, request);
 
@@ -1328,9 +1349,14 @@ namespace MediaBrowser.Api.LiveTv
 
         public object Get(GetRecording request)
         {
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
+
+            if (item == null)
+            {
+                throw new ResourceNotFoundException(string.Format("LiveTv recording with Id {0} not found", request.Id));
+            }
 
             var dtoOptions = GetDtoOptions(_authContext, request);
 
@@ -1342,6 +1368,11 @@ namespace MediaBrowser.Api.LiveTv
         public async Task<object> Get(GetTimer request)
         {
             var result = await _liveTvManager.GetTimer(request.Id, CancellationToken.None).ConfigureAwait(false);
+
+            if (result == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Timer with Id {0} not found", request.Id));
+            }
 
             return ToOptimizedResult(result);
         }
@@ -1399,6 +1430,11 @@ namespace MediaBrowser.Api.LiveTv
         public async Task<object> Get(GetSeriesTimer request)
         {
             var result = await _liveTvManager.GetSeriesTimer(request.Id, CancellationToken.None).ConfigureAwait(false);
+
+            if (result == null)
+            {
+                throw new ResourceNotFoundException(string.Format("SeriesTimer with Id {0} not found", request.Id));
+            }
 
             return ToOptimizedResult(result);
         }

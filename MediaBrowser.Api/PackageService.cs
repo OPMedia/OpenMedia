@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common;
+using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller.Net;
@@ -181,6 +181,11 @@ namespace MediaBrowser.Api
 
             var result = packages.FirstOrDefault(p => string.Equals(p.guid, request.AssemblyGuid ?? "none", StringComparison.OrdinalIgnoreCase))
                          ?? packages.FirstOrDefault(p => p.name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (result == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Package not found: {0}", request.Name));
+            }
 
             return ToOptimizedResult(result);
         }

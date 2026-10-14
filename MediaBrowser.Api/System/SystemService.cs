@@ -1,4 +1,5 @@
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Controller;
@@ -167,7 +168,12 @@ namespace MediaBrowser.Api.System
         public Task<object> Get(GetLogFile request)
         {
             var file = _fileSystem.GetFiles(_appPaths.LogDirectoryPath)
-                .First(i => string.Equals(i.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(i => string.Equals(i.Name, request.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (file == null)
+            {
+                throw new ResourceNotFoundException(string.Format("Log file {0} not found", request.Name));
+            }
 
             // For older files, assume fully static
             if (file.LastWriteTimeUtc < DateTime.UtcNow.AddHours(-1))

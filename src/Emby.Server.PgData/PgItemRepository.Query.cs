@@ -2055,7 +2055,8 @@ namespace Emby.Server.PgData
                 fromText + joinText + whereText,
                 distinctOnExpr,
                 orderByExpressions,
-                pagingText);
+                pagingText,
+                query);
         }
 
         /// <summary>
@@ -2082,7 +2083,8 @@ namespace Emby.Server.PgData
             string fromJoinWhere,
             string distinctOnExpr,
             List<Tuple<string, SortOrder>> orderByExpressions,
-            string pagingText)
+            string pagingText,
+            InternalItemsQuery query)
         {
             var sortColumnList = new List<string>();
             var innerOrderItems = new List<string>();
@@ -2090,7 +2092,7 @@ namespace Emby.Server.PgData
 
             for (var i = 0; i < orderByExpressions.Count; i++)
             {
-                var expr = NormalizeSortExpressionForWrap(orderByExpressions[i].Item1);
+                var expr = ExpandSortAliasExpression(NormalizeSortExpressionForWrap(orderByExpressions[i].Item1), query);
                 var direction = orderByExpressions[i].Item2 == SortOrder.Ascending ? "ASC" : "DESC";
 
                 sortColumnList.Add(expr + " AS __sort" + i);
@@ -2121,6 +2123,32 @@ namespace Emby.Server.PgData
             if (string.Equals(expr, "MAX(ud.last_played_date)", StringComparison.OrdinalIgnoreCase))
             {
                 return "ud.last_played_date";
+            }
+
+            return expr;
+        }
+
+        /// <summary>
+        /// 包装路径的输出别名展开：similarity_score / search_score 是 SELECT 输出别名，
+        /// PG 只允许 ORDER BY 引用别名，SELECT 列表（__sortN 别名列）引用会 42703。
+        /// 展开为完整表达式后内层 SELECT / ORDER BY / 外层重排序三处均合法，
+        /// 且对内层不输出该别名的 ID 查询路径同样成立。
+        /// </summary>
+        private static string ExpandSortAliasExpression(string expr, InternalItemsQuery query)
+        {
+            if (string.Equals(expr, "similarity_score", StringComparison.Ordinal))
+            {
+                return GetSimilarityScoreExpression();
+            }
+
+            if (string.Equals(expr, "search_score", StringComparison.Ordinal))
+            {
+                if (string.IsNullOrEmpty(query.SearchTerm))
+                {
+                    return "0";
+                }
+
+                return GetSearchScoreExpression(query);
             }
 
             return expr;
@@ -2444,7 +2472,7 @@ namespace Emby.Server.PgData
                 return "SELECT " + columns + fromText + joinText + whereText + orderByText + pagingText;
             }
 
-            return BuildDistinctOnWrapper(columns, fromText + joinText + whereText, distinctOnExpr, orderByExpressions, pagingText);
+            return BuildDistinctOnWrapper(columns, fromText + joinText + whereText, distinctOnExpr, orderByExpressions, pagingText, query);
         }
 
         // ===========================================================
