@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Model.IO;
+using MediaBrowser.Model.IO;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -55,23 +55,13 @@ namespace MediaBrowser.Providers.Omdb
 
                 if (!string.IsNullOrEmpty(rootObject.Poster))
                 {
-                    if (item is Episode)
+                    // img.omdbapi.com 已死（实测 404，8 年前注释已记录），统一走
+                    // 主 API 返回的 Poster 字段（m.media-amazon.com，实测可用）
+                    list.Add(new RemoteImageInfo
                     {
-                        // img.omdbapi.com is returning 404's
-                        list.Add(new RemoteImageInfo
-                        {
-                            ProviderName = Name,
-                            Url = rootObject.Poster
-                        });
-                    }
-                    else
-                    {
-                        list.Add(new RemoteImageInfo
-                        {
-                            ProviderName = Name,
-                            Url = string.Format("https://img.omdbapi.com/?i={0}&apikey=fe53f97e", imdbId)
-                        });
-                    }
+                        ProviderName = Name,
+                        Url = rootObject.Poster
+                    });
                 }
             }
 

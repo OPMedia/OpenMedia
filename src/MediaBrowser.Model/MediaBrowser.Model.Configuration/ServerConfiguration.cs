@@ -186,8 +186,9 @@ public class ServerConfiguration : BaseApplicationConfiguration
 			new MetadataOptions
 			{
 				ItemType = "Series",
-				DisabledMetadataFetchers = new string[1] { "TheMovieDb" },
-				DisabledImageFetchers = new string[1] { "TheMovieDb" }
+				// TVDB v3 外部停服（api.thetvdb.com 不可达），死源默认禁用，TMDb 顶上（phase3-design §2.4）
+				DisabledMetadataFetchers = new string[1] { "TheTVDB" },
+				DisabledImageFetchers = new string[1] { "TheTVDB" }
 			},
 			new MetadataOptions
 			{
@@ -206,14 +207,16 @@ public class ServerConfiguration : BaseApplicationConfiguration
 			new MetadataOptions
 			{
 				ItemType = "Season",
-				DisabledMetadataFetchers = new string[1] { "TheMovieDb" },
-				DisabledImageFetchers = new string[1] { "FanArt" }
+				// TVDB 死源默认禁用（同 Series）；FanArt 维持原禁用
+				DisabledMetadataFetchers = new string[1] { "TheTVDB" },
+				DisabledImageFetchers = new string[2] { "FanArt", "TheTVDB" }
 			},
 			new MetadataOptions
 			{
 				ItemType = "Episode",
-				DisabledMetadataFetchers = new string[2] { "The Open Movie Database", "TheMovieDb" },
-				DisabledImageFetchers = new string[2] { "The Open Movie Database", "TheMovieDb" }
+				// TVDB 死源默认禁用（同 Series）
+				DisabledMetadataFetchers = new string[2] { "The Open Movie Database", "TheTVDB" },
+				DisabledImageFetchers = new string[2] { "The Open Movie Database", "TheTVDB" }
 			}
 		};
 	}
