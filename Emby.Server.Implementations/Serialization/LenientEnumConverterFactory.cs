@@ -100,5 +100,16 @@ namespace Emby.Common.Implementations.Serialization
         {
             writer.WriteStringValue(value.ToString());
         }
+
+        // 字典键支持（如 ItemImageInfo 的 Dictionary<ImageType, string>）
+        public override T ReadAsPropertyName(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            return Read(ref reader, typeToConvert, options);
+        }
+
+        public override void WriteAsPropertyName(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+        {
+            writer.WritePropertyName(value.ToString());
+        }
     }
 }
