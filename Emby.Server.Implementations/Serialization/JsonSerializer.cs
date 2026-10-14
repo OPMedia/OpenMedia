@@ -83,12 +83,22 @@ namespace Emby.Common.Implementations.Serialization
             for (var i = typeInfo.Properties.Count - 1; i >= 0; i--)
             {
                 var prop = typeInfo.Properties[i];
-                if (prop.AttributeProvider != null &&
-                    prop.AttributeProvider.IsDefined(typeof(System.Runtime.Serialization.IgnoreDataMemberAttribute), true))
+                if (prop.AttributeProvider != null && HasIgnoreDataMember(prop.AttributeProvider))
                 {
                     typeInfo.Properties.RemoveAt(i);
                 }
             }
+        }
+
+        private static bool HasIgnoreDataMember(System.Reflection.ICustomAttributeProvider provider)
+        {
+            // 实体上存在两种 IgnoreDataMemberAttribute：
+            // 1) System.Runtime.Serialization.IgnoreDataMemberAttribute（BCL 标准）
+            // 2) MediaBrowser.Model.Serialization.IgnoreDataMemberAttribute
+            //    （反编译恢复的 PCL 兼容 shim——实体上 208 处用的是这个！）
+            // 旧 ServiceStack.Text 按特性名匹配两者都跳过；STJ 需显式检查两个类型
+            return provider.IsDefined(typeof(System.Runtime.Serialization.IgnoreDataMemberAttribute), true)
+                || provider.IsDefined(typeof(MediaBrowser.Model.Serialization.IgnoreDataMemberAttribute), true);
         }
 
         /// <summary>
