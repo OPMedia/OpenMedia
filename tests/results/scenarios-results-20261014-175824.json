@@ -1,0 +1,184 @@
+﻿{
+    "runAt":  "2026-10-14 18:00:26",
+    "baseUrl":  "http://127.0.0.1:8096",
+    "apiBase":  "http://127.0.0.1:8096/emby",
+    "serverId":  "980f922f49e84b8b8c7c9631964fa1c1",
+    "serverVersion":  "3.5.3.0",
+    "token":  "acquired",
+    "summary":  {
+                    "pass":  16,
+                    "fail":  4,
+                    "skip":  1,
+                    "total":  21
+                },
+    "results":  [
+                    {
+                        "section":  "S0-预检",
+                        "name":  "GET /System/Info/Public",
+                        "expected":  "200 + JSON",
+                        "actual":  "status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0",
+                        "status":  "PASS",
+                        "notes":  "Id 为 32 位无连字符 hex"
+                    },
+                    {
+                        "section":  "S1-启动向导",
+                        "name":  "GET /Startup/Configuration（无 token）",
+                        "expected":  "200（向导未完成，免认证放行）",
+                        "actual":  "status=200 body={\"UICulture\":\"zh-CN\",\"MetadataCountryCode\":\"US\",\"PreferredMetadataLanguage\":\"en\"}",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S1-启动向导",
+                        "name":  "POST /Startup/User {\"Name\":\"admin\"}",
+                        "expected":  "200/204（设置初始用户名）",
+                        "actual":  "status=200",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S1-启动向导",
+                        "name":  "POST /Startup/Complete",
+                        "expected":  "200/204",
+                        "actual":  "status=204",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "POST /Users/AuthenticateByName（admin/admin）",
+                        "expected":  "200 + AccessToken",
+                        "actual":  "admin/admin→401；空密码→200",
+                        "status":  "PASS",
+                        "notes":  "初始用户无密码（Startup/User 仅设 Name），空密码回退成功"
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "POST /Users/AuthenticateByName（错误密码）",
+                        "expected":  "401",
+                        "actual":  "status=401",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "GET /Users（带 token 复用）",
+                        "expected":  "200",
+                        "actual":  "status=200",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "GET /Users（无 token）",
+                        "expected":  "401",
+                        "actual":  "status=401",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "测试媒体就绪（Movie1/Movie2 mkv+nfo+poster）",
+                        "expected":  "文件存在",
+                        "actual":  "就绪",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "GET /Library/VirtualFolders",
+                        "expected":  "200",
+                        "actual":  "status=200 文件夹数=0（OpenMediaTests 存在=False）",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "POST /Library/VirtualFolders（添加 OpenMediaTests → D:\\Dev\\OpenMedia\\tests\\media）",
+                        "expected":  "200/204",
+                        "actual":  "status=500",
+                        "status":  "FAIL",
+                        "notes":  "A possible object cycle was detected. This can either be due to a cycle or if the object depth is la…"
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "POST /Library/Refresh（触发扫描）",
+                        "expected":  "200/204",
+                        "actual":  "status=204",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "扫描出 2 部电影（轮询 /Items?Recursive=true）",
+                        "expected":  "≥2 个 Movie 条目（≤120s）",
+                        "actual":  "count=0",
+                        "status":  "FAIL",
+                        "notes":  "扫描超时或未识别（检查服务器日志 ffprobe/媒体识别）"
+                    },
+                    {
+                        "section":  "S4-WebSocket",
+                        "name":  "ws://…/embywebsocket 连接 + SessionsStart 回环",
+                        "expected":  "连接成功，收到服务器推送消息（MessageType=Sessions）",
+                        "actual":  "异常：Exception calling \"Wait\" with \"1\" argument(s): \"One or more errors occurred.\"",
+                        "status":  "FAIL",
+                        "notes":  "R4：WebSocket"
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /web/index.html",
+                        "expected":  "200 + text/html",
+                        "actual":  "status=200 type=text/html 2811B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /web/index.html + Range: bytes=0-99",
+                        "expected":  "206 + Content-Range: bytes 0-99/N",
+                        "actual":  "status=206 content-range=bytes 0-99/2811 body=100B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /emby/web/index.html（前缀克隆）",
+                        "expected":  "200 + text/html",
+                        "actual":  "status=200 type=text/html",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /favicon.ico",
+                        "expected":  "200",
+                        "actual":  "status=200 type=image/vnd.microsoft.icon",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /robots.txt",
+                        "expected":  "200",
+                        "actual":  "status=200 type=text/plain",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /emby/System/Ping",
+                        "expected":  "200",
+                        "actual":  "status=500 body=Could not find method named Get(PingSystem) or Any(PingSystem) on Service SystemService",
+                        "status":  "FAIL",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /Videos/{Movie1}/stream + Range",
+                        "expected":  "—",
+                        "actual":  "无 Movie1 条目，跳过",
+                        "status":  "SKIP",
+                        "notes":  ""
+                    }
+                ]
+}

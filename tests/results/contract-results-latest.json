@@ -1,0 +1,139 @@
+﻿{
+    "runAt":  "2026-10-14 20:21:50",
+    "baseUrl":  "http://127.0.0.1:8096",
+    "apiBase":  "http://127.0.0.1:8096/emby",
+    "summary":  {
+                    "pass":  16,
+                    "fail":  2,
+                    "skip":  0,
+                    "total":  18
+                },
+    "checks":  [
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "HTTP 200 + JSON",
+                       "result":  "status=200",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "键名 PascalCase",
+                       "result":  "全部 PascalCase（LocalAddress,ServerName,Version,OperatingSystem,Id）",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "Id = 32 位无连字符 hex（Guid N 格式）",
+                       "result":  "Id=6225572626f94ea0b6e469c9ac63ef6f",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "关键字段 ServerName",
+                       "result":  "存在（DESKTOP-5CAN3E7）",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "关键字段 Version",
+                       "result":  "存在（3.5.3.0）",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info/Public",
+                       "rule":  "关键字段 OperatingSystem",
+                       "result":  "存在（Windows）",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Users",
+                       "rule":  "HTTP 200 + 数组",
+                       "result":  "status=200",
+                       "status":  "FAIL",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "HTTP 200 + QueryResult{Items,TotalRecordCount}",
+                       "result":  "Items=4 TotalRecordCount=4",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "Type 为枚举字符串（非数字）",
+                       "result":  "前 5 个 Type: Folder,Movie,Movie,PlaylistsFolder",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "无 null 值字段（序列化应省略 null）",
+                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId",
+                       "status":  "FAIL",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "键名 PascalCase（首元素）",
+                       "result":  "全部 PascalCase",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "关键字段 Id",
+                       "result":  "存在",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "关键字段 Name",
+                       "result":  "存在",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "关键字段 Type",
+                       "result":  "存在",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/Items",
+                       "rule":  "Item.Id = Guid N 格式（32 hex）",
+                       "result":  "全部合规",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info",
+                       "rule":  "HTTP 200 + JSON",
+                       "result":  "status=200",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info",
+                       "rule":  "键名 PascalCase",
+                       "result":  "全部 PascalCase",
+                       "status":  "PASS",
+                       "detail":  ""
+                   },
+                   {
+                       "endpoint":  "/System/Info",
+                       "rule":  "Id = Guid N 格式",
+                       "result":  "Id=6225572626f94ea0b6e469c9ac63ef6f",
+                       "status":  "PASS",
+                       "detail":  ""
+                   }
+               ]
+}

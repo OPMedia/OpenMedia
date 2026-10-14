@@ -1,0 +1,644 @@
+[
+  {
+    "status": 500,
+    "op": "GET /AudioCodecs",
+    "url": "http://127.0.0.1:8096/emby/AudioCodecs",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 500,
+    "op": "GET /Containers",
+    "url": "http://127.0.0.1:8096/emby/Containers",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 500,
+    "op": "GET /OfficialRatings",
+    "url": "http://127.0.0.1:8096/emby/OfficialRatings",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 500,
+    "op": "GET /Packages",
+    "url": "http://127.0.0.1:8096/emby/Packages",
+    "snippet": "Cannot access a disposed object. Object name: 'System.IO.Compression.GZipStream'."
+  },
+  {
+    "status": 500,
+    "op": "GET /SubtitleCodecs",
+    "url": "http://127.0.0.1:8096/emby/SubtitleCodecs",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 500,
+    "op": "GET /Tags",
+    "url": "http://127.0.0.1:8096/emby/Tags",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 200,
+    "op": "GET /Users",
+    "url": "http://127.0.0.1:8096/emby/Users",
+    "snippet": "[{\"Name\":\"admin\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"ac49142474fd4c49b85427f29fc4ba9b\",\"HasPas"
+  },
+  {
+    "status": 500,
+    "op": "GET /VideoCodecs",
+    "url": "http://127.0.0.1:8096/emby/VideoCodecs",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 404,
+    "op": "GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/Images/Primary/0/0/original/200/200/0/0",
+    "snippet": "media does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Artists/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Artists/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1445"
+  },
+  {
+    "status": 400,
+    "op": "GET /Artists/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/Artists/InstantMix?Id=26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 404,
+    "op": "GET /Environment/DirectoryContents",
+    "url": "http://127.0.0.1:8096/emby/Environment/DirectoryContents?Path=test",
+    "snippet": "Could not find a part of the path '\\test'."
+  },
+  {
+    "status": 500,
+    "op": "GET /GameGenres/{Name}",
+    "url": "http://127.0.0.1:8096/emby/GameGenres/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1213"
+  },
+  {
+    "status": 400,
+    "op": "GET /Games/SystemSummaries",
+    "url": "http://127.0.0.1:8096/emby/Games/SystemSummaries",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 500,
+    "op": "GET /Genres/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Genres/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1562"
+  },
+  {
+    "status": 500,
+    "op": "GET /Images/Remote",
+    "url": "http://127.0.0.1:8096/emby/Images/Remote?ImageUrl=test",
+    "snippet": "Invalid URI: The format of the URI could not be determined."
+  },
+  {
+    "status": 500,
+    "op": "GET /Items/Prefixes",
+    "url": "http://127.0.0.1:8096/emby/Items/Prefixes",
+    "snippet": "Field not found in row: genres"
+  },
+  {
+    "status": 400,
+    "op": "GET /Items/File",
+    "url": "http://127.0.0.1:8096/emby/Items/File",
+    "snippet": "Value cannot be null. (Parameter 'path')"
+  },
+  {
+    "status": 500,
+    "op": "GET /LiveTv/ChannelMappings",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/ChannelMappings?ProviderId=test",
+    "snippet": "Could not find method named Get(SetChannelMapping) or Any(SetChannelMapping) on Service LiveTvService"
+  },
+  {
+    "status": 500,
+    "op": "GET /LiveTv/ChannelMappingOptions",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/ChannelMappingOptions?ProviderId=test",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 400,
+    "op": "GET /Movies/Recommendations",
+    "url": "http://127.0.0.1:8096/emby/Movies/Recommendations",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 500,
+    "op": "GET /MusicGenres/{Name}",
+    "url": "http://127.0.0.1:8096/emby/MusicGenres/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1448"
+  },
+  {
+    "status": 400,
+    "op": "GET /MusicGenres/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/MusicGenres/InstantMix?Id=26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 500,
+    "op": "GET /Packages/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Packages/Movie1",
+    "snippet": "Cannot access a disposed object. Object name: 'System.IO.Compression.GZipStream'."
+  },
+  {
+    "status": 500,
+    "op": "GET /Persons/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Persons/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1522"
+  },
+  {
+    "status": 500,
+    "op": "GET /Playback/BitrateTest",
+    "url": "http://127.0.0.1:8096/emby/Playback/BitrateTest?Size=test",
+    "snippet": "The input string 'test' was not in a correct format."
+  },
+  {
+    "status": 404,
+    "op": "GET /ScheduledTasks/{Id}",
+    "url": "http://127.0.0.1:8096/emby/ScheduledTasks/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Task not found"
+  },
+  {
+    "status": 500,
+    "op": "GET /Studios/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Studios/Movie1",
+    "snippet": "42883: 操作符不存在: uuid = bigint POSITION: 1522"
+  },
+  {
+    "status": 500,
+    "op": "GET /System/Ping",
+    "url": "http://127.0.0.1:8096/emby/System/Ping",
+    "snippet": "Could not find method named Get(PingSystem) or Any(PingSystem) on Service SystemService"
+  },
+  {
+    "status": 200,
+    "op": "GET /Users/Public",
+    "url": "http://127.0.0.1:8096/emby/Users/Public",
+    "snippet": "[{\"Name\":\"admin\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"ac49142474fd4c49b85427f29fc4ba9b\",\"HasPas"
+  },
+  {
+    "status": 400,
+    "op": "POST /Users/AuthenticateByName",
+    "url": "http://127.0.0.1:8096/emby/Users/AuthenticateByName",
+    "snippet": "Value cannot be null. (Parameter 'username')"
+  },
+  {
+    "status": 404,
+    "op": "GET /web/ConfigurationPage",
+    "url": "http://127.0.0.1:8096/emby/web/ConfigurationPage",
+    "snippet": "Exception of type 'MediaBrowser.Common.Extensions.ResourceNotFoundException' was thrown."
+  },
+  {
+    "status": 400,
+    "op": "GET /Albums/{Id}/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/Albums/26e47cc5e5bc5ba953f15e8333bfea81/InstantMix",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /Audio/{Id}/universal.{Container}",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/universal.mkv",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /Audio/{Id}/universal",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/universal",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 500,
+    "op": "GET /Audio/{Id}/stream.{Container}",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/stream.mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Audio/{Id}/stream",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/stream?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Audio/{Id}/master.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/master.m3u8?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Audio/{Id}/main.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/main.m3u8?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Channels/{Id}/Items",
+    "url": "http://127.0.0.1:8096/emby/Channels/{Id}/Items",
+    "snippet": "Unrecognized Guid format."
+  },
+  {
+    "status": 500,
+    "op": "GET /Dlna/icons/{Filename}",
+    "url": "http://127.0.0.1:8096/emby/Dlna/icons/test",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 500,
+    "op": "GET /Dlna/Profiles/{Id}",
+    "url": "http://127.0.0.1:8096/emby/Dlna/Profiles/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 400,
+    "op": "GET /Items/RemoteSearch/Image",
+    "url": "http://127.0.0.1:8096/emby/Items/RemoteSearch/Image?ImageUrl=test&ProviderName=test",
+    "snippet": "Search provider not found."
+  },
+  {
+    "status": 400,
+    "op": "GET /Items/{Id}/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/InstantMix",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /Items/{Id}/Download",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/Download",
+    "snippet": "Item does not support downloading"
+  },
+  {
+    "status": 500,
+    "op": "GET /Items/{Id}/File",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/File",
+    "snippet": "Access to the path 'D:\\Dev\\OpenMedia\\tests\\media' is denied."
+  },
+  {
+    "status": 500,
+    "op": "GET /Items/{Id}/PlaybackInfo",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/PlaybackInfo?UserId=ac49142474fd4c49b85427f29fc4ba9b",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "POST /Items/{Id}/PlaybackInfo",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/PlaybackInfo",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /LiveTv/Recordings/Folders",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Recordings/Folders",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 404,
+    "op": "GET /LiveTv/ListingProviders/Lineups",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/ListingProviders/Lineups",
+    "snippet": "Exception of type 'MediaBrowser.Common.Extensions.ResourceNotFoundException' was thrown."
+  },
+  {
+    "status": 400,
+    "op": "GET /LiveTv/Channels/{Id}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Channels/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /LiveTv/Programs/Recommended",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Programs/Recommended",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /LiveTv/Recordings/{Id}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Recordings/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 400,
+    "op": "GET /LiveTv/Timers/{Id}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Timers/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'result')"
+  },
+  {
+    "status": 400,
+    "op": "GET /LiveTv/SeriesTimers/{Id}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/SeriesTimers/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Value cannot be null. (Parameter 'result')"
+  },
+  {
+    "status": 400,
+    "op": "GET /MusicGenres/{Name}/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/MusicGenres/Movie1/InstantMix",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 500,
+    "op": "GET /Playlists/{Id}/Items",
+    "url": "http://127.0.0.1:8096/emby/Playlists/26e47cc5e5bc5ba953f15e8333bfea81/Items",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Playl"
+  },
+  {
+    "status": 500,
+    "op": "GET /Playlists/{Id}/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/Playlists/26e47cc5e5bc5ba953f15e8333bfea81/InstantMix",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Playl"
+  },
+  {
+    "status": 500,
+    "op": "GET /Plugins/{Id}/Thumb",
+    "url": "http://127.0.0.1:8096/emby/Plugins/11111111111111111111111111111111/Thumb",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 500,
+    "op": "GET /Plugins/{Id}/Configuration",
+    "url": "http://127.0.0.1:8096/emby/Plugins/11111111111111111111111111111111/Configuration",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 404,
+    "op": "GET /Shows/{Id}/Seasons",
+    "url": "http://127.0.0.1:8096/emby/Shows/26e47cc5e5bc5ba953f15e8333bfea81/Seasons?UserId=ac49142474fd4c49b85427f29fc4ba9b",
+    "snippet": "Series not found"
+  },
+  {
+    "status": 404,
+    "op": "GET /Shows/{Id}/Episodes",
+    "url": "http://127.0.0.1:8096/emby/Shows/26e47cc5e5bc5ba953f15e8333bfea81/Episodes?UserId=ac49142474fd4c49b85427f29fc4ba9b",
+    "snippet": "Series not found"
+  },
+  {
+    "status": 400,
+    "op": "GET /Songs/{Id}/InstantMix",
+    "url": "http://127.0.0.1:8096/emby/Songs/26e47cc5e5bc5ba953f15e8333bfea81/InstantMix",
+    "snippet": "Value cannot be null. (Parameter 'id')"
+  },
+  {
+    "status": 404,
+    "op": "GET /System/Configuration/{Key}",
+    "url": "http://127.0.0.1:8096/emby/System/Configuration/test",
+    "snippet": "Configuration with key test not found."
+  },
+  {
+    "status": 500,
+    "op": "GET /System/Logs/Log",
+    "url": "http://127.0.0.1:8096/emby/System/Logs/Log?Name=Movie1",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 500,
+    "op": "GET /Users/{UserId}/Views",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Views?IncludeExternalContent=test",
+    "snippet": "The input string 'test' was not in a correct format."
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/index.bif",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/index.bif?Width=test",
+    "snippet": "The input string 'test' was not in a correct format."
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/stream.{Container}",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/stream.mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/stream",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/stream?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/master.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/master.m3u8?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/main.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/main.m3u8?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/subtitles.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/subtitles.m3u8?SubtitleSegmentLength=test&ManifestSubtitles=test",
+    "snippet": "The input string 'test' was not in a correct format."
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/live.m3u8",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/live.m3u8?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 404,
+    "op": "GET /Artists/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Artists/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Dlna/{UuId}/icons/{Filename}",
+    "url": "http://127.0.0.1:8096/emby/Dlna/test/icons/test",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 404,
+    "op": "GET /GameGenres/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/GameGenres/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Genres/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Genres/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Images/General/{Name}/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Images/General/Movie1/Primary",
+    "snippet": "Could not find a part of the path '\\ProgramData-Server\\metadata\\general\\Movie1\\folder.png'."
+  },
+  {
+    "status": 404,
+    "op": "GET /Images/Ratings/{Theme}/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Images/Ratings/test/Movie1",
+    "snippet": "MediaInfo image not found: Movie1"
+  },
+  {
+    "status": 404,
+    "op": "GET /Images/MediaInfo/{Theme}/{Name}",
+    "url": "http://127.0.0.1:8096/emby/Images/MediaInfo/test/Movie1",
+    "snippet": "MediaInfo image not found: Movie1"
+  },
+  {
+    "status": 404,
+    "op": "GET /Items/{Id}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/Images/Primary",
+    "snippet": "media does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /LiveTv/LiveRecordings/{Id}/stream",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/LiveRecordings/26e47cc5e5bc5ba953f15e8333bfea81/stream",
+    "snippet": "Unable to find the specified file."
+  },
+  {
+    "status": 500,
+    "op": "GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/LiveStreamFiles/26e47cc5e5bc5ba953f15e8333bfea81/stream.mkv",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 500,
+    "op": "GET /LiveTv/ListingProviders/SchedulesDirect/Countries",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/ListingProviders/SchedulesDirect/Countries",
+    "snippet": "Cannot access a disposed object. Object name: 'System.IO.Compression.GZipStream'."
+  },
+  {
+    "status": 404,
+    "op": "GET /LiveTv/Recordings/Groups/{Id}",
+    "url": "http://127.0.0.1:8096/emby/LiveTv/Recordings/Groups/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Unable to find the specified file."
+  },
+  {
+    "status": 404,
+    "op": "GET /MusicGenres/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/MusicGenres/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Persons/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Persons/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Providers/Subtitles/Subtitles/{Id}",
+    "url": "http://127.0.0.1:8096/emby/Providers/Subtitles/Subtitles/26e47cc5e5bc5ba953f15e8333bfea81",
+    "snippet": "Sequence contains no matching element"
+  },
+  {
+    "status": 404,
+    "op": "GET /Studios/{Name}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Studios/Movie1/Images/Primary",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Users/{UserId}/Items/{Id}",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/ac49142474fd4c49b85427f29fc4ba9b",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 404,
+    "op": "GET /Users/{Id}/Images/{Type}",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Images/Primary",
+    "snippet": "admin does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Artists/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Artists/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Audio/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}",
+    "url": "http://127.0.0.1:8096/emby/Audio/26e47cc5e5bc5ba953f15e8333bfea81/hls1/test/test.test?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 404,
+    "op": "GET /GameGenres/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/GameGenres/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Genres/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Genres/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Items/{Id}/RemoteSearch/Subtitles/{Language}",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/RemoteSearch/Subtitles/en",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 404,
+    "op": "GET /Items/{Id}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Items/26e47cc5e5bc5ba953f15e8333bfea81/Images/Primary/0",
+    "snippet": "media does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /MusicGenres/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/MusicGenres/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Persons/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Persons/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 404,
+    "op": "GET /Studios/{Name}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Studios/Movie1/Images/Primary/0",
+    "snippet": "Movie1 does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Users/{UserId}/Items/{Id}/SpecialFeatures",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/ac49142474fd4c49b85427f29fc4ba9b/SpecialFeatures",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 500,
+    "op": "GET /Users/{UserId}/Items/{Id}/LocalTrailers",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/ac49142474fd4c49b85427f29fc4ba9b/LocalTrailers",
+    "snippet": "Object reference not set to an instance of an object."
+  },
+  {
+    "status": 404,
+    "op": "GET /Users/{Id}/Images/{Type}/{Index}",
+    "url": "http://127.0.0.1:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Images/Primary/0",
+    "snippet": "admin does not have an image of type Primary"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/hls1/test/test.test?Container=mkv",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 404,
+    "op": "GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/hls/test/test.test?Container=mkv",
+    "snippet": "Could not find file '\\ProgramData-Server\\transcoding-temp\\test.test'."
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/test/Subtitles/0/Stream.original",
+    "snippet": "Unable to cast object of type 'MediaBrowser.Controller.Entities.Folder' to type 'MediaBrowser.Controller.Entit"
+  },
+  {
+    "status": 500,
+    "op": "GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}",
+    "url": "http://127.0.0.1:8096/emby/Videos/26e47cc5e5bc5ba953f15e8333bfea81/test/Subtitles/0/test/Stream.original",
+    "snippet": "The input string 'test' was not in a correct format."
+  }
+]
