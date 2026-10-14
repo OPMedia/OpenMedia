@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-14 23:27:14　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-15 05:00:10　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -8,18 +8,45 @@
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
 | P0 | 14 | 11 | 3 | — | 0 |
-| P1 | 252 | 143 | 73 | 36 | 0 |
+| P1 | 252 | 144 | 72 | 36 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：67%**（154 / 230）
+**通过率（PASS / (PASS+FAIL)）：67.4%**（155 / 230）
+
+## 负路径用例（T1.T 固化，23/24 PASS）
+
+| 族 | 操作 | 期望 | 实际 | 结果 |
+|----|------|------|------|------|
+| LiveTv | `GET /LiveTv/Channels/{Id}` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/Recordings/{Id}` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/Timers/{Id}` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/SeriesTimers/{Id}` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/ChannelMappings` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/ChannelMappingOptions` | 404 | 404 | **PASS** |
+| LiveTv | `GET /LiveTv/Recordings/Folders` | 200 | 200 | **PASS** |
+| LiveTv | `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | 404/400 | 404 | **PASS** |
+| Dlna | `GET /Dlna/Profiles/{Id}` | 404 | 404 | **PASS** |
+| Dlna | `GET /Dlna/icons/{Filename}` | 404 | 404 | **PASS** |
+| Dlna | `GET /Dlna/{UuId}/icons/{Filename}` | 404/400 | 404 | **PASS** |
+| Plugins | `GET /Plugins/{Id}/Thumb` | 404 | 404 | **PASS** |
+| Plugins | `GET /Plugins/{Id}/Configuration` | 404 | 404 | **PASS** |
+| Packages | `GET /Packages/{Name}` | 404 | 404 | **PASS** |
+| Logs | `GET /System/Logs/Log` | 404 | 404 | **PASS** |
+| Subtitles | `GET /Providers/Subtitles/Subtitles/{Id}` | 404 | 404 | **PASS** |
+| Playlists | `GET /Playlists/{Id}/Items` | 404 | 404 | **PASS** |
+| Playlists | `GET /Playlists/{Id}/InstantMix` | 404 | 404 | **PASS** |
+| Parse400 | `GET /Playback/BitrateTest` | 400 | 400 | **PASS** |
+| Parse400 | `GET /Images/Remote` | 400 | 400 | **PASS** |
+| Parse400 | `GET /Videos/{Id}/index.bif` | 400 | 400 | **PASS** |
+| Parse400 | `GET /Users/{UserId}/Views` | 400 | 400 | **PASS** |
+| Similar | `GET /Albums/{Id}/Similar` | 404 | 500 | **FAIL** |
+| Similar | `GET /Items/{Id}/Similar` | 200 | 200 | **PASS** |
 
 ### 失败清单
 
 | 级别 | 操作 | 状态码 | 备注 |
 |------|------|--------|------|
-| P1 | `GET /Artists` | 500 | 500 Internal Server Error：Field not found in row: item_types |
 | P0 | `GET /Users` | 200 | 非数组 |
-| P1 | `GET /Artists/AlbumArtists` | 500 | 500 Internal Server Error：Field not found in row: item_types |
 | P1 | `GET /Artists/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Environment/DirectoryContents` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Games/SystemSummaries` | 400 | 400：Value cannot be null. (Parameter 'id') |
@@ -36,6 +63,7 @@
 | P1 | `POST /Users/AuthenticateByName` | 400 | 400：Value cannot be null. (Parameter 'username') |
 | P1 | `GET /web/ConfigurationPage` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Albums/{Id}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
+| P1 | `GET /Albums/{Id}/Similar` | 500 | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Entities.… |
 | P1 | `GET /Audio/{Id}/universal.{Container}` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/universal` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/master.m3u8` | 400 | 400：MediaSourceId is required |
@@ -101,20 +129,20 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Albums/{Id}/InstantMix` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
-| `GET /Albums/{Id}/Similar` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
+| `GET /Albums/{Id}/Similar` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Entities.… |
 
 ### 域：Artists（8）
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Artists` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Field not found in row: item_types |
+| `GET /Artists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/{Id}/Similar` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
 | `GET /Artists/{Name}/Images/{Type}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Artists/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Artists/AlbumArtists` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Field not found in row: item_types |
+| `GET /Artists/AlbumArtists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/InstantMix` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
-| `GET /Artists/Prefixes` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
+| `GET /Artists/Prefixes` | P1 | 200 | PascalCase ✓ | Name,Value | **PASS** |  |
 
 ### 域：Audio（7）
 
@@ -315,7 +343,7 @@
 | `GET /LiveTv/Channels/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
 | `GET /LiveTv/GuideInfo` | P1 | 200 | PascalCase ✓ | StartDate,EndDate | **PASS** |  |
 | `GET /LiveTv/Info` | P1 | 200 | PascalCase ✓ | Services,IsEnabled,EnabledUsers | **PASS** |  |
-| `GET /LiveTv/ListingProviders` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
+| `GET /LiveTv/ListingProviders` | P1 | 200 | PascalCase ✓ | Id,Type,Path,EnabledTuners,EnableAllTuners,NewsCategories,Sp… | **PASS** |  |
 | `GET /LiveTv/ListingProviders/Available` | P1 | 200 | PascalCase ✓ | Name,Id | **PASS** |  |
 | `GET /LiveTv/ListingProviders/Default` | P1 | 200 | PascalCase ✓ | EnabledTuners,EnableAllTuners,NewsCategories,SportsCategorie… | **PASS** |  |
 | `GET /LiveTv/ListingProviders/Lineups` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
@@ -336,7 +364,7 @@
 | `GET /LiveTv/Timers` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Timers/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /LiveTv/Timers/Defaults` | P1 | 200 | PascalCase ✓ | RecordAnyTime,SkipEpisodesInLibrary,RecordAnyChannel,KeepUpT… | **PASS** |  |
-| `GET /LiveTv/TunerHosts` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
+| `GET /LiveTv/TunerHosts` | P1 | 200 | PascalCase ✓ | Id,Url,Type,ImportFavoritesOnly,AllowHWTranscoding,EnableStr… | **PASS** |  |
 | `GET /LiveTv/TunerHosts/Types` | P1 | 200 | PascalCase ✓ | Name,Id | **PASS** |  |
 | `GET /LiveTv/Tuners/Discvover` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `OPTIONS /LiveTv/ChannelMappingOptions` | P1 | 200 | — |  | **PASS** |  |
@@ -407,7 +435,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Packages` | P1 | 200 | ✗ id,name,shortDescription,overview,isPremium,adult,richDescUrl,thumbImage,previewImage,type,targetFilename,category,tileColor,featureId,regInfo,price,targetSystem,guid,avgRating,isRegistered,expDate,versions,enableInAppStore,installs | id,name,shortDescription,overview,isPremium,adult,richDescUr… | **PASS** | 键名风格: id,name,shortDescription,overview,isPremium,adult,richDescUrl,thumbImage,previewImage,type,targetFilename,category,tileColor,featureId,regInfo,price,targetSystem,guid,avgRating,isRegistered,expDate,versions,enableInAppStore,installs |
+| `GET /Packages` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /Packages/{Name}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Packages/Updates` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 
@@ -460,7 +488,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /ScheduledTasks` | P1 | 200 | PascalCase ✓ | Name,State,Id,Triggers,Description,Category,IsHidden,Key | **PASS** |  |
+| `GET /ScheduledTasks` | P1 | 200 | PascalCase ✓ | Name,State,Id,LastExecutionResult,Triggers,Description,Categ… | **PASS** |  |
 | `GET /ScheduledTasks/{Id}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 
 ### 域：Search（1）

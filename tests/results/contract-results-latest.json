@@ -1,5 +1,5 @@
 ﻿{
-    "runAt":  "2026-10-14 23:28:39",
+    "runAt":  "2026-10-15 04:55:23",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
     "summary":  {
@@ -75,7 +75,7 @@
                    {
                        "endpoint":  "/Items",
                        "rule":  "无 null 值字段（序列化应省略 null）",
-                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId",
+                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId",
                        "status":  "FAIL",
                        "detail":  ""
                    },

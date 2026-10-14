@@ -326,6 +326,31 @@ foreach ($op in $exec) {
     if ($verdict -eq 'PASS') { $mark = 'ok' }
     Write-Host ("  [{0}/{1}] {2,-8} {3} -> {4} {5}" -f $i, $exec.Count, $verdict, $op.id, $r.Status, $r.Reason)
 }
+
+# ============ 6.5 负路径用例（T1.T，test-plan.json negativeCases）============
+$negResults = [System.Collections.Generic.List[object]]::new()
+$negCases = @()
+try { $negCases = @($plan.negativeCases) } catch {}
+$ghostId = 'ffffffffffffffffffffffffffffffff'
+$negPass = 0; $negFail = 0
+foreach ($nc in $negCases) {
+    if ($null -eq $nc) { continue }
+    $negPath = [string]$nc.path
+    $negPath = $negPath.Replace('{GhostId}', $ghostId)
+    if ($ctx.ItemId) { $negPath = $negPath.Replace('{ItemId}', $ctx.ItemId) }
+    if ($ctx.UserId) { $negPath = $negPath.Replace('{UserId}', $ctx.UserId) }
+    $negUrl = "$ApiBase$negPath"
+    $r = Invoke-EmbyRequest -Client $client -Method $nc.method -Url $negUrl -Headers $baseHeaders
+    $expects = @($nc.expect)
+    $verdict = 'FAIL'
+    if ($expects -contains $r.Status) { $verdict = 'PASS'; $negPass++ } else { $negFail++ }
+    $negResults.Add([pscustomobject]@{
+        family = $nc.family; op = $nc.id; method = $nc.method; path = $negPath
+        expect = ($expects -join '/'); status = $r.Status; verdict = $verdict
+        elapsedMs = $r.ElapsedMs; bodySnippet = (SnippetOf $r.Body); error = $r.Error
+    })
+    Write-Host ("  [NEG] {0,-8} {1} -> {2}（期望 {3}）" -f $verdict, $nc.id, $r.Status, ($expects -join '/'))
+}
 $client.Dispose()
 
 # ============ 7. 输出 ============
@@ -354,8 +379,10 @@ $rawJson = [pscustomobject]@{
         planTotal = @($ops).Count; executed = $execTotal; skippedP2 = $skipP2.Count
         p0Pass = $cnt.pass0; p0Fail = $cnt.fail0; p0Skip = $cnt.skip0
         p1Pass = $cnt.pass1; p1Fail = $cnt.fail1; p1SkipExpected = $cnt.exp1; p1SkipNoFixture = $cnt.nofx1
+        negativeTotal = $negResults.Count; negativePass = $negPass; negativeFail = $negFail
         passRate = $rate
     }
+    negativeResults = $negResults
     results = $results
 }
 Write-ResultFile -Path (Join-Path $OutDir "api-results-$stamp.json") -Content ($rawJson | ConvertTo-Json -Depth 8)
@@ -378,6 +405,16 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine('')
 [void]$sb.AppendLine("**通过率（PASS / (PASS+FAIL)）：$rate%**（$execPass / $($execPass + $execFail)）")
 [void]$sb.AppendLine('')
+if ($negResults.Count -gt 0) {
+    [void]$sb.AppendLine("## 负路径用例（T1.T 固化，$($negPass)/$($negResults.Count) PASS）")
+    [void]$sb.AppendLine('')
+    [void]$sb.AppendLine('| 族 | 操作 | 期望 | 实际 | 结果 |')
+    [void]$sb.AppendLine('|----|------|------|------|------|')
+    foreach ($nr in $negResults) {
+        [void]$sb.AppendLine("| $($nr.family) | ``$($nr.op)`` | $($nr.expect) | $($nr.status) | **$($nr.verdict)** |")
+    }
+    [void]$sb.AppendLine('')
+}
 if ($execFail -gt 0) {
     [void]$sb.AppendLine('### 失败清单')
     [void]$sb.AppendLine('')
@@ -419,5 +456,6 @@ Write-Host '=== API 矩阵测试完成 ==='
 Write-Host ("P0: {0} PASS / {1} FAIL / {2} SKIP" -f $cnt.pass0, $cnt.fail0, $cnt.skip0)
 Write-Host ("P1: {0} PASS / {1} FAIL / {2} SKIP-EXPECTED / {3} SKIP-NOFIXTURE" -f $cnt.pass1, $cnt.fail1, $cnt.exp1, $cnt.nofx1)
 Write-Host ("P2: {0} 跳过" -f $skipP2.Count)
+if ($negResults.Count -gt 0) { Write-Host ("负路径（T1.T）: {0} PASS / {1} FAIL" -f $negPass, $negFail) }
 Write-Host ("通过率: {0}%（{1}/{2}）" -f $rate, $execPass, ($execPass + $execFail))
 Write-Host "输出: $OutDir\api-matrix.md / api-results-$stamp.json"

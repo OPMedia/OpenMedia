@@ -1,6 +1,6 @@
 ﻿# OpenMedia JSON 契约抽查报告
 
-> 运行时间：2026-10-14 23:28:39　基址：http://localhost:8096/emby
+> 运行时间：2026-10-15 04:55:23　基址：http://localhost:8096/emby
 
 **结果：PASS 16 / FAIL 2 / SKIP 0（共 18）**
 
@@ -15,7 +15,7 @@
 | `/Users` | HTTP 200 + 数组 | status=200 | **FAIL** |  |
 | `/Items` | HTTP 200 + QueryResult{Items,TotalRecordCount} | Items=20 TotalRecordCount=29 | **PASS** |  |
 | `/Items` | Type 为枚举字符串（非数字） | 前 5 个 Type: Folder,Movie,Movie,Folder,Folder | **PASS** |  |
-| `/Items` | 无 null 值字段（序列化应省略 null） | null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId | **FAIL** |  |
+| `/Items` | 无 null 值字段（序列化应省略 null） | null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId | **FAIL** |  |
 | `/Items` | 键名 PascalCase（首元素） | 全部 PascalCase | **PASS** |  |
 | `/Items` | 关键字段 Id | 存在 | **PASS** |  |
 | `/Items` | 关键字段 Name | 存在 | **PASS** |  |

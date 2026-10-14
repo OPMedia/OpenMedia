@@ -1,0 +1,192 @@
+﻿{
+    "runAt":  "2026-10-15 04:54:45",
+    "baseUrl":  "http://localhost:8096",
+    "apiBase":  "http://localhost:8096/emby",
+    "serverId":  "980f922f49e84b8b8c7c9631964fa1c1",
+    "serverVersion":  "3.5.3.0",
+    "token":  "acquired",
+    "summary":  {
+                    "pass":  21,
+                    "fail":  0,
+                    "skip":  1,
+                    "total":  22
+                },
+    "results":  [
+                    {
+                        "section":  "S0-预检",
+                        "name":  "GET /System/Info/Public",
+                        "expected":  "200 + JSON",
+                        "actual":  "status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0",
+                        "status":  "PASS",
+                        "notes":  "Id 为 32 位无连字符 hex"
+                    },
+                    {
+                        "section":  "S1-启动向导",
+                        "name":  "GET /Startup/Configuration（无 token）",
+                        "expected":  "401（向导已完成，需认证）",
+                        "actual":  "status=401",
+                        "status":  "PASS",
+                        "notes":  "向导已完成，跳过向导步骤（幂等）"
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "POST /Users/AuthenticateByName（admin/admin）",
+                        "expected":  "200 + AccessToken",
+                        "actual":  "admin/admin→401；空密码→200",
+                        "status":  "PASS",
+                        "notes":  "初始用户无密码（Startup/User 仅设 Name），空密码回退成功"
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "POST /Users/AuthenticateByName（错误密码）",
+                        "expected":  "401",
+                        "actual":  "status=401",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "GET /Users（带 token 复用）",
+                        "expected":  "200",
+                        "actual":  "status=200",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S2-认证",
+                        "name":  "GET /Users（无 token）",
+                        "expected":  "401",
+                        "actual":  "status=401",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "测试媒体就绪（Movie1/Movie2 mkv+nfo+poster）",
+                        "expected":  "文件存在",
+                        "actual":  "就绪",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "GET /Library/VirtualFolders",
+                        "expected":  "200",
+                        "actual":  "status=200 文件夹数=7（OpenMediaTests 存在=True）",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "POST /Library/VirtualFolders（添加 OpenMediaTests）",
+                        "expected":  "—",
+                        "actual":  "已存在，跳过（幂等）",
+                        "status":  "SKIP",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "POST /Library/Refresh（触发扫描）",
+                        "expected":  "200/204",
+                        "actual":  "status=204",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "扫描出 2 部电影（轮询 /Items?Recursive=true）",
+                        "expected":  "≥2 个 Movie 条目（≤120s）",
+                        "actual":  "count=2，耗时 0.1s",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "Movie1 元数据（nfo title/year）",
+                        "expected":  "Name=Movie1, ProductionYear=2020",
+                        "actual":  "Name=Movie1, Year=2020, Id=c3f6962891668fc8365e3dfaa24bb3ea",
+                        "status":  "PASS",
+                        "notes":  "nfo 解析（title/year）"
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "Movie2 元数据（nfo title/year）",
+                        "expected":  "Name=Movie2, ProductionYear=2021",
+                        "actual":  "Name=Movie2, Year=2021",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S3-媒体库",
+                        "name":  "GET /Items/{Movie1}/Images/Primary（poster.jpg）",
+                        "expected":  "200 + image/*",
+                        "actual":  "status=200 type=image/jpeg 633B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S4-WebSocket",
+                        "name":  "ws://…/embywebsocket 连接 + SessionsStart 回环",
+                        "expected":  "连接成功，收到服务器推送消息（MessageType=Sessions）",
+                        "actual":  "收到推送 MessageType=UserUpdated（1708B，EndOfMessage=True）",
+                        "status":  "PASS",
+                        "notes":  "发送 SessionsStart → 服务器解析并回推，双向回环验证通过"
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /web/index.html",
+                        "expected":  "200 + text/html",
+                        "actual":  "status=200 type=text/html 2811B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /web/index.html + Range: bytes=0-99",
+                        "expected":  "206 + Content-Range: bytes 0-99/N",
+                        "actual":  "status=206 content-range=bytes 0-99/2811 body=100B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /emby/web/index.html（前缀克隆）",
+                        "expected":  "200 + text/html",
+                        "actual":  "status=200 type=text/html",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /favicon.ico",
+                        "expected":  "200",
+                        "actual":  "status=200 type=image/vnd.microsoft.icon",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /robots.txt",
+                        "expected":  "200",
+                        "actual":  "status=200 type=text/plain",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /emby/System/Ping",
+                        "expected":  "200",
+                        "actual":  "status=200 body=Emby Server",
+                        "status":  "PASS",
+                        "notes":  ""
+                    },
+                    {
+                        "section":  "S5-静态资源",
+                        "name":  "GET /Videos/{Movie1}/stream?static=true + Range",
+                        "expected":  "206 + Content-Range（R3）",
+                        "actual":  "status=206 content-range=bytes 0-99/157280 type=video/x-matroska 100B",
+                        "status":  "PASS",
+                        "notes":  ""
+                    }
+                ]
+}
