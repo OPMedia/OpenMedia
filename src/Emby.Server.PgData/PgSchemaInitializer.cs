@@ -201,6 +201,17 @@ namespace Emby.Server.PgData
             Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_type_clean_value ON item_extradata (extradata_type_id, clean_value)");
             Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_item_type ON item_extradata (item_id, extradata_type_id)");
 
+            // ========== item_extradata_types 字典种子（关键！） ==========
+            // item_extradata.extradata_type_id 有外键指向本字典表；字典为空时
+            // 任何带 extradata 值的保存（genres/studios/tags/artists）都会
+            // 23503 外键违规 → 整个保存事务回滚 → 元数据永不落库。
+            // 类型码对照旧 ItemValues：0=Artists 1=AlbumArtists 2=Genres
+            // 3=Studios 4=Tags 6=InheritedTags
+            Execute(connection, @"INSERT INTO item_extradata_types (extradata_type_id, name) VALUES
+                (0, 'Artists'), (1, 'AlbumArtists'), (2, 'Genres'), (3, 'Studios'),
+                (4, 'Tags'), (6, 'InheritedTags')
+                ON CONFLICT (extradata_type_id) DO NOTHING");
+
             // ========== item_people 补充列（person_type SMALLINT 存不下任意字符串类型；sort_order 旧 People 表有） ==========
 
             Execute(connection, "ALTER TABLE item_people ADD COLUMN IF NOT EXISTS person_type_name TEXT");

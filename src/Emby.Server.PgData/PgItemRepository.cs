@@ -326,6 +326,7 @@ namespace Emby.Server.PgData
 
             CheckDisposed();
 
+
             var tuples = new List<Tuple<BaseItem, List<Guid>, BaseItem, string, List<string>>>();
 
             foreach (var item in items)
