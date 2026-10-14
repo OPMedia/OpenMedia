@@ -26,6 +26,7 @@ namespace Emby.Server.HttpServer.Results
         private long RangeEnd { get; set; }
         private long RangeLength { get; set; }
         private long TotalContentLength { get; set; }
+        private bool RangeUnsatisfiable { get; set; }
 
         public Action OnComplete { get; set; }
         private readonly ILogger _logger;
@@ -79,6 +80,16 @@ namespace Emby.Server.HttpServer.Results
 
             TotalContentLength = contentLength;
 
+            // RFC 7233 §4.4：起点超出内容长度 → 416 + bytes */总长（不发正文）
+            if (requestedRange.Key >= TotalContentLength)
+            {
+                StatusCode = HttpStatusCode.RequestedRangeNotSatisfiable;
+                Headers["Content-Range"] = "bytes */" + TotalContentLength.ToString(UsCulture);
+                Headers["Content-Length"] = "0";
+                RangeUnsatisfiable = true;
+                return;
+            }
+
             // If the requested range is "0-", we can optimize by just doing a stream copy
             if (!requestedRange.Value.HasValue)
             {
@@ -86,7 +97,9 @@ namespace Emby.Server.HttpServer.Results
             }
             else
             {
-                RangeEnd = requestedRange.Value.Value;
+                // BUG-26（RFC 7233 §2.1）：last-byte-pos 超出内容长度时按尾部截断，
+                // Content-Range/Content-Length 与实际发送字节数一致。
+                RangeEnd = Math.Min(requestedRange.Value.Value, TotalContentLength - 1);
             }
 
             RangeStart = requestedRange.Key;
@@ -147,7 +160,7 @@ namespace Emby.Server.HttpServer.Results
             try
             {
                 // Headers only
-                if (IsHeadRequest)
+                if (IsHeadRequest || RangeUnsatisfiable)
                 {
                     return;
                 }
