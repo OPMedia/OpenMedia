@@ -1,91 +1,115 @@
-# OpenMedia 三期设计：跟 Emby 的差距路线图
+# OpenMedia 三期设计：跟 Emby 的差距路线图（v2，去 Emby 化版）
 
-> 依据：docs/api-gap-map.md（44 缺失端点盘点）、docs/test-report.md §6/§8（83 FAIL 分类 + 复测建议）、docs/phase2-design.md（二期口径延续）
-> 代码证据核验日期：2026-10-14（Architect 实读 LiveTv/Providers/WebDashboard/插件加载链）
-> 前置：二期 T1 健壮性、T2 性能基线、音乐/剧集 fixture 轨道（D2/D3 进行中）——三期轨道多数在 fixture 就绪后启动
+> 依据：docs/api-gap-map.md（44 缺失端点盘点）、docs/test-report.md §6/§8、docs/phase2-design.md（二期口径延续）
+> 代码证据核验日期：2026-10-14（Architect 实读 LiveTv/Providers/WebDashboard/Security/EntryPoints 全链）
+> **v2 变更（用户决策 10-14 22:2x）**：①插件系统不做——原 P3-C 插件框架轨道整体删除，B6 25 端点维持 404 跳过（矩阵按"用户决策跳过"记账）；②新增**去 Emby 化轨道**（会员/云耦合/遥测清除）。
 
 ## 0. 差距总览（五个维度）
 
 | 维度 | 现状 | 与 Emby 4.x 的差距 | 三期动作 |
 |------|------|---------------------|---------|
-| API 面 | 63.9%（责任口径 87%）；B1–B5 已对齐 DTO/参数/核心端点 | 剩 B6 插件端点 25 个 + 转码链路 bug（二期修） | P3-C |
-| 功能域 | 电影全链路通（含转码）；音乐/剧集 fixture 轨道进行中；LiveTv 域 API 在但无数据源 | LiveTv 无免费 EPG 源=死域；音乐/剧集元数据未验证 | P3-A / P3-B |
-| 元数据 | 仅 nfo 本地元数据验证过；网络 provider（TMDb/TVDB/MusicBrainz…）全部未验证 | Emby 核心体验（海报/简介/演员自动来）缺失 | P3-A |
-| Web UI | 3.5.3 老 jQuery dashboard（bower_components/legacy 目录） | Emby 4.x 是全新 React web，用户可见差距最大 | P3-D spike |
-| 生态 | 插件框架代码在，**0 插件、从未验证**；官方客户端兼容目标 D7 未实测 | 插件生态为零；4.1 客户端直连未验证 | P3-C / P3-D |
+| API 面 | 63.9%（责任口径 87%）；B1–B5 已对齐 | 剩 B6 插件端点 25 个 | **用户拍板暂缓**（不做插件系统，维持 404） |
+| 功能域 | 电影全链路通（含转码）；音乐/剧集 fixture 轨道进行中；LiveTv 域 API 在但无数据源 | LiveTv 无免费 EPG 源=死域；**DVR/系列录制被 Premiere 门禁静默阻断**（新发现，见 §1.2） | P3-B + P3-C2 |
+| 元数据 | 仅 nfo 本地元数据验证过；网络 provider 全部未验证 | Emby 核心体验（海报/简介/演员自动来）缺失 | P3-A |
+| Web UI | 3.5.3 老 jQuery dashboard | Emby 4.x 全新 React web；**老 UI 内嵌 Premiere 推销位**（侧栏菜单/supporterkey 页/iap 组件） | P3-D spike + P3-C3 |
+| 商业耦合 | mb3admin 遥测/会员校验、emby.media RSS/下载链接散布 8 处 | 去 Emby 化（用户点名：会员、云同步之类） | P3-C |
 
-**优先级判断**（按用户可见价值）：元数据 provider（A）≈ Web UI（D）> LiveTv（B）> 插件/B6（C）。A 和 D 是用户"打开就能看见"的差距；B 是功能域从死到活；C 是生态基础。
+**优先级**（按用户点名 + 可见价值）：去 Emby 化（C）≥ 元数据（A）> LiveTv（B）> Web UI spike（D）。
 
 ---
 
 ## 1. 差距盘点（代码证据）
 
-### 1.1 B6 插件端点（25 个，口径说明）
+### 1.1 B6 插件端点（用户已拍板：不做）
 
-api-gap-map §4.2 全量盘点 **25 个**：user_usage_stats 19 + Reports 4 + ThumbnailSet 1 + SMTP Test 1。test-report 的"22 个"是矩阵 SKIP 登记数（user_usage_stats 17 + Reports 4 + ThumbnailSet 1，SMTP 与 2 个 user_usage_stats 端点未入矩阵）——**以 25 为准，矩阵是子集**。
+api-gap-map §4.2 全量 25 个（user_usage_stats 19 + Reports 4 + ThumbnailSet 1 + SMTP 1；矩阵 SKIP 的 22 是子集）。**用户决策：插件系统可能得逆向 Emby，先不做**——B6 维持 404，矩阵按"用户决策跳过"记账，不进通过率分母。插件加载框架代码（ApplicationHost.cs:1400/:1833）保留现状不动（死代码无害），四期若做插件系统再启。
 
-这些端点在 Emby 里全部由插件提供（Playback Reporting / Emby Reports / RokuMetadata / SMTP 通知），官方客户端不调用，仅 dashboard 插件页使用。
+### 1.2 LiveTv 现状（含新发现：DVR 门禁真阻断）
 
-### 1.2 LiveTv 现状
-
-- **TunerHosts 已有**：M3UTunerHost（免费，本地文件/URL）、HdHomerun（硬件）——`Emby.Server.Implementations/LiveTv/TunerHosts/`
-- **Listings 只有 SchedulesDirect**（`Listings/SchedulesDirect.cs`）——付费订阅服务，需账号，无 fixture 可测 → **guide 永远空，LiveTv 域在 UI 上是死的**
-- **XmlTv 解析库存在但零接线**：`src/Emby.XmlTv`（完整解析器）被 `Emby.Server.Implementations.csproj` 引用，但全解决方案**没有任何 .cs 使用它**——死引用，正好是三期要接的线
-- **EmbyTV 录制引擎完整**：DirectRecorder/EncodedRecorder/TimerManager/SeriesTimerManager
-- API 端点：B3 已补 3 个 GET；二期 T1.2 正在修 8 个健壮性端点
+- **TunerHosts 已有**：M3UTunerHost（免费）、HdHomerun（硬件）——`Emby.Server.Implementations/LiveTv/TunerHosts/`
+- **Listings 只有 SchedulesDirect**（付费订阅，无 fixture 可测）→ guide 永远空，LiveTv 域是死的
+- **XmlTv 解析库存在但零接线**：`src/Emby.XmlTv` 被 csproj 引用但全解决方案无任何 .cs 使用——死引用，三期接上
+- **web UI 的 XmlTv 配置页已存在**（`dashboard-ui/components/tvproviders/xmltv.js`）——服务端 provider 接上即有现成 UI（注意该页带 Premiere 提示，P3-C3 一并清）
+- ⚠️ **新发现——DVR 门禁是真阻断**：
+  - `LiveTvManager.cs:2193` CreateSeriesTimer：`GetRegistrationInfo("seriesrecordings")` → `!IsValid` 时 **log + return**——系列录制静默失败
+  - `EmbyTV.cs:1193`：`GetRegistrationInfo("dvr")` → `!IsValid` 时 **log + OnTimerOutOfDate + return**——DVR 录制静默失败
+  - 链路：GetRegistrationInfo → PluginSecurityManager → mb3admin.com 校验（外部已死）→ IsValid=false → **P3-B3 录制验证必被此门禁挡死**。去 Emby 化（P3-C2）是 B3 的硬前置
 
 ### 1.3 元数据 provider 现状（全部未验证）
 
-| 域 | Provider（代码位置 MediaBrowser.Providers/） | 状态 |
-|----|---------------------------------------------|------|
-| 电影 | MovieDb（TMDb v3，**API key 硬编码** `MovieDbProvider.cs:171`）、Fanart、Omdb | 代码在，从未跑过真实拉取 |
-| 剧集 | TheMovieDb（6 个 provider）、**TheTVDB（v3 API，外部已停服，大概率死）**、FanArt、MissingEpisode | 同上；TVDB 需处置 |
+| 域 | Provider（MediaBrowser.Providers/） | 状态 |
+|----|--------------------------------------|------|
+| 电影 | MovieDb（TMDb v3，key 硬编码 `MovieDbProvider.cs:171`）、Fanart、Omdb | 代码在，从未跑过真实拉取 |
+| 剧集 | TheMovieDb（6 个 provider）、TheTVDB（v3 外部已停服，大概率死）、MissingEpisode | 同上 |
 | 音乐 | MusicBrainz、AudioDb、FanArt | 同上 |
-| 本地 | LocalMetadata + XbmcMetadata（nfo） | ✅ 已验证（一期/二期） |
+| 本地 | LocalMetadata + XbmcMetadata（nfo） | ✅ 已验证 |
 
-关键背景：一期 BUG-16 修复（22fcd01242）前**元数据保存整个事务回滚**——网络 provider 即使拉到也存不进去。现在保存链路通了，provider 验证才第一次有意义。预期首跑暴露：老 API 端点变更、TLS/UA 被拒、图片下载路径 bug（同 ffmpeg 首跑炸三个 bug 的模式，登记不算失败）。
+背景：BUG-16 修复（22fcd01242）前元数据保存整个事务回滚，网络 provider 拉到也存不进。现在保存链路通了，provider 验证才第一次有意义。预期首跑暴露老 API 变更/UA 拒绝/图片下载 bug（同 ffmpeg 首跑模式，登记不算失败）。
 
 ### 1.4 Web UI 现状
 
-`MediaBrowser.WebDashboard/dashboard-ui/` = Emby 3.5.3 老 jQuery UI（bower_components、legacy/、85 个顶层条目）。Emby 4.x 的 web 是全新应用（MediaBrowser/Emby.Web，4.1.x tag 有开源构建产物）。api-gap-map 的 **D7 目标本来就是"官方 Emby 客户端 4.1.x 零适配直连"**——同一逻辑适用于官方 web：API 对齐做到位，4.1 web 理论上能连。
+`dashboard-ui/` = 3.5.3 老 jQuery UI。**内嵌 Emby 商业耦合**（详见 §2.5 清单）：侧栏 "Emby Premiere" 菜单项（librarymenu.js）、supporterkey.html 密钥页、iap.js 购买组件、registrationservices.js（bower emby-webcomponents）、XmlTv 页 premiere 提示、emby.media 下载/新闻链接、sync 菜单残留。Emby 4.x web（MediaBrowser/Emby.Web 4.1.x 开源构建产物）是换新路线——**注意其 emby-webcomponents 同样带 premiere/iap 耦合，换新后去 Emby 化要重做一遍**，spike 结论必须计入该成本。
 
-### 1.5 插件框架现状
+### 1.5 去 Emby 化全量盘点（服务器 + web UI，实测 grep 取证）
 
-`ApplicationHost.cs:1400` LoadPlugin → `:1833` GetPluginAssemblies（从 ProgramData/plugins 扫 DLL + 从 resources/plugins 复制预装）→ 硬编码插件名单（:1925 TvMazeProvider/Vimeo/Twitch…）。**框架代码完整但 0 插件装过、.NET 10 下从未验证**——这是比 25 个端点更基础的差距。
+**打 mb3admin.com 的点（6 处）**：
+
+| 位置 | 内容 | 性质 |
+|------|------|------|
+| `Security/PluginSecurityManager.cs:26,27` | 会员校验/注册 URL（IsSupporter/SupporterKey/GetRegistrationStatus/LicenseFile） | 会员体系核心 |
+| `EntryPoints/UsageReporter.cs:20`（wired by `UsageEntryPoint.cs:88,116`） | 服务器/客户端使用遥测上报 | 纯遥测 |
+| `Updates/InstallationManager.cs:181,216` | 插件包目录两个 URL | 插件系统（已不做） |
+| `Api/StartupWizardService.cs:78` | 安装向导完成时上报安装信息 | 纯遥测 |
+| `Api/PluginService.cs` 4 端点 | GET/POST /Plugins/SecurityInfo、GET /Plugins/RegistrationRecords/{Name}、POST /Appstore/Register | 会员 API 面 |
+| `LiveTv/LiveTvManager.cs:2193` + `EmbyTV/EmbyTV.cs:1193` | DVR/系列录制 Premiere 门禁（真阻断，见 §1.2） | 功能门禁 |
+
+**打 emby.media 的点**：`News/NewsEntryPoint.cs:86`（博客 RSS → /ProductNews → web 首页新闻区块）、`dashboardpage.js` 手动更新下载链接、DLNA `DefaultProfile.cs:21` ModelUrl/ManufacturerUrl（协议字段）、`EmbyTV.cs:283` provider info URL、`Notifications.cs:141` 文案、2 处代码注释。**云同步/Connect**：DLL 迁移期已删，代码零残留（实测 grep 零命中），仅 web UI 有 sync 菜单残留（lnkSyncToOtherDevices/mySyncPage，服务器无对应能力时 UI 自动隐藏）。
 
 ---
 
 ## 2. 方案决策
 
-### 2.1 B6：插件框架优先（方案 C：框架验证 → 内置插件 → 长尾跟随）
+### 2.1 B6：用户拍板不做插件系统
 
-- **方案 A 全进核心**：25 端点 × 中难度占核心开发量，且违背 Emby 架构语义（这些本来是插件），核心 API 面膨胀。否决。
-- **方案 B 纯等外部插件**：老 3.5.3 插件生态已死，没有现成 DLL 可装，等于永远不做。否决。
-- **方案 C（选定）**：
-  1. **C1 先验证插件框架本身**（1 天 spike）：写一个最小测试插件（一个 service + 一个页面），编译 → 放 resources/plugins → 启动加载 → 端点 200。**这是三期的生态基石**——框架不通，B6 没有载体，fallback 才是核心实现
-  2. **C2 Playback Reporting 做成内置插件**（user_usage_stats 19 端点）：数据源核心已有（activity log / sessions / user_data 播放记录），做插件不污染核心，同时当框架的实战验证
-  3. **C3 Reports/ThumbnailSet/SMTP 跟随**：C2 完成后按用户需求拍板，默认继续暂缓（404 现状可接受）
-- 判定点：C1 失败（框架在 .NET 10 跑不通且 1 天内修不好）→ B6 降级回"核心实现 user_usage_stats 最小集（user_list/user_activity/HourlyReport 3 个）"，其余维持 404，四期再议
+维持 404 跳过；插件框架代码保留不动；矩阵记账口径改"用户决策跳过"。四期若启动插件系统，需先逆向 Emby 插件 API（用户原话），另立设计。
 
-### 2.2 LiveTv：XmlTv + M3U 免费全链路
+### 2.2 去 Emby 化：删除 + 桩化双轨（原则：UI 会调的桩化，纯外连的删除，门禁的解除）
 
-- SchedulesDirect 付费且无 fixture，**不做**；HdHomerun 无硬件，**不做**
-- 路线：**新建 XmlTvListingsProvider**（复用现成 `src/Emby.XmlTv` 解析库，接线 `ILiveTvListingsProvider`）+ 现成 M3UTunerHost = IPTV 通用组合（Emby 官方同样支持）
-- 全链路验收：M3U+XMLTV fixture → /LiveTv/Channels 非空 → guide 有 program → 频道可播放 → timer 录制出文件
-- 这是把 LiveTv 域从"API 在但永远空"变成可用功能的最短路径
+| # | 项 | 处置 | 理由 |
+|---|----|------|------|
+| 1 | PluginSecurityManager（GetRegistrationInfo/IsSupporter） | **桩化：恒返回 IsValid=true**（单点） | DVR/themes 等所有门禁走这里；删 ISecurityManager 接口动静大，桩化一行=全功能解锁，语义正确 |
+| 2 | PluginService 4 端点 | SecurityInfo GET 桩化 `{IsMBSupporter:true}`；POST 桩化 204 no-op；RegistrationRecords 桩化 `IsRegistered:true`；Appstore/Register **删除** | 老 web UI getPluginSecurityInfo 调用链有 catch 兜底（false→themes 禁用），桩化让 UI 全绿且不炸 |
+| 3 | UsageEntryPoint + UsageReporter | **删除**（EntryPoint 摘除 + 类删） | 纯遥测无 UI 依赖 |
+| 4 | StartupWizardService:78 安装上报 | **删除调用** | 纯遥测 |
+| 5 | NewsEntryPoint RSS 拉取 | **桩化：GetProductNews 返回空 QueryResult**（删定时拉取） | web 首页新闻区块调 /ProductNews；空列表 UI 自然隐藏不报错 |
+| 6 | InstallationManager 包目录远程 URL | **桩化：不打 mb3admin，返回空/仅已装** | /Packages 端点在用（矩阵 200 + web 插件页）；插件系统不做，目录无意义但端点要活 |
+| 7 | LiveTvManager:2193 系列录制门禁 | **删门禁**（registration check + return 整块） | mb3admin 死→IsValid=false→系列录制静默失败，这是真功能 bug |
+| 8 | EmbyTV:1193 DVR 门禁 | **删门禁**（同上） | 同上；P3-B3 硬前置 |
+| 9 | SystemInfo.HardwareAccelerationRequiresPremiere | 不动（B1 已补，恒 false） | 无商业语义 |
+| 10 | DLNA ModelUrl/ManufacturerUrl、EmbyTV.cs:283、Notifications 文案、注释 | **白名单保留**（登记进文档） | 协议字段/文案/注释，非功能耦合，改动无收益 |
+| 11 | web：librarymenu.js "Emby Premiere" 菜单项 | **删除菜单项** | 用户可见推销位 |
+| 12 | web：supporterkey.html + supporterkeypage.js + supporter 图片 | **删除**（菜单删了无入口） | 会员密钥页 |
+| 13 | web：iap.js | **桩化**（getSubscriptionOptions 空列表、beginPurchase no-op） | xmltv 等页面依赖 registrationServices 链 |
+| 14 | web：registrationservices.js（bower emby-webcomponents） | **桩化：所有 feature 恒 unlocked** | themes/xmltv 多处调用，删了报 require 错 |
+| 15 | web：xmltv.js `.lnkPremiere` + XmlTvPremiere 文案 | **删提示元素** | 推销位 |
+| 16 | web：dashboardpage.js emby.media/download 链接 | 改 GitHub release 链接或删（低优先） | 死链 |
+| 17 | web：sync 菜单残留（lnkSyncToOtherDevices 等） | **删菜单**（服务器 sync 已删） | 死链接 UI |
 
-### 2.3 元数据：逐 provider 验证与修复
+**PremiereDate（首播日期）是正常元数据字段，与会员无关，严禁误伤**（LiveTvManager 里大量 IsPremiere/PremiereDate 是节目元数据）。
 
-- TMDb 优先（电影+剧集主源，v3 API 仍在服务，key 已硬编码）；音乐三件套（MusicBrainz/AudioDb/FanArt）跟随 D2 音频 fixture；TVDB v3 预处置：**默认禁用**（外部 API 已停），TMDb 剧集链路顶上，不花时间修死源
-- 每个 provider 一份验证记录（成功/失败/根因/处置），修一个 commit 一个
-- 图片下载链路（ProviderManager 远程图片入库）单独验证——海报是用户最直观的元数据体验
+### 2.3 LiveTv：XmlTv + M3U 免费全链路
 
-### 2.4 Web UI：Emby.Web 4.1 接入 spike（只出结论不承诺）
+- SchedulesDirect 付费无 fixture 不做；HdHomerun 无硬件不做
+- 新建 **XmlTvListingsProvider**（复用 `src/Emby.XmlTv` 解析库，实现 ILiveTvListingsProvider）+ 现成 M3UTunerHost；web UI 配置页现成（xmltv.js）
+- 全链路验收：M3U+XMLTV fixture → /LiveTv/Channels 非空 → guide 有 program → 频道可播放 → timer 录制出文件（**依赖 P3-C2 先拆 DVR 门禁**）
 
-- 半天~1 天：取 Emby.Web 4.1.x 构建产物 → 替换 dashboard-ui（保留回滚）→ 连本地服务器 → 逐页面记录可用/白屏/API 缺口
-- 产出决策报告：**换新 web 的 API 缺口清单 + 工作量估计**，给四期拍板；spike 期间老 UI 保留随时回滚
-- license 与来源合规由 Chief 核实后才能转正式轨道（spike 本地试验无风险）
-- 不选"修老 UI"：老 UI 补丁是往 8 年前技术上投资，方向错误；不选"自建"：工作量否决
+### 2.4 元数据：逐 provider 验证与修复
+
+TMDb 优先（电影+剧集主源，v3 API 在服务，key 已硬编码）；音乐三件套跟随 D2 音频 fixture；**TVDB v3 默认禁用**（外部停服，不修死源，TMDb 顶上）；每 provider 一份验证记录，修一个 commit 一个；图片下载链路（ProviderManager 远程图入库）单独验证。
+
+### 2.5 Web UI：Emby.Web 4.1 接入 spike（只出结论不承诺）
+
+半天~1 天：Emby.Web 4.1.x 构建产物 → 替换 dashboard-ui（保留回滚）→ 连本地服务器 → 逐页面可用性/API 缺口清单。**spike 结论必须计入两项成本**：①API 缺口补齐量；②**Emby.Web 自带 premiere/iap/registrationservices 耦合，去 Emby 化要重做一遍**——该成本会抬高"老 UI 补丁"路线权重。license 合规 Chief 核实后才能转正式轨道。
 
 ---
 
@@ -93,24 +117,25 @@ api-gap-map §4.2 全量盘点 **25 个**：user_usage_stats 19 + Reports 4 + Th
 
 | 任务 | 内容 | 依赖 | 工作量 | 验收 |
 |------|------|------|--------|------|
-| **P3-A1** | TMDb 电影链路验证修复（Movie 无 nfo → 拉取 Overview/Poster/Year 入库） | — | 1d | Movie1 删 nfo 重扫后 TMDb 元数据+海报入库；验证记录入 docs |
-| **P3-A2** | TMDb 剧集链路（Series/Season/Episode） | D3 剧集 fixture | 1d | 剧集 fixture 无 nfo 拉取全季元数据 |
+| **P3-C1** | 服务器遥测清除：UsageEntryPoint/UsageReporter 删、StartupWizardService:78 删、NewsEntryPoint 桩化空新闻、InstallationManager 包目录桩化 | — | 1d | 断网启动零外连报错；/Packages 200；/ProductNews 200 空列表 |
+| **P3-C2** | 会员门禁桩化与解除：PluginSecurityManager 恒 IsValid=true、PluginService 4 端点处置、DVR×2 门禁删除 | — | 1d | SecurityInfo 返回 IsMBSupporter=true；CreateSeriesTimer 不再 return；EmbyTV 录制不再 OnTimerOutOfDate |
+| **P3-C3** | web UI 去 Emby 化：菜单/supporterkey 页删、iap+registrationservices 桩、xmltv 提示删、sync 残留删 | — | 1d | 侧栏无 Premiere 项；supporterkey 404；XmlTv 页无 premiere 提示；themes 可用 |
+| **P3-C4** | 全量复扫 + 白名单登记 + 验收报告 | C1–C3 | 0.5d | grep mb3admin 零命中；emby.media 仅白名单；三套件回归不劣化 |
+| **P3-A1** | TMDb 电影链路验证修复（无 nfo → 拉取入库） | — | 1d | Movie1 删 nfo 重扫后 TMDb 元数据+海报入库；验证记录入 docs |
+| **P3-A2** | TMDb 剧集链路（Series/Season/Episode） | D3 剧集 fixture | 1d | 剧集 fixture 无 nfo 拉全季元数据 |
 | **P3-A3** | 音乐 provider（MusicBrainz/AudioDb/FanArt） | D2 音频 fixture | 1d | 音频 fixture 拉专辑/艺人元数据 |
 | **P3-A4** | TVDB 禁用处置 + Omdb 验证 | — | 0.5d | TVDB 默认关闭不报错；Omdb 出验证记录 |
-| **P3-B1** | XmlTvListingsProvider 新建（接 src/Emby.XmlTv） | — | 1.5d | XMLTV 文件 → guide program 数据入库 |
+| **P3-B1** | XmlTvListingsProvider 新建（接 src/Emby.XmlTv） | — | 1.5d | XMLTV 文件 → guide program 入库 |
 | **P3-B2** | M3U+XMLTV 全链路 fixture | P3-B1 | 1d | 频道列表非空 → guide 有数据 → 频道可播放 |
-| **P3-B3** | 录制链路验证（timer → EmbyTV 出文件） | P3-B2 | 1d | 单次 timer 录制出媒体文件可播放 |
-| **P3-C1** | 插件框架验证 spike（最小插件加载） | — | 1d | 日志见插件加载；测试插件端点 200；失败出 fallback 决策 |
-| **P3-C2** | Playback Reporting 内置插件（user_usage_stats 19） | P3-C1 | 2d | /user_usage_stats/user_list 等 200；dashboard 插件页可见 |
-| **P3-C3** | Reports/ThumbnailSet/SMTP 处置 | P3-C2 | 0.5d | 用户拍板记录：实现或维持 404 |
-| **P3-D** | Emby.Web 4.1 接入 spike | — | 1d | 决策报告：页面可用性清单 + API 缺口清单 + 回滚验证 |
-| **P3-E** | 性能优化实施（按优化候选清单） | 二期 T2 基线产出 | 视清单 | 每项优化前后对比数字；回归不劣化 |
+| **P3-B3** | 录制链路验证（timer → EmbyTV 出文件） | **P3-B2 + P3-C2** | 1d | 单次 timer 录制出媒体文件可播放 |
+| **P3-D** | Emby.Web 4.1 接入 spike（含去 Emby 化成本评估） | — | 1d | 决策报告：页面可用性 + API 缺口 + premiere 耦合重做成本 + 回滚验证 |
+| **P3-E** | 性能优化实施（按优化候选清单） | 二期 T2 基线 | 视清单 | 每项前后对比数字；回归不劣化 |
 
-**依赖图**：P3-A2←D3 fixture；P3-A3←D2 fixture；P3-B1→B2→B3；P3-C1→C2→C3；P3-E←T2。A/B/C/D 四轨道相互独立全并行。
+**依赖图**：C2→B3（DVR 门禁）；B1→B2→B3；A2←D3 fixture；A3←D2 fixture；E←T2 基线。A/B/C/D 四轨道相互独立全并行。
 
-**分工建议**：Developer（二期 T1 完）→ P3-A；Developer-2（音乐完）→ P3-B；Developer-3（剧集完）→ P3-C；P3-D 给先空出的开发（半天可插入）；Tester 每轨道验收 + 负路径用例入 test-plan；Reviewer 按总闸门。
+**分工建议**：最先空出的开发 → P3-C（用户点名，最高优先）；Developer（二期 T1 完）→ P3-A；Developer-2（音乐完）→ P3-B；P3-D 给再下一个空出的（半天可插入）；Tester 每轨道验收 + 负路径用例入 test-plan；Reviewer 总闸门。
 
-**总闸门**：三套件回归不劣化（场景 ≥ 22/24、矩阵 ≥ 当前基线、契约 ≥ 16/2）+ 各轨道验收全过 + 每修一个 bug/功能一个 commit。
+**总闸门**：三套件回归不劣化（场景 ≥ 22/24、矩阵 ≥ 当前基线、契约 ≥ 16/2）+ 各轨道验收全过 + 修一个 commit 一个 + **去 Emby 化复扫零命中**。
 
 ---
 
@@ -120,15 +145,17 @@ api-gap-map §4.2 全量盘点 **25 个**：user_usage_stats 19 + Reports 4 + Th
 |------|------|
 | R1 网络 provider 首跑出新 bug（同 ffmpeg 模式） | 预期内，登记 fail-classified 新分类，不算轨道失败 |
 | R2 外部 API 已死（TVDB v3、可能 AudioDb/Fanart） | 逐个验证记录处置；死源禁用不修；TMDb 主源顶上 |
-| R3 插件框架 .NET 10 跑不通 | C1 判定点 1 天为限，fallback 核心最小集 |
-| R4 Emby.Web license 不合规 | spike 仅本地试验；正式接入前 Chief 核实 |
-| R5 元数据拉取污染共享条目库 | fixture 条目用独立虚拟文件夹；验证前后 TotalRecordCount 对账 |
-| R6 三期轨道与二期收尾抢人 | 依赖图已错开：A2/A3 等 fixture，E 等基线，不空转 |
-| R7 XMLTV 大文件解析慢/内存 | fixture 控制规模；真实 IPTV 源留四期压测 |
+| R3 桩化 SecurityInfo 后 web themes 全解锁 | 语义即"全功能解锁"，符合去商业化目标，非风险 |
+| R4 DVR 门禁删除后录制无门槛 | 符合目标；B3 验证录制链路真实可用 |
+| R5 Emby.Web license 不合规 | spike 仅本地试验；正式接入前 Chief 核实 |
+| R6 元数据拉取污染共享条目库 | fixture 条目独立虚拟文件夹；前后 TotalRecordCount 对账 |
+| R7 三期轨道与二期收尾抢人 | 依赖图错开：A2/A3 等 fixture、E 等基线、C 独立可先行 |
+| R8 XMLTV 大文件解析慢/内存 | fixture 控制规模；真实 IPTV 源留四期压测 |
+| R9 去Emby化误伤 PremiereDate 元数据字段 | §2.2 已标注严禁误伤；Reviewer 对照白名单审查 |
 
 ---
 
 ## 5. 与二期/四期的衔接
 
-- 二期收尾（T1 健壮性 + T2 基线 + 音乐/剧集 fixture）= 三期的启动条件，无空窗
-- 三期产出决定四期方向：P3-D 结论 → Web UI 大轨道 or 继续补丁；P3-E 基线 → 性能优化批次；P3-C 结论 → 插件生态是否展开
+- 二期收尾（T1 健壮性 + T2 基线 + 音乐/剧集 fixture）= 三期启动条件，无空窗
+- 三期产出决定四期方向：P3-D 结论（含去 Emby 化重做成本）→ Web UI 大轨道 or 老 UI 补丁；P3-E 基线 → 性能优化批次；插件系统 → 用户拍板"先逆向再议"，四期另立设计
