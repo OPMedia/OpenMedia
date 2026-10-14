@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.News;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Serialization;
@@ -21,26 +21,12 @@ namespace Emby.Server.Implementations.News
 
         public QueryResult<NewsItem> GetProductNews(NewsQuery query)
         {
-            try
+            // OpenMedia（去 Emby 化，用户决策）：产品新闻恒返回空列表。
+            // RSS 拉取已在 NewsEntryPoint 移除，旧缓存 news.json 不再透出，web UI 新闻区块自然隐藏。
+            return new QueryResult<NewsItem>
             {
-                return GetProductNewsInternal(query);
-            }
-            catch (FileNotFoundException)
-            {
-                // No biggie
-                return new QueryResult<NewsItem>
-                {
-                    Items = new NewsItem[] { }
-                };
-            }
-            catch (IOException)
-            {
-                // No biggie
-                return new QueryResult<NewsItem>
-                {
-                    Items = new NewsItem[] { }
-                };
-            }
+                Items = new NewsItem[] { }
+            };
         }
 
         private QueryResult<NewsItem> GetProductNewsInternal(NewsQuery query)
