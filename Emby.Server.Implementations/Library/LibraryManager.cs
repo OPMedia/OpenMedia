@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Progress;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -2124,9 +2124,28 @@ namespace Emby.Server.Implementations.Library
 
             return GetUserRootFolder().Children
                 .OfType<ICollectionFolder>()
-                .Where(i => string.Equals(i.Path, item.Path, StringComparison.OrdinalIgnoreCase) || i.PhysicalLocations.Contains(item.Path))
+                .Where(i => PathsEqual(i.Path, item.Path) || i.PhysicalLocations.Any(p => PathsEqual(p, item.Path)))
                 .Select(i => i.CollectionType)
                 .FirstOrDefault(i => !string.IsNullOrEmpty(i));
+        }
+
+        /// <summary>
+        /// 路径等价比较（分隔符不敏感）。
+        /// .mblink/PhysicalLocations 保存的是建库时客户端传入的原始字符串（REST 客户端常传正斜杠），
+        /// 而扫描侧 item.Path 用本机分隔符——旧精确比较（Ordinal + List.Contains）会因斜杠方向失配，
+        /// 导致 collectionType 无法下传、Music/TV 等按类型解析的 Resolver 全部跳过（条目降级为普通 Folder）。
+        /// </summary>
+        private static bool PathsEqual(string path1, string path2)
+        {
+            if (string.IsNullOrEmpty(path1) || string.IsNullOrEmpty(path2))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                path1.Replace('/', Path.DirectorySeparatorChar),
+                path2.Replace('/', Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private readonly TimeSpan _viewRefreshInterval = TimeSpan.FromHours(24);

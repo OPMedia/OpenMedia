@@ -137,11 +137,12 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 读取表的主键列数（schema 对齐迁移判断用）。
+        /// 数 indkey 数组长度（列数）；不能数 pg_index 行数（那是索引个数，恒为 1）。
         /// </summary>
         protected static int GetPrimaryKeyColumnCount(NpgsqlConnection connection, string tableName)
         {
             const string sql = @"
-                SELECT count(*)
+                SELECT COALESCE(array_length(i.indkey, 1), 0)
                 FROM pg_index i
                 WHERE i.indrelid = @table::regclass
                   AND i.indisprimary";

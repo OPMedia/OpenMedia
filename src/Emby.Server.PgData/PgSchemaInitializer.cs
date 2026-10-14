@@ -277,9 +277,13 @@ namespace Emby.Server.PgData
                             FOREIGN KEY (extradata_type_id) REFERENCES item_extradata_types (extradata_type_id)
                         ) WITH (fillfactor = 90)");
 
+                    // 拷贝保留 clean_value（列已存在时）；无该列的旧表用 lower(value) 派生，
+                    // 避免迁移把聚合匹配依赖的 clean_value 全部置 NULL（艺人/流派/标签查询失效）。
+                    var cleanValueSelect = hasCleanValueColumn ? "clean_value" : "lower(value)";
+
                     Execute(connection, transaction, @"
-                        INSERT INTO item_extradata_fixed (item_id, extradata_type_id, value)
-                        SELECT item_id, extradata_type_id, value FROM item_extradata");
+                        INSERT INTO item_extradata_fixed (item_id, extradata_type_id, value, clean_value)
+                        SELECT item_id, extradata_type_id, value, " + cleanValueSelect + @" FROM item_extradata");
 
                     Execute(connection, transaction, "DROP TABLE item_extradata");
 
@@ -306,8 +310,12 @@ namespace Emby.Server.PgData
 
         private static int GetPrimaryKeyColumnCount(NpgsqlConnection connection, string tableName)
         {
+            // 注意：数的是主键"列数"（indkey 数组长度），不是主键"索引个数"（恒为 1）。
+            // 旧实现 count(pg_index) 恒返回 1，导致 FixItemExtradata 的
+            // "pkColumnCount >= 3 && hasCleanValueColumn" 永假 → 每次启动都重跑迁移，
+            // 把 item_extradata 全表复制成 clean_value=NULL（艺人/流派/标签聚合全失效）。
             const string sql = @"
-                SELECT count(*)
+                SELECT COALESCE(array_length(i.indkey, 1), 0)
                 FROM pg_index i
                 WHERE i.indrelid = @table::regclass
                   AND i.indisprimary";

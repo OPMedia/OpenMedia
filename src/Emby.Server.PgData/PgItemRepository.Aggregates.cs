@@ -379,7 +379,9 @@ namespace Emby.Server.PgData
                                 var item = GetItem(reader, connection);
                                 if (item != null)
                                 {
-                                    var itemTypesOrdinal = reader.GetOrdinal("item_types");
+                                    // item_types 列仅在 typesToCount 非空时进入 SELECT；
+                                    // 无该列时传 -1（GetItemCounts 对 typesToCount 空直接返回空计数，不触 ordinal）
+                                    var itemTypesOrdinal = typesToCount.Length > 0 ? reader.GetOrdinal("item_types") : -1;
                                     list.Add(new Tuple<BaseItem, ItemCounts>(item, GetItemCounts(reader, itemTypesOrdinal, typesToCount)));
                                 }
                             }
