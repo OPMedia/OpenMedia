@@ -105,13 +105,23 @@ public class SubtitleEncoder : ISubtitleEncoder
 		{
 			throw new ArgumentNullException("mediaSourceId");
 		}
-		MediaSourceInfo val = (await _mediaSourceManager.GetPlayackMediaSources(item, (User)null, false, false, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).First((MediaSourceInfo i) => string.Equals(i.Id, mediaSourceId, StringComparison.OrdinalIgnoreCase));
-		MediaStream subtitleStream = val.MediaStreams.First((MediaStream i) =>
+		MediaSourceInfo val = (await _mediaSourceManager.GetPlayackMediaSources(item, (User)null, false, false, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).FirstOrDefault((MediaSourceInfo i) => string.Equals(i.Id, mediaSourceId, StringComparison.OrdinalIgnoreCase));
+		if (val == null)
+		{
+			// ①类：MediaSourceId 不存在 → 404（旧 First() 抛 IOE 落 500）
+			throw new ResourceNotFoundException(string.Format("Media source {0} not found", mediaSourceId));
+		}
+		MediaStream subtitleStream = val.MediaStreams.FirstOrDefault((MediaStream i) =>
 		{
 			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
 			//IL_0007: Invalid comparison between Unknown and I4
 			return (int)i.Type == 2 && i.Index == subtitleStreamIndex;
 		});
+		if (subtitleStream == null)
+		{
+			// ①类：字幕流索引不存在（无字幕媒体常见）→ 404（旧 First() 抛 IOE 落 500）
+			throw new ResourceNotFoundException(string.Format("Subtitle stream {0} not found in media source {1}", subtitleStreamIndex, mediaSourceId));
+		}
 		Tuple<Stream, string> tuple = await GetSubtitleStream(val, subtitleStream, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 		string item2 = tuple.Item2;
 		if (TryGetWriter(outputFormat) == null)

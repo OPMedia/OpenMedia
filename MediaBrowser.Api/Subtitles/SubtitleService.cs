@@ -253,10 +253,20 @@ namespace MediaBrowser.Api.Subtitles
 
                 var idString = request.Id.ToString("N");
                 var mediaSource = _mediaSourceManager.GetStaticMediaSources(item, false, null)
-                    .First(i => string.Equals(i.Id, request.MediaSourceId ?? idString));
+                    .FirstOrDefault(i => string.Equals(i.Id, request.MediaSourceId ?? idString));
+                if (mediaSource == null)
+                {
+                    // ①类：MediaSourceId 不存在 → 404（旧 First() 抛 IOE 落 500）
+                    throw new ResourceNotFoundException(string.Format("Media source {0} not found", request.MediaSourceId ?? idString));
+                }
 
                 var subtitleStream = mediaSource.MediaStreams
-                    .First(i => i.Type == MediaStreamType.Subtitle && i.Index == request.Index);
+                    .FirstOrDefault(i => i.Type == MediaStreamType.Subtitle && i.Index == request.Index);
+                if (subtitleStream == null)
+                {
+                    // ①类：字幕流索引不存在 → 404（旧 First() 抛 IOE 落 500）
+                    throw new ResourceNotFoundException(string.Format("Subtitle stream {0} not found", request.Index));
+                }
 
                 return await ResultFactory.GetStaticFileResult(Request, subtitleStream.Path).ConfigureAwait(false);
             }
