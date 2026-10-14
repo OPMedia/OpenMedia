@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -114,7 +114,14 @@ namespace Emby.Server.Implementations.Security
         /// and then register the proper feature and then fill in the supporter key on success.
         /// </summary>
         /// <param name="parameters">Json parameters to send to admin server</param>
-        public async Task RegisterAppStoreSale(string parameters)
+        public Task RegisterAppStoreSale(string parameters)
+        {
+            // OpenMedia（去 Emby 化，用户决策）：应用商店注册（Emby 云）已移除，保留签名兼容现有调用方。
+            _logger.Info("App store registration is disabled in OpenMedia (Emby cloud decoupled).");
+            return Task.CompletedTask;
+        }
+
+        private async Task RegisterAppStoreSaleOriginal(string parameters)
         {
             var options = new HttpRequestOptions()
             {
@@ -187,6 +194,23 @@ namespace Emby.Server.Implementations.Security
         private SemaphoreSlim _regCheckLock = new SemaphoreSlim(1, 1);
 
         private async Task<MBRegistrationRecord> GetRegistrationStatusInternal(string feature, bool forceCallToServer, string version, CancellationToken cancellationToken)
+        {
+            // OpenMedia（去 Emby 化，用户决策）：Emby 云注册体系已移除，所有功能门禁（DVR/系列录制/硬件加速等）
+            // 恒为已注册且有效，不再向 mb3admin.com 发起任何校验请求。原始校验逻辑保留为死代码，由 P3-C 轨道整体清理。
+            await Task.CompletedTask.ConfigureAwait(false);
+
+            return new MBRegistrationRecord
+            {
+                IsRegistered = true,
+                IsValid = true,
+                RegChecked = true,
+                RegError = false,
+                TrialVersion = false,
+                ExpirationDate = new DateTime(2099, 12, 31, 0, 0, 0, DateTimeKind.Utc)
+            };
+        }
+
+        private async Task<MBRegistrationRecord> GetRegistrationStatusOriginal(string feature, bool forceCallToServer, string version, CancellationToken cancellationToken)
         {
             await _regCheckLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 

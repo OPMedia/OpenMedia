@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -167,6 +167,17 @@ namespace Emby.Server.Implementations.Updates
             string packageType = null,
             Version applicationVersion = null)
         {
+            // OpenMedia（去 Emby 化+插件系统暂缓，用户决策）：包目录不再向 mb3admin.com 请求，恒返回空列表。
+            // /Packages 与 /Packages/Updates 返回 200 空数组；原始目录拉取逻辑保留为死代码，由 P3-C 轨道清理。
+            await Task.CompletedTask.ConfigureAwait(false);
+            return new List<PackageInfo>();
+        }
+
+        private async Task<List<PackageInfo>> GetAvailablePackagesOriginal(CancellationToken cancellationToken,
+            bool withRegistration,
+            string packageType,
+            Version applicationVersion)
+        {
             if (withRegistration)
             {
                 var data = new Dictionary<string, string>
@@ -210,6 +221,13 @@ namespace Emby.Server.Implementations.Updates
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{List{PackageInfo}}.</returns>
         public async Task<List<PackageInfo>> GetAvailablePackagesWithoutRegistrationInfo(CancellationToken cancellationToken)
+        {
+            // OpenMedia（去 Emby 化）：包目录云请求已移除，恒返回空列表。
+            await Task.CompletedTask.ConfigureAwait(false);
+            return new List<PackageInfo>();
+        }
+
+        private async Task<List<PackageInfo>> GetAvailablePackagesWithoutRegistrationInfoOriginal(CancellationToken cancellationToken)
         {
             using (var response = await _httpClient.SendAsync(new HttpRequestOptions
             {

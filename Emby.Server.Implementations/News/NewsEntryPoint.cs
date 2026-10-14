@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Library;
@@ -51,7 +51,8 @@ namespace Emby.Server.Implementations.News
 
         public void Run()
         {
-            _timer = _timerFactory.Create(OnTimerFired, null, TimeSpan.FromMilliseconds(500), _frequency);
+            // OpenMedia（去 Emby 化，用户决策）：Emby 博客 RSS 定时拉取已移除。
+            // /ProductNews 由 NewsService 读本地缓存 news.json，无缓存时返回空列表，web UI 新闻区块自然隐藏。
         }
 
         /// <summary>

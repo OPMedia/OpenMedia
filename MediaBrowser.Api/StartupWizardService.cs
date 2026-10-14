@@ -68,7 +68,7 @@ namespace MediaBrowser.Api
             _config.SetOptimalValues();
             _config.SaveConfiguration();
 
-            Task.Run(UpdateStats);
+            // OpenMedia（去 Emby 化，用户决策）：向导完成后的 mb3admin.com 安装上报已移除（原 Task.Run(UpdateStats)）。
         }
 
         private async Task UpdateStats()

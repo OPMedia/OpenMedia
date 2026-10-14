@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
@@ -73,10 +73,7 @@ namespace Emby.Server.Implementations.EntryPoints
 
                     _apps[key] = info;
 
-                    if (_config.Configuration.EnableAnonymousUsageReporting)
-                    {
-                        Task.Run(() => ReportNewSession(info));
-                    }
+                    // OpenMedia（去 Emby 化）：会话遥测上报已移除（原 EnableAnonymousUsageReporting 分支）。
                 }
             }
         }
@@ -95,10 +92,9 @@ namespace Emby.Server.Implementations.EntryPoints
             }
         }
 
-        public async void Run()
+        public void Run()
         {
-            await Task.Delay(5000).ConfigureAwait(false);
-            OnTimerFired();
+            // OpenMedia（去 Emby 化，用户决策）：匿名使用遥测已移除，不再向 mb3admin.com 上报服务器/客户端使用数据。
         }
 
         /// <summary>
