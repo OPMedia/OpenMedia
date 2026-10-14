@@ -422,6 +422,12 @@ namespace Emby.Server.HttpServer.Middleware
                 return 400;
             }
 
+            // 派生类兜底（UriFormatException 等）：字典是精确类型匹配，与 ArgumentException 同模式前置检查
+            if (ex is FormatException)
+            {
+                return 400;
+            }
+
             var exceptionType = ex.GetType();
 
             int statusCode;

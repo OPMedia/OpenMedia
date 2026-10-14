@@ -2136,12 +2136,13 @@ namespace Emby.Server.PgData
         /// </summary>
         private static string ExpandSortAliasExpression(string expr, InternalItemsQuery query)
         {
-            if (string.Equals(expr, "similarity_score", StringComparison.Ordinal))
+            // IgnoreCase 对齐上游 MapOrderByField：异常大小写的排序名同样展开，避免包装器里重新 42703
+            if (string.Equals(expr, "similarity_score", StringComparison.OrdinalIgnoreCase))
             {
                 return GetSimilarityScoreExpression();
             }
 
-            if (string.Equals(expr, "search_score", StringComparison.Ordinal))
+            if (string.Equals(expr, "search_score", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.IsNullOrEmpty(query.SearchTerm))
                 {

@@ -2622,8 +2622,9 @@ namespace Emby.Server.Implementations.LiveTv
         {
             var folders = new List<BaseItem>();
 
-            // EmbyTV 为插件服务，未加载时 Current 为空（无录制文件夹）
-            if (EmbyTV.EmbyTV.Current != null)
+            // EmbyTV 为插件服务，未加载时 Current 为空（无录制文件夹）；
+            // IsVisibleStandalone(user) 在 user==null 时抛 ANE（BaseItem.IsVisible），空 UserId 一并跳过
+            if (EmbyTV.EmbyTV.Current != null && user != null)
             {
                 folders.AddRange(EmbyTV.EmbyTV.Current.GetRecordingFolders()
                     .SelectMany(i => i.Locations)
