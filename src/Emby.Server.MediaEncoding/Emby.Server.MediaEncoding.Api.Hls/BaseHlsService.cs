@@ -124,37 +124,52 @@ public abstract class BaseHlsService : BaseStreamingService
 	protected virtual async Task WaitForMinimumSegmentCount(string playlist, int segmentCount, CancellationToken cancellationToken)
 	{
 		Logger.Debug("Waiting for {0} segments in {1}", new object[2] { segmentCount, playlist });
+		// BUG-22 双根因：
+		// ① 旧版 Task.Delay(100) 写在 using 块内部——播放列表句柄每周期被持有 ~100ms/150ms
+		//   （67% 占空比），ffmpeg 9 的 .tmp+rename（MoveFileEx REPLACE，实测任何共享模式
+		//   下有句柄即 err=5）必然撞车 → 播放列表永久停在旧内容。修复：读完立即释放，
+		//   句柄窗口压缩到 ~1ms，撞车概率趋零；偶发撞车由 ffmpeg 下一次分段写自愈。
+		// ② 轮询无超时会在播放列表停滞时无限挂起。上限 30s：到点按现状返回并告警。
+		DateTime deadline = DateTime.UtcNow.AddSeconds(30.0);
 		while (!cancellationToken.IsCancellationRequested)
 		{
 			try
 			{
-				using Stream fileStream = GetPlaylistFileStream(playlist);
-				using StreamReader reader = new StreamReader(fileStream);
 				int num = 0;
-				while (!reader.EndOfStream)
+				using (Stream fileStream = GetPlaylistFileStream(playlist))
+				using (StreamReader reader = new StreamReader(fileStream))
 				{
-					if (reader.ReadLine().IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
+					while (!reader.EndOfStream)
 					{
-						num++;
-						if (num >= segmentCount)
+						if (reader.ReadLine().IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
 						{
-							Logger.Debug("Finished waiting for {0} segments in {1}", new object[2] { segmentCount, playlist });
-							return;
+							num++;
 						}
 					}
 				}
-				await Task.Delay(100, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+				if (num >= segmentCount)
+				{
+					Logger.Debug("Finished waiting for {0} segments in {1}", new object[2] { segmentCount, playlist });
+					return;
+				}
 			}
 			catch (IOException)
 			{
 			}
-			await Task.Delay(50, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+			if (DateTime.UtcNow >= deadline)
+			{
+				Logger.Warn("Timed out (30s) waiting for {0} segments in {1}. Serving current playlist state.", new object[2] { segmentCount, playlist });
+				return;
+			}
+			await Task.Delay(150, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 		}
 	}
 
 	protected Stream GetPlaylistFileStream(string path)
 	{
-		return FileSystem.GetFileStream(path, (FileOpenMode)3, (FileAccessMode)1, (FileShareMode)3, (FileOpenOptions)134217728);
+		// BUG-22：ffmpeg 9 用 .tmp+rename 原子写播放列表；句柄必须带 FILE_SHARE_DELETE
+		// （FileShareMode.ReadWriteDelete），否则 rename 失败、播放列表停在旧内容。
+		return FileSystem.GetFileStream(path, (FileOpenMode)3, (FileAccessMode)1, (FileShareMode)4, (FileOpenOptions)134217728);
 	}
 
 	protected override string GetCommandLineArguments(string outputPath, EncodingOptions encodingOptions, StreamState state, bool isEncoding)

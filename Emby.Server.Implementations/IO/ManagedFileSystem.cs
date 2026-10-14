@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -532,6 +532,8 @@ namespace Emby.Server.Implementations.IO
             {
                 case FileShareMode.ReadWrite:
                     return FileShare.ReadWrite;
+                case FileShareMode.ReadWriteDelete:
+                    return FileShare.Read | FileShare.Write | FileShare.Delete;
                 case FileShareMode.Write:
                     return FileShare.Write;
                 case FileShareMode.Read:
