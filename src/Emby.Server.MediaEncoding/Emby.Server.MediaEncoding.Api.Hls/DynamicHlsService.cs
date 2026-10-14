@@ -794,7 +794,7 @@ public class DynamicHlsService : BaseHlsService
 		}
 		if (!string.IsNullOrEmpty(((EncodingJobInfo)state).OutputVideoSync))
 		{
-			text = text + " -vsync " + ((EncodingJobInfo)state).OutputVideoSync;
+			text += EncodingHelper.GetVideoSyncArgument(((EncodingJobInfo)state).OutputVideoSync);
 		}
 		return text + EncodingHelper.GetOutputFFlags((EncodingJobInfo)(object)state);
 	}

@@ -87,6 +87,18 @@ public abstract class BaseProgressiveStreamingService : BaseStreamingService
 				return ".wma";
 			}
 		}
+		// 兜底：copy（remux/直连流）或未登记编解码器 → 输出容器＝输入容器（首个）。
+		// 无扩展名输出文件会让 ffmpeg 报 "Unable to choose an output format"（3.5.3 时代
+		// 客户端总带扩展名请求，openapi 4.1.1 的裸 /stream 端点会走到这里）。
+		string inputContainer = ((EncodingJobInfo)state).InputContainer;
+		if (!string.IsNullOrEmpty(inputContainer))
+		{
+			string first = inputContainer.Split(',')[0].Trim();
+			if (!string.IsNullOrEmpty(first))
+			{
+				return "." + first;
+			}
+		}
 		return null;
 	}
 

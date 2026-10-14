@@ -69,6 +69,9 @@ namespace Emby.Common.Implementations.Serialization
             options.Converters.Add(new EmbyDateTimeConverter());
             options.Converters.Add(new LenientEnumConverterFactory());
             options.Converters.Add(new LenientPrimitiveConverterFactory());
+            // 数字/布尔 → string 静默强转（旧 SST 吞错语义；ffprobe start_pts 等数字字段
+            // 读入 string 属性，缺失会抛 "token type 'Number' as a string"）
+            options.Converters.Add(new LenientStringConverter());
 
             return options;
         }

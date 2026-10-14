@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -149,7 +149,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             {
                 var maxBitrate = 25000000;
                 videoArgs = string.Format(
-                        "-codec:v:0 libx264 -force_key_frames \"expr:gte(t,n_forced*5)\" {0} -pix_fmt yuv420p -preset superfast -crf 23 -b:v {1} -maxrate {1} -bufsize ({1}*2) -vsync -1 -profile:v high -level 41",
+                        "-codec:v:0 libx264 -force_key_frames \"expr:gte(t,n_forced*5)\" {0} -pix_fmt yuv420p -preset superfast -crf 23 -b:v {1} -maxrate {1} -bufsize ({1}*2) -profile:v high -level 41",
                         GetOutputSizeParam(),
                         maxBitrate.ToString(CultureInfo.InvariantCulture));
             }
@@ -177,7 +177,9 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
                 flags.Add("+genpts");
             }
 
-            var inputModifier = "-async 1 -vsync -1";
+            // ffmpeg 7+ 移除 -vsync；输入段的 -vsync -1（auto）＝现代默认行为，省略。
+            // -async 1 仍可用（已废弃但保留），维持音频时间戳修正。
+            var inputModifier = "-async 1";
 
             if (flags.Count > 0)
             {

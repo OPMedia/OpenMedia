@@ -1331,7 +1331,8 @@ public class EncodingHelper
 		}
 		if (!string.IsNullOrEmpty(state.InputVideoSync))
 		{
-			text = text + " -vsync " + state.InputVideoSync;
+			// ffmpeg 7+ 移除 -vsync（5.1 起废弃）；-fps_mode 为输出侧专用选项不可用于输入段。
+			// InputVideoSync 恒为 "-1"（auto）＝现代 ffmpeg 默认行为，直接省略，语义不变。
 		}
 		if (state.ReadInputAtNativeFramerate && (int)state.InputProtocol != 3)
 		{
@@ -1844,9 +1845,45 @@ public class EncodingHelper
 		}
 		if (!string.IsNullOrEmpty(state.OutputVideoSync))
 		{
-			text = text + " -vsync " + state.OutputVideoSync;
+			text += GetVideoSyncArgument(state.OutputVideoSync);
 		}
 		return text + GetOutputFFlags(state);
+	}
+
+	/// <summary>
+	/// 旧 -vsync 值 → 现代 -fps_mode 参数（ffmpeg 7+ 移除 -vsync，5.1 起废弃）。
+	/// "-1"/"auto"（旧 auto）＝现代默认行为 → 省略；
+	/// "0" → passthrough，"1" → cfr，"2" → vfr，其余（cfr/vfr/passthrough/drop）原样。
+	/// </summary>
+	public static string GetVideoSyncArgument(string videoSync)
+	{
+		if (string.IsNullOrEmpty(videoSync))
+		{
+			return string.Empty;
+		}
+		var value = videoSync.Trim();
+		if (value == "-1" || value == "auto")
+		{
+			return string.Empty;
+		}
+		string mode;
+		if (value == "0")
+		{
+			mode = "passthrough";
+		}
+		else if (value == "1")
+		{
+			mode = "cfr";
+		}
+		else if (value == "2")
+		{
+			mode = "vfr";
+		}
+		else
+		{
+			mode = value;
+		}
+		return " -fps_mode " + mode;
 	}
 
 	public string GetProgressiveVideoAudioArguments(EncodingJobInfo state, EncodingOptions encodingOptions)
