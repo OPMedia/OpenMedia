@@ -131,6 +131,26 @@ public class TranscodingJob
 		}
 	}
 
+	/// <summary>
+	/// 进程已退出后的兜底清理定时器（BUG-25）：无视 HasExited 守卫启动一次性删除。
+	/// 回调（OnTranscodeKillTimerStopped）对 HasExited=true 的 job 会直接走删除+注销。
+	/// </summary>
+	public void StartExitedCleanupTimer(Action<object> timerCallback, string reason)
+	{
+		lock (_timerLock)
+		{
+			int timerDuration = TimerDuration;
+			if (KillTimer == null)
+			{
+				KillTimer = _timerFactory.Create(timerCallback, (object)this, timerDuration, -1);
+			}
+			else
+			{
+				KillTimer.Change(timerDuration, -1);
+			}
+		}
+	}
+
 	public void ChangeKillTimerIfStarted(string reason)
 	{
 		if (HasExited)

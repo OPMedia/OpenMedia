@@ -352,7 +352,10 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 		//IL_001b: Unknown result type (might be due to invalid IL or missing references)
 		if (job.HasExited)
 		{
-			job.StopKillTimer();
+			// BUG-25：进程已退出时旧逻辑只停表直接返回——临时文件从此无人删除（泄漏）。
+			// 改为安排一次性清理定时器：到点（或后续 ping 重置后到点）删除文件并注销 job。
+			// 回调 OnTranscodeKillTimerStopped 对 HasExited 的 job 无条件走 KillTranscodingJob(delete:true)。
+			job.StartExitedCleanupTimer(OnTranscodeKillTimerStopped, "ProcessExitedCleanup");
 			return;
 		}
 		job.LastPingDate = DateTime.UtcNow;
