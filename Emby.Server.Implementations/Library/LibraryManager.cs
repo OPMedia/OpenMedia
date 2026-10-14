@@ -3123,6 +3123,23 @@ namespace Emby.Server.Implementations.Library
             {
                 CollectionFolder.OnCollectionFolderChange();
 
+                // 幽灵库修复：目录删除后同步清掉 DB 的 CollectionFolder 行。
+                // 旧逻辑只删目录——孤儿行继续出现在用户视图（实测删库后视图仍显示，
+                // 且全量扫描的 ValidateTopLibraryFolders 也不清理）。GUID 与创建时
+                // 同公式（GetNewItemId(root\default\name)），DeleteItem(Guid) 只删
+                // DB 行不递归不碰物理文件（媒体条目不挂在这些行下，已验证零引用）。
+                var folderId = GetNewItemId(path, typeof(CollectionFolder));
+                try
+                {
+                    ItemRepository.DeleteItem(folderId, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error deleting collection folder item for {0}", ex, name);
+                }
+                BaseItem removedFromCache;
+                _libraryItemsCache.TryRemove(folderId, out removedFromCache);
+
                 if (refreshLibrary)
                 {
                     await ValidateTopLibraryFolders(CancellationToken.None).ConfigureAwait(false);
