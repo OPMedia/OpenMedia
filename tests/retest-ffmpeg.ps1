@@ -4,16 +4,25 @@
 # 输出：results/retest-ffmpeg-<ts>.json（含受测 PID，R6 约定）
 # 幂等可重复；PS 5.1 兼容
 # ============================================================
+param(
+    [int]$Port = 8096,
+    [string]$TranscodeDirOverride = ''
+)
+
 . "$PSScriptRoot\lib\common.ps1"
 
-$baseUrl = 'http://127.0.0.1:8096'
+$baseUrl = "http://127.0.0.1:$Port"
 $apiBase = "$baseUrl/emby"
 $deviceId = 'tester-t32-01'
 $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
-# transcoding-temp：当前实例可能从部署目录（D:\OpenMedia）或 bin\Debug 运行，取存在者
+# transcoding-temp：默认按部署目录探测；验证实例（8097 等）用 -TranscodeDirOverride 指定
 $transcodeDir = $null
-foreach ($cand in @('D:\OpenMedia\ProgramData-Server\transcoding-temp', (Join-Path $PSScriptRoot '..\MediaBrowser.Server\bin\Debug\net10.0\ProgramData-Server\transcoding-temp'))) {
-    if (Test-Path $cand) { $transcodeDir = (Resolve-Path $cand).Path; break }
+if ($TranscodeDirOverride) {
+    $transcodeDir = $TranscodeDirOverride
+} else {
+    foreach ($cand in @('D:\OpenMedia\ProgramData-Server\transcoding-temp', (Join-Path $PSScriptRoot '..\MediaBrowser.Server\bin\Debug\net10.0\ProgramData-Server\transcoding-temp'))) {
+        if (Test-Path $cand) { $transcodeDir = (Resolve-Path $cand).Path; break }
+    }
 }
 
 $client = New-EmbyClient -TimeoutSec 120
@@ -37,7 +46,7 @@ function Add-Case {
 # ---------- 预检 ----------
 $pub = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$apiBase/System/Info/Public"
 if ($pub.Status -ne 200) { Write-Host "预检失败：/System/Info/Public => $($pub.Status)"; exit 1 }
-$listen = (netstat -ano | Where-Object { $_ -match ':8096\s+.+LISTENING' } | Select-Object -First 1)
+$listen = (netstat -ano | Where-Object { $_ -match (':' + $Port + '\s+.+LISTENING') } | Select-Object -First 1)
 $serverPid = ''
 if ($listen) { $serverPid = ($listen.Trim() -split '\s+')[-1] }
 Write-Host "受测实例 PID=$serverPid  Version=$((ConvertFrom-JsonSafe $pub.Body).Version)"
