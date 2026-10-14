@@ -866,7 +866,8 @@ namespace Emby.Server.PgData
                 foreach (var personId in query.PersonIds)
                 {
                     var paramName = "PersonId" + index;
-                    clauses.Add("A.guid IN (SELECT ip.item_id FROM item_people ip WHERE ip.person_id = (SELECT id FROM media_items WHERE guid = @" + paramName + " LIMIT 1))");
+                    // A.id (bigint) IN item_people.item_id (bigint)——不能用 A.guid (uuid)
+                    clauses.Add("A.id IN (SELECT ip.item_id FROM item_people ip WHERE ip.person_id = (SELECT id FROM media_items WHERE guid = @" + paramName + " LIMIT 1))");
                     if (cmd != null) AddOrSetParam(cmd, paramName, personId);
                     index++;
                 }
@@ -875,7 +876,7 @@ namespace Emby.Server.PgData
 
             if (!string.IsNullOrWhiteSpace(query.Person))
             {
-                whereClauses.Add("A.guid IN (SELECT ip.item_id FROM item_people ip JOIN media_items p ON p.id = ip.person_id WHERE p.name = @PersonName)");
+                whereClauses.Add("A.id IN (SELECT ip.item_id FROM item_people ip JOIN media_items p ON p.id = ip.person_id WHERE p.name = @PersonName)");
                 if (cmd != null) AddOrSetParam(cmd, "PersonName", query.Person);
             }
 
@@ -1037,7 +1038,7 @@ namespace Emby.Server.PgData
                 foreach (var artistId in query.ArtistIds)
                 {
                     var paramName = "ArtistIds" + index;
-                    clauses.Add("A.guid IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id <= 1)");
+                    clauses.Add("A.id IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id <= 1)");
                     if (cmd != null) AddOrSetParam(cmd, paramName, artistId);
                     index++;
                 }
@@ -1051,7 +1052,7 @@ namespace Emby.Server.PgData
                 foreach (var artistId in query.AlbumArtistIds)
                 {
                     var paramName = "ArtistIds" + index;
-                    clauses.Add("A.guid IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 1)");
+                    clauses.Add("A.id IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 1)");
                     if (cmd != null) AddOrSetParam(cmd, paramName, artistId);
                     index++;
                 }
@@ -1108,7 +1109,7 @@ namespace Emby.Server.PgData
                 foreach (var genreId in query.GenreIds)
                 {
                     var paramName = "GenreId" + index;
-                    clauses.Add("A.guid IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 2)");
+                    clauses.Add("A.id IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 2)");
                     if (cmd != null) AddOrSetParam(cmd, paramName, genreId);
                     index++;
                 }
@@ -1161,7 +1162,7 @@ namespace Emby.Server.PgData
                 foreach (var studioId in query.StudioIds)
                 {
                     var paramName = "StudioId" + index;
-                    clauses.Add("A.guid IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 3)");
+                    clauses.Add("A.id IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = (SELECT clean_name FROM media_items WHERE guid = @" + paramName + " LIMIT 1) AND iv.extradata_type_id = 3)");
                     if (cmd != null) AddOrSetParam(cmd, paramName, studioId);
                     index++;
                 }

@@ -371,7 +371,9 @@ namespace Emby.Server.Implementations.HttpClientManager
                 {
                     cts.CancelAfter(options.TimeoutMs);
 
-                    using (var response = await client.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
+                    var response = await client.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+
+                    try
                     {
                         EnsureSuccessStatusCode(client, response, options);
 
@@ -379,6 +381,9 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                         if (!options.BufferContent)
                         {
+                            // 流式路径：调用方持有 stream（连带 response 的解压流），
+                            // 不能 Dispose response——否则 "Cannot access a disposed
+                            // object GZipStream"（AutomaticDecompression 的包装流）
                             var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
 
                             return GetResponseInfo(response, stream, response.Content.Headers.ContentLength, null);
@@ -394,6 +399,11 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                             return GetResponseInfo(response, memoryStream, memoryStream.Length, null);
                         }
+                    }
+                    catch
+                    {
+                        response.Dispose();
+                        throw;
                     }
                 }
             }

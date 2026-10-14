@@ -808,6 +808,12 @@ namespace MediaBrowser.Api.LiveTv
             return await _liveTvManager.SetChannelMapping(request.ProviderId, request.TunerChannelId, request.ProviderChannelId).ConfigureAwait(false);
         }
 
+        // spec 4.1：GET /LiveTv/ChannelMappings（与 ChannelMappingOptions 同义）
+        public Task<object> Get(SetChannelMapping request)
+        {
+            return Get(new GetChannelMappingOptions { ProviderId = request.ProviderId });
+        }
+
         public async Task<object> Get(GetChannelMappingOptions request)
         {
             var config = GetConfiguration();

@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Controller;
@@ -120,6 +120,11 @@ namespace MediaBrowser.Api.System
         }
 
         public object Post(PingSystem request)
+        {
+            return _appHost.Name;
+        }
+
+        public object Get(PingSystem request)
         {
             return _appHost.Name;
         }

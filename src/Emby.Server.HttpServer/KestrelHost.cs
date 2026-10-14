@@ -139,6 +139,10 @@ namespace Emby.Server.HttpServer
 
                     webBuilder.Configure(app =>
                     {
+                        // ASP.NET Core WebSocket 支持（注册 WebSocketManager 特性，
+                        // IsWebSocketRequest/AcceptWebSocketAsync 依赖它——缺失时
+                        // upgrade 请求被当普通 GET 走路由 → 404）
+                        app.UseWebSockets();
                         app.UseMiddleware<WebSocketMiddleware>(this);
                         app.UseMiddleware<ServiceRoutingMiddleware>(this);
                     });

@@ -1338,20 +1338,21 @@ namespace Emby.Server.PgData
             }
 
             // ===== item_extradata 聚合列（对照旧 Genres/Studios/Tags/Artists 扁平列） =====
+            // 这些列是条件列（HasField(query, ItemFields.X) 才进 SELECT），读取需容错
 
-            var genres = ReadStringOrNull(reader, "genres");
+            var genres = ReadOptionalStringOrNull(reader, "genres");
             if (genres != null)
             {
                 item.Genres = genres.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            var studios = ReadStringOrNull(reader, "studios");
+            var studios = ReadOptionalStringOrNull(reader, "studios");
             if (studios != null)
             {
                 item.Studios = studios.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            var tags = ReadStringOrNull(reader, "tags");
+            var tags = ReadOptionalStringOrNull(reader, "tags");
             if (tags != null)
             {
                 item.Tags = tags.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1360,7 +1361,7 @@ namespace Emby.Server.PgData
             var hasArtist = item as IHasArtist;
             if (hasArtist != null)
             {
-                var artists = ReadStringOrNull(reader, "artists");
+                var artists = ReadOptionalStringOrNull(reader, "artists");
                 if (artists != null)
                 {
                     hasArtist.Artists = artists.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1370,7 +1371,7 @@ namespace Emby.Server.PgData
             var hasAlbumArtist = item as IHasAlbumArtist;
             if (hasAlbumArtist != null)
             {
-                var albumArtists = ReadStringOrNull(reader, "album_artists");
+                var albumArtists = ReadOptionalStringOrNull(reader, "album_artists");
                 if (albumArtists != null)
                 {
                     hasAlbumArtist.AlbumArtists = albumArtists.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1378,6 +1379,30 @@ namespace Emby.Server.PgData
             }
 
             return item;
+        }
+
+        /// <summary>
+        /// 条件列容错读取：列不在 SELECT 清单中时返回 null（extradata 聚合列
+        /// 仅在 HasField(query, ItemFields.X) 时才包含）。
+        /// </summary>
+        private static string ReadOptionalStringOrNull(NpgsqlDataReader reader, string column)
+        {
+            var ordinal = -1;
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                if (string.Equals(reader.GetName(i), column, StringComparison.Ordinal))
+                {
+                    ordinal = i;
+                    break;
+                }
+            }
+
+            if (ordinal < 0)
+            {
+                return null;
+            }
+
+            return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
         }
 
         private static string ReadStringOrNull(NpgsqlDataReader reader, string column)

@@ -67,7 +67,7 @@ namespace Emby.Common.Implementations.Serialization
 
             options.Converters.Add(new EmbyGuidConverter());
             options.Converters.Add(new EmbyDateTimeConverter());
-            options.Converters.Add(new JsonStringEnumConverter());
+            options.Converters.Add(new LenientEnumConverterFactory());
             options.Converters.Add(new LenientPrimitiveConverterFactory());
 
             return options;
