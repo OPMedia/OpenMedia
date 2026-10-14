@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tv source-info-name="OpenMediaTest">
+  <channel id="ch1.test.1">
+    <display-name>Test One</display-name>
+    <display-name>101</display-name>
+  </channel>
+  <channel id="ch2.test.2">
+    <display-name>Test Two</display-name>
+    <display-name>102</display-name>
+  </channel>
+  <programme start="20261014200833 +0000" stop="20261015000833 +0000" channel="ch1.test.1">
+    <title lang="en">Alpha Show Live</title>
+    <desc lang="en">Currently airing test programme on channel one.</desc>
+    <category lang="en">News</category>
+  </programme>
+  <programme start="20261014200833 +0000" stop="20261015000833 +0000" channel="ch2.test.2">
+    <title lang="en">Beta Movie Live</title>
+    <desc lang="en">Currently airing test movie on channel two.</desc>
+    <category lang="en">Movie</category>
+  </programme>
+</tv>
