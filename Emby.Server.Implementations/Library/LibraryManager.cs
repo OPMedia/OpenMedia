@@ -514,9 +514,15 @@ namespace Emby.Server.Implementations.Library
             {
                 // Try to normalize paths located underneath program-data in an attempt to make them more portable
                 key = key.Substring(ConfigurationManager.ApplicationPaths.ProgramDataPath.Length)
-                    .TrimStart(new[] { '/', '\\' })
-                    .Replace("/", "\\");
+                    .TrimStart(new[] { '/', '\\' });
             }
+
+            // 分隔符归一（D2 登记的 MusicArtist 重复行根因）：REST 客户端建库常传正斜杠
+            // 路径（.mblink 原样保存），本地扫描用反斜杠——同一物理路径两种写法在
+            // GetNewItemId 下生成两个 GUID，重建库后同名条目成重复行。
+            // 原逻辑仅 ProgramData 前缀分支做 Replace("/", "\\")，此处扩展到全部路径；
+            // 反斜杠键不含 "/"，既有条目 GUID 不变（前向兼容），仅正斜杠异常行重哈希。
+            key = key.Replace('/', '\\');
 
             if (forceCaseInsensitive || !ConfigurationManager.Configuration.EnableCaseSensitiveItemIds)
             {
