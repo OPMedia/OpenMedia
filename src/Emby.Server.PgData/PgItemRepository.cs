@@ -860,7 +860,7 @@ namespace Emby.Server.PgData
             using (var connection = CreateConnection())
             {
                 using (var cmd = new NpgsqlCommand(
-                    BuildItemSelectText(null) + " WHERE A.guid = @guid LIMIT 1",
+                    BuildItemSelectText(null) + " FROM media_items A WHERE A.guid = @guid LIMIT 1",
                     connection))
                 {
                     cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id });
@@ -986,7 +986,9 @@ namespace Emby.Server.PgData
                 columns.Add(GetSearchScoreExpression(query) + " AS search_score");
             }
 
-            return "SELECT " + string.Join(",", columns.ToArray()) + " FROM media_items A";
+            // 只返回 SELECT 列清单，不带 FROM——由调用方提供（Query/Aggregates 各自拼 FROM，
+            // RetrieveItem 单独拼 " FROM media_items A WHERE ..."）
+            return "SELECT " + string.Join(",", columns.ToArray());
         }
 
         /// <summary>

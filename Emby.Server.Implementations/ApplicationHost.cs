@@ -594,7 +594,10 @@ namespace Emby.Server.Implementations
         protected void RegisterSingleInstance<T>(Func<T> func)
             where T : class
         {
-            Container.RegisterInstance(func);
+            // RegisterSingleton 的 Func<T> 重载在 SimpleInjector 5.x 仍然有效（被
+            // 标废弃的只是实例重载）；RegisterInstance(func) 会把 Func<T> 本身
+            // 注册成实例而非注册 T 的工厂
+            Container.RegisterSingleton(func);
         }
 
         /// <summary>
