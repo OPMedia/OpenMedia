@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading.Tasks;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
@@ -57,12 +58,37 @@ namespace Emby.Common.Implementations.Serialization
                 MaxDepth = 128
             };
 
+            // 实体契约：[IgnoreDataMember]（旧 ServiceStack.Text 尊重该特性跳过惰性属性，
+            // 如 User.RootFolder / BaseItem.ThemeSongIds——共 208 处；STJ 默认不认，
+            // 会触发惰性 getter 查询库导致启动 NRE/深图序列化，必须显式剔除）
+            var resolver = new DefaultJsonTypeInfoResolver();
+            resolver.Modifiers.Add(IgnoreDataMemberModifier);
+            options.TypeInfoResolver = resolver;
+
             options.Converters.Add(new EmbyGuidConverter());
             options.Converters.Add(new EmbyDateTimeConverter());
             options.Converters.Add(new JsonStringEnumConverter());
             options.Converters.Add(new LenientPrimitiveConverterFactory());
 
             return options;
+        }
+
+        private static void IgnoreDataMemberModifier(JsonTypeInfo typeInfo)
+        {
+            if (typeInfo.Kind != JsonTypeInfoKind.Object)
+            {
+                return;
+            }
+
+            for (var i = typeInfo.Properties.Count - 1; i >= 0; i--)
+            {
+                var prop = typeInfo.Properties[i];
+                if (prop.AttributeProvider != null &&
+                    prop.AttributeProvider.IsDefined(typeof(System.Runtime.Serialization.IgnoreDataMemberAttribute), true))
+                {
+                    typeInfo.Properties.RemoveAt(i);
+                }
+            }
         }
 
         /// <summary>

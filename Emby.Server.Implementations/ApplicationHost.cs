@@ -257,7 +257,19 @@ namespace Emby.Server.Implementations
         /// <summary>
         /// The container
         /// </summary>
-        protected readonly SimpleInjector.Container Container = new SimpleInjector.Container();
+        protected readonly SimpleInjector.Container Container = CreateContainer();
+
+        private static SimpleInjector.Container CreateContainer()
+        {
+            var container = new SimpleInjector.Container();
+
+            // SimpleInjector 4→5 行为变更：v5 默认 ResolveUnregisteredConcreteTypes=false，
+            // 而 GetExports/CreateInstanceSafe 模式依赖隐式构造具体类型（配置工厂/Provider/
+            // EntryPoint/解析器全部如此）。恢复 4.x 语义。
+            container.Options.ResolveUnregisteredConcreteTypes = true;
+
+            return container;
+        }
 
         protected ISystemEvents SystemEvents { get; set; }
 
@@ -930,16 +942,17 @@ namespace Emby.Server.Implementations
             UserDataManager = new UserDataManager(LogManager, ServerConfigurationManager, () => UserManager);
             RegisterSingleInstance(UserDataManager);
 
-            UserRepository = GetUserRepository();
-            // This is only needed for disposal purposes. If removing this, make sure to have the manager handle disposing it
-            RegisterSingleInstance(UserRepository);
-
             // PostgreSQL：schema 幂等初始化（to_regclass 门卫 + 补充对齐 DDL）
+            // 必须先于所有仓储创建（GetUserRepository 等会校验表存在）
             using (var pgConnection = new Npgsql.NpgsqlConnection(GetPostgresConnectionString()))
             {
                 pgConnection.Open();
                 Emby.Server.PgData.PgSchemaInitializer.Initialize(pgConnection);
             }
+
+            UserRepository = GetUserRepository();
+            // This is only needed for disposal purposes. If removing this, make sure to have the manager handle disposing it
+            RegisterSingleInstance(UserRepository);
 
             var displayPreferencesRepo = new Emby.Server.PgData.PgDisplayPreferencesRepository(LogManager.GetLogger("PgDisplayPreferencesRepository"), JsonSerializer, GetPostgresConnectionString());
             DisplayPreferencesRepository = displayPreferencesRepo;
@@ -1067,11 +1080,14 @@ namespace Emby.Server.Implementations
 
             SetStaticProperties();
 
+            // LibraryManager.ItemRepository 必须先于 UserManager.Initialize()：
+            // 首次运行 CreateUser 会序列化 User（data JSONB），惰性属性链可能触达库查询
+            ((LibraryManager)LibraryManager).ItemRepository = ItemRepository;
+
             ((UserManager)UserManager).Initialize();
 
             ((UserDataManager)UserDataManager).Repository = userDataRepo;
             itemRepo.Initialize();
-            ((LibraryManager)LibraryManager).ItemRepository = ItemRepository;
         }
 
         protected virtual IBrotliCompressor CreateBrotliCompressor()

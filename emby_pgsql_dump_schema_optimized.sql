@@ -642,8 +642,9 @@ CREATE TABLE IF NOT EXISTS user_datas (
     date_last_searched      TIMESTAMPTZ,
     PRIMARY KEY (user_data_key_id, user_id),
     FOREIGN KEY (user_data_key_id) REFERENCES user_data_keys (id)
-) PARTITION BY HASH (user_id)
-  WITH (fillfactor = 85);
+) PARTITION BY HASH (user_id);
+-- 注：分区父表不能带 WITH (fillfactor)（PG 报 cannot specify storage parameters for
+-- a partitioned table），叶子分区上的 fillfactor 保留
 
 CREATE TABLE user_datas_p0 PARTITION OF user_datas FOR VALUES WITH (MODULUS 8, REMAINDER 0)
     WITH (fillfactor = 85);
@@ -760,7 +761,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mv_library_stats AS
 SELECT
     type                                          AS media_type,
     COUNT(*)                                      AS item_count,
-    ROUND(AVG(community_rating), 1)               AS avg_community_rating,
+    ROUND(AVG(community_rating)::numeric, 1)      AS avg_community_rating,
     SUM(runtime_ticks)                            AS total_runtime_ticks,
     MIN(production_year)                          AS min_year,
     MAX(production_year)                          AS max_year,
