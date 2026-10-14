@@ -1,4 +1,5 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Common.Extensions;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -74,6 +75,18 @@ namespace MediaBrowser.Api.Music
         /// <returns>System.Object.</returns>
         public object Get(GetSimilarAlbums request)
         {
+            // 类型守卫：非 MusicAlbum 的 Id（如 Movie）走相似度回调会 InvalidCastException
+            // （GetAlbumSimilarityScore 强转 item1），同 Playlists 强转族修法 → 404
+            if (!string.IsNullOrEmpty(request.Id))
+            {
+                var item = _libraryManager.GetItemById(request.Id);
+
+                if (item != null && !(item is MusicAlbum))
+                {
+                    throw new ResourceNotFoundException(string.Format("Album with Id {0} not found", request.Id));
+                }
+            }
+
             var dtoOptions = GetDtoOptions(_authContext, request);
 
             var result = SimilarItemsHelper.GetSimilarItemsResult(dtoOptions, _userManager,

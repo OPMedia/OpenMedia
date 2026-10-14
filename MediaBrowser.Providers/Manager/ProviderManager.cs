@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Net;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -821,7 +821,11 @@ namespace MediaBrowser.Providers.Manager
                 }
                 catch (Exception ex)
                 {
-                    // Logged at lower levels
+                    // 原先注释声称 "Logged at lower levels"，但 HttpClientManager 对
+                    // HttpException（非 2xx 响应）不打日志——provider 失败完全静默
+                    // （A3 实测黑洞：MusicBrainz 503 表现为搜索结果空且日志零线索）。
+                    // 这里补 provider 级日志，与 HttpClientManager 侧双保险。
+                    _logger.ErrorException("Error in search provider {0}", ex, provider.Name);
                 }
             }
 

@@ -615,6 +615,14 @@ namespace Emby.Server.Implementations.HttpClientManager
         {
             if (ex is HttpException)
             {
+                // 补日志：EnsureSuccessStatusCode 抛出的 HttpException（非 2xx 响应，如
+                // MusicBrainz 限流 503）原先静默透传，上层 ProviderManager catch 吞掉后
+                // 无任何痕迹——排障黑洞（A3 实测：MB 503 表现为搜索结果空且日志零线索）
+                if (options.LogErrors)
+                {
+                    _logger.ErrorException("Error getting response from " + options.Url, ex);
+                }
+
                 return ex;
             }
 
