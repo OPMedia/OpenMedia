@@ -189,6 +189,12 @@ public abstract class BaseHlsService : BaseStreamingService
 			string text4 = Path.Combine(FileSystem.GetDirectoryName(outputPath), Path.GetFileNameWithoutExtension(outputPath)) + "%d" + GetSegmentFileExtension(state.Request);
 			string empty = string.Empty;
 			string text5 = state.Request.SegmentContainer;
+			if (string.IsNullOrWhiteSpace(text5))
+			{
+				// BUG-21：无 SegmentContainer 时按分片扩展名推导封装格式（默认 .ts→mpegts），
+				// 避免 -segment_format 空值造成 ffmpeg 参数移位（-segment_list_entry_prefix 被吞）
+				text5 = GetSegmentFileExtension(state.Request).TrimStart('.');
+			}
 			if (string.Equals(text5, "ts", StringComparison.OrdinalIgnoreCase))
 			{
 				text5 = "mpegts";

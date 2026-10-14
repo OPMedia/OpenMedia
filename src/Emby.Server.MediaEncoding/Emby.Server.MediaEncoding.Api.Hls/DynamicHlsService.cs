@@ -807,13 +807,17 @@ public class DynamicHlsService : BaseHlsService
 		string text = (isEncoding ? startNumber.ToString(UsCulture) : "0");
 		string text2 = (((EncodingJobInfo)state).IsVideoRequest ? EncodingHelper.GetMapArgs((EncodingJobInfo)(object)state) : string.Empty);
 		string text3 = Path.Combine(FileSystem.GetDirectoryName(outputPath), Path.GetFileNameWithoutExtension(outputPath)) + "%d" + GetSegmentFileExtension(state.Request);
+		// BUG-24：旧版在 isEncoding && startNumber>0 时拼 -segment_time_delta -{N}（负值）对齐分片网格，
+		// ffmpeg 9 校验范围 [0,∞) 直接拒绝 → "Could not write header" → 分片重启路径确定性 500。
+		// 实测（ffmpeg 9.0.2）：去掉该选项后重启路径产出合法分片（首片时长按实际边界，
+		// 播放器可正常消费），故直接省略。
 		string text4 = string.Empty;
-		if (isEncoding && startNumber > 0)
-		{
-			int num = state.SegmentLength * startNumber;
-			text4 = $"-segment_time_delta -{num}";
-		}
 		string text5 = state.Request.SegmentContainer;
+		if (string.IsNullOrWhiteSpace(text5))
+		{
+			// BUG-21：无 SegmentContainer 时按分片扩展名推导封装格式，避免 -segment_format 空值
+			text5 = GetSegmentFileExtension(state.Request).TrimStart('.');
+		}
 		if (string.Equals(text5, "ts", StringComparison.OrdinalIgnoreCase))
 		{
 			text5 = "mpegts";
