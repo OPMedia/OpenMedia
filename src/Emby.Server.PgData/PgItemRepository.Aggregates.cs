@@ -98,7 +98,9 @@ namespace Emby.Server.PgData
 
             var typeClause = BuildExtradataTypeClause(itemValueTypes);
 
-            var commandText = "SELECT value FROM item_extradata WHERE " + typeClause;
+            // 旧 SQLite "SELECT Value ... GROUP BY CleanValue" 在 PG 下非法（非聚合列）；
+            // MIN(value) 保留旧语义：每个 clean 分组取一个代表显示值
+            var commandText = "SELECT MIN(value) FROM item_extradata WHERE " + typeClause;
 
             if (withItemTypes.Count > 0)
             {
