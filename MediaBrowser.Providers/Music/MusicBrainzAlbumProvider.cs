@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common;
+using MediaBrowser.Common;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
@@ -823,7 +823,9 @@ namespace MediaBrowser.Providers.Music
             {
                 Url = url,
                 CancellationToken = cancellationToken,
-                UserAgent = _appHost.Name + "/" + _appHost.ApplicationVersion,
+                // MusicBrainz 对含空格的 User-Agent（如 "Emby Server/…"）直接 503 busy（实测 2026-10）；
+                // UA 必须无空格，去 Emby 化后以 OpenMedia 名义标识
+                UserAgent = "OpenMedia/" + _appHost.ApplicationVersion,
                 BufferContent = throttleMs > 0
             };
 

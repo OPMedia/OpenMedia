@@ -1,10 +1,38 @@
 # 元数据 Provider 验证记录（P3-A 轨道）
 
-> 执行：Developer，2026-10-14 22:45–23:15，受测实例 PID 24980（T1 构建，8096）
-> 依据：docs/phase3-design.md §2.4 / §A（P3-A1、P3-A4）
+> 执行：Developer，2026-10-14 22:45–23:15（A1/A4）+ 2026-10-15 04:52–05:20（A2/A3），受测实例 PID 24980/12856（8096）
+> 依据：docs/phase3-design.md §2.4 / §A（P3-A1~A4）
 > 方法：API 实测（curl 直打 provider 端点 + 服务器端到端刷新）+ DB 落库核对（psql）
 
-## A1 TMDb 电影链路 ✅ 全通
+## A2 TMDb 剧集链路 ✅ 全通（2026-10-15）
+
+**搜索链路**：`POST /Items/RemoteSearch/Series`（服务器侧）→ "Breaking Bad" 命中 TMDb 1396（含 ImageUrl/ProductionYear/PremiereDate）。
+
+**完整落库验证**（Show Alpha fixture，identify → 验证 → 已恢复）：
+- Apply {Tmdb:1396} → 全量刷新 → Series：Name "Breaking Bad"、Year 2008、Rating 9.5、Genres [Drama,Crime]、Overview、ProviderIds {Tmdb,Imdb,TvRage,Tvdb}（external_ids 全拉）
+- **Episode 按集号正确落库**：S01E01 "Pilot"、S01E02 "Cat's in the Bag..."、S02E01 "Seven Thirty-Seven"、S02E02 "Grilled"（TMDb 真实标题）
+- People：Bryan Cranston (Walter White) 等 8 Actor 落库（credits 链路）
+- **无 nfo 无匹配行为**：删 tvshow.nfo 刷新 → TMDb/Omdb 搜索执行（日志实证）→ "Show Alpha" 无匹配 → 本地数据保留、ProviderIds 清空、不炸（优雅降级）
+- 恢复：Apply 空 ids + 本地名 → 刷新 → nfo 数据全回（Name/Year/ids 空/集标题 Pilot/Aftermath/Return/Finale）
+
+**顺手修复**：TvShowsService 四处裸 `GetUserById(request.UserId)`（GetUpcomingEpisodes/GetNextUpEpisodes/GetSeasons/GetEpisodes）——裸调 /Shows/{Id}/Seasons、/Shows/NextUp 等端点 400 ANE('id')，T1 同款漏网，改 UserId 可选模式。
+
+## A3 音乐元数据链路 ✅（2026-10-15）
+
+**搜索链路三路实测**（8096 服务器侧）：
+- MusicArtist 按名："Miles Davis" → MusicBrainz 命中（含 MusicBrainzArtist id）
+- MusicArtist 按 id（arid）：Radiohead → 命中
+- MusicAlbum 按名+艺人："Kind of Blue"+Miles Davis → MusicBrainzAlbum/ReleaseGroup ids
+
+**GetMetadata 落库语义**（Alpha Album One identify → 已恢复）：MusicBrainz 是补充源——ProviderIds/ExternalUrls 落库 ✓，Name/AlbumArtist/Year 保持**音频文件标签值**（本地优先，老 Emby 设计行为，非 bug）。
+
+**真 bug 修复：MusicBrainz UA**（MusicBrainzAlbumProvider.GetMusicBrainzResponse）：UA 从 `_appHost.Name + "/" + Version`（"Emby Server/3.5.3.0"，**含空格**）改为 `"OpenMedia/" + Version`。实测含空格 UA 触发过 MB 503 busy（复现程序实证），无空格 UA 稳定 200；去 Emby 化后以 OpenMedia 名义标识。
+
+**已知限制（记录不修）**：MusicBrainz 有 IP 级滑动窗口限流，间歇性 503 "server busy"；503 经 EnsureSuccessStatusCode→HttpException→ProviderManager catch **静默吞掉无日志**（GetException 对 HttpException 不打日志）——排障黑洞。改进候选：GetMusicBrainzResponse 对 503 延迟重试一次 + HttpException 路径补日志，留 Chief 拍板（影响面 HttpClientManager 全局）。
+
+**排查副产品**：本机 curl 对 api.themoviedb.org 解析到污染 IP（DNS 层，128.121.243.76/Facebook IPv6 段），`--resolve` 指真实 CDN IP 即通；**服务器进程（.NET HttpClient）不受影响**——TMDb 链路验证必须走服务器侧。复现脚本入库 tests/perf/mbz-artist-repro*.cs。
+
+## A1 TMDb 电影链路 ✅ 全通（2026-10-14）
 
 **前置实测**：`api.themoviedb.org` 可达，硬编码 key `f6bd687…` 有效（configuration / movie / search 三端点 200）。
 

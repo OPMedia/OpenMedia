@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
@@ -285,7 +285,7 @@ namespace MediaBrowser.Api
 
         public object Get(GetUpcomingEpisodes request)
         {
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             var minPremiereDate = DateTime.Now.Date.ToUniversalTime().AddDays(-1);
 
@@ -336,7 +336,7 @@ namespace MediaBrowser.Api
                 EnableTotalRecordCount = request.EnableTotalRecordCount
             }, options);
 
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             var returnItems = _dtoService.GetBaseItemDtos(result.Items, options, user);
 
@@ -373,7 +373,7 @@ namespace MediaBrowser.Api
 
         public object Get(GetSeasons request)
         {
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             var series = GetSeries(request.Id, user);
 
@@ -413,7 +413,7 @@ namespace MediaBrowser.Api
 
         public object Get(GetEpisodes request)
         {
-            var user = _userManager.GetUserById(request.UserId);
+            var user = request.UserId.Equals(Guid.Empty) ? null : _userManager.GetUserById(request.UserId);
 
             List<BaseItem> episodes;
 
