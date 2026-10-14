@@ -12,11 +12,10 @@ namespace Emby.Server.PgData
     /// 1) 幂等门卫：SELECT to_regclass('public.media_items') 为 NULL 才执行全量 DDL
     ///    （SQL 文件里的分区子表 CREATE TABLE ... PARTITION OF 没有 IF NOT EXISTS，重复执行会失败）。
     /// 2) 全量 DDL 来自嵌入资源 emby_pgsql_dump_schema_optimized.sql（单一事实来源，含 sync 三表照建留空）。
-    ///    执行前做一处必要的内存内修正：剥离引用 media_items(id, type) 复合主键的单列外键子句
-    ///    （PostgreSQL 要求外键引用列与被引用列数量一致，"FOREIGN KEY (x) REFERENCES media_items (id, type)"
-    ///     会报 "number of referencing and referenced columns for foreign key disagree"，
-    ///     该约束在文件中无法成立；剥离后与旧 SQLite 行为一致——由应用层维护引用完整性，
-    ///     DeleteItem 显式删除子行）。磁盘上的 SQL 文件保持原样不动（D3 决策）。
+    ///    文件中曾存在的非法单列外键 REFERENCES media_items (id, type)（引用列数与复合主键不匹配，
+    ///    PostgreSQL 报 "number of referencing and referenced columns for foreign key disagree"）
+    ///    已直接在 SQL 文件内移除；引用完整性由仓储层维护（与旧 SQLite 行为一致，
+    ///    DeleteItem 显式删除子行）。
     /// 3) 补充对齐 DDL（docs/upgrade-net10-plan.md §5.2 + 查询引擎语义保留所需的列/索引），全部幂等。
     /// </summary>
     public static class PgSchemaInitializer
@@ -61,8 +60,6 @@ namespace Emby.Server.PgData
         {
             var sql = ReadEmbeddedSchema();
 
-            sql = StripBrokenForeignKeys(sql);
-
             using (var transaction = connection.BeginTransaction())
             {
                 try
@@ -91,30 +88,6 @@ namespace Emby.Server.PgData
                     throw;
                 }
             }
-        }
-
-        /// <summary>
-        /// 剥离引用 media_items(id, type) 复合主键的单列外键子句。
-        /// PostgreSQL 要求外键的引用列数与被引用列数一致；schema 文件中所有
-        /// "FOREIGN KEY (单列) REFERENCES media_items (id, type)" 形式的约束都无法建立
-        /// （且被引用列 (id) 单独不存在唯一约束，也无法改为单列引用）。
-        /// 剥离后引用完整性由仓储层维护（与旧 SQLite 完全一致：无外键、显式删除子行）。
-        /// 其余合法外键（user_data_keys/devices/local_users 等单列对单列）保持不变。
-        /// </summary>
-        internal static string StripBrokenForeignKeys(string sql)
-        {
-            // 1) 移除外键子句本身（含可选的 ON DELETE 动作与尾随逗号——
-            //    media_items 的三个自引用 FK 均带尾逗号，不吞掉会留下悬空逗号）
-            var result = Regex.Replace(
-                sql,
-                @"FOREIGN\s+KEY\s*\(\s*\w+\s*\)\s+REFERENCES\s+media_items\s*\(\s*id\s*,\s*type\s*\)(\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION))?\s*,?",
-                string.Empty,
-                RegexOptions.IgnoreCase);
-
-            // 2) 清理移除后遗留的悬空逗号（逗号后仅空白直接跟右括号）
-            result = Regex.Replace(result, @",\s*\)", ")");
-
-            return result;
         }
 
         private static string ReadEmbeddedSchema()

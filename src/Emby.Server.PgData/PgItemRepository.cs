@@ -788,7 +788,7 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 删除媒体项（旧 DeleteItem：显式删除 People/Chapters/MediaStreams/AncestorIds/ItemValues/TypedBaseItems）。
-        /// 新 schema 无外键级联（见 PgSchemaInitializer.StripBrokenForeignKeys），同样显式删除子行。
+        /// 新 schema 无外键级联（非法单列外键已在 SQL 文件内移除，完整性由应用层维护），同样显式删除子行。
         /// </summary>
         public void DeleteItem(Guid id, CancellationToken cancellationToken)
         {

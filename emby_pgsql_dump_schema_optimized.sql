@@ -245,9 +245,9 @@ CREATE TABLE IF NOT EXISTS media_items (
     remote_trailers                 JSONB,
     is_public                       BOOLEAN      DEFAULT FALSE,
     PRIMARY KEY (id, type),
-    FOREIGN KEY (parent_id)         REFERENCES media_items (id, type),
-    FOREIGN KEY (album_id)          REFERENCES media_items (id, type),
-    FOREIGN KEY (series_id)         REFERENCES media_items (id, type),
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
     FOREIGN KEY (user_data_key_id)  REFERENCES user_data_keys (id)
 ) PARTITION BY LIST (type);
 
@@ -311,9 +311,9 @@ CREATE TABLE IF NOT EXISTS ancestor_ids (
     ancestor_id BIGINT  NOT NULL,
     distance    INTEGER NOT NULL DEFAULT 0
                     CHECK (distance >= 0),
-    PRIMARY KEY (item_id, ancestor_id),
-    FOREIGN KEY (item_id)    REFERENCES media_items (id, type),
-    FOREIGN KEY (ancestor_id) REFERENCES media_items (id, type)
+    PRIMARY KEY (item_id, ancestor_id)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) PARTITION BY HASH (item_id);
 
 -- 8 个分区 (根据数据量可增减, 建议为 2 的幂)
@@ -342,8 +342,8 @@ CREATE TABLE IF NOT EXISTS chapters (
     image_path              TEXT,
     image_date_modified     TIMESTAMPTZ,
     marker_type             INTEGER      NOT NULL DEFAULT 0,
-    PRIMARY KEY (item_id, chapter_index),
-    FOREIGN KEY (item_id) REFERENCES media_items (id, type) ON DELETE CASCADE
+    PRIMARY KEY (item_id, chapter_index)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) PARTITION BY HASH (item_id);
 
 CREATE TABLE chapters_p0 PARTITION OF chapters FOR VALUES WITH (MODULUS 8, REMAINDER 0);
@@ -406,8 +406,8 @@ CREATE TABLE IF NOT EXISTS media_streams (
     mime_type             TEXT,
     extended_video_type   SMALLINT,
     extended_video_subtype SMALLINT,
-    PRIMARY KEY (item_id, stream_index),
-    FOREIGN KEY (item_id) REFERENCES media_items (id, type) ON DELETE CASCADE
+    PRIMARY KEY (item_id, stream_index)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) PARTITION BY HASH (item_id);
 
 CREATE TABLE media_streams_p0 PARTITION OF media_streams FOR VALUES WITH (MODULUS 8, REMAINDER 0);
@@ -443,9 +443,9 @@ CREATE TABLE IF NOT EXISTS item_people (
     person_type SMALLINT NOT NULL
                 CHECK (person_type >= 0),
     list_order  INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (id, item_id),
-    FOREIGN KEY (item_id)   REFERENCES media_items (id, type) ON DELETE CASCADE,
-    FOREIGN KEY (person_id) REFERENCES media_items (id, type)
+    PRIMARY KEY (id, item_id)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) PARTITION BY HASH (item_id);
 
 CREATE TABLE item_people_p0 PARTITION OF item_people FOR VALUES WITH (MODULUS 8, REMAINDER 0);
@@ -474,9 +474,9 @@ CREATE TABLE IF NOT EXISTS item_links (
     link_type  SMALLINT NOT NULL,       -- 原 "Type", 避免 SQL 保留字
     linked_id  BIGINT  NOT NULL,
     link_order INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (item_id, link_type, linked_id),
-    FOREIGN KEY (item_id)   REFERENCES media_items (id, type) ON DELETE CASCADE,
-    FOREIGN KEY (linked_id) REFERENCES media_items (id, type)
+    PRIMARY KEY (item_id, link_type, linked_id)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_item_links_linked_id ON item_links (linked_id);
@@ -496,7 +496,7 @@ CREATE TABLE IF NOT EXISTS item_extradata (
     extradata_type_id  INTEGER NOT NULL,
     value              TEXT    NOT NULL,
     PRIMARY KEY (item_id, extradata_type_id),
-    FOREIGN KEY (item_id)           REFERENCES media_items (id, type) ON DELETE CASCADE,
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
     FOREIGN KEY (extradata_type_id) REFERENCES item_extradata_types (extradata_type_id)
 ) WITH (fillfactor = 90);
 
@@ -509,8 +509,8 @@ CREATE INDEX idx_item_extradata_type_id ON item_extradata (extradata_type_id);
 CREATE TABLE IF NOT EXISTS imported_collections (
     item_id     BIGINT,
     name        TEXT    NOT NULL,
-    provider_ids JSONB,
-    FOREIGN KEY (item_id) REFERENCES media_items (id, type) ON DELETE SET NULL
+    provider_ids JSONB
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 );
 
 CREATE INDEX idx_imported_collections_item_id ON imported_collections (item_id);
@@ -525,9 +525,9 @@ CREATE TABLE IF NOT EXISTS list_items (
     list_id            BIGINT  NOT NULL,
     list_item_id       BIGINT  NOT NULL,
     list_item_order    INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (list_item_entry_id),
-    FOREIGN KEY (list_id)      REFERENCES media_items (id, type) ON DELETE CASCADE,
-    FOREIGN KEY (list_item_id) REFERENCES media_items (id, type) ON DELETE CASCADE
+    PRIMARY KEY (list_item_entry_id)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 );
 
 CREATE INDEX idx_list_items_list_id      ON list_items (list_id);
@@ -584,8 +584,8 @@ CREATE TABLE IF NOT EXISTS sync_jobs (
     video_codec         TEXT,
     audio_codec         TEXT,
     PRIMARY KEY (id),
-    FOREIGN KEY (internal_target_id) REFERENCES sync_targets (id) ON DELETE CASCADE,
-    FOREIGN KEY (item_id)            REFERENCES media_items (id, type)
+    FOREIGN KEY (internal_target_id) REFERENCES sync_targets (id) ON DELETE CASCADE
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_sync_jobs_user_id       ON sync_jobs (user_id);
@@ -606,7 +606,7 @@ CREATE TABLE IF NOT EXISTS sync_job_items (
     additional_files JSONB,
     media_source    JSONB,
     PRIMARY KEY (id),
-    FOREIGN KEY (item_id) REFERENCES media_items (id, type) ON DELETE CASCADE,
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
     FOREIGN KEY (job_id) REFERENCES sync_jobs (id) ON DELETE CASCADE
 ) WITH (fillfactor = 90);
 
@@ -708,8 +708,8 @@ CREATE TABLE IF NOT EXISTS user_item_shares (
     item_id     BIGINT  NOT NULL,
     share_level SMALLINT NOT NULL
                 CHECK (share_level >= 0),
-    PRIMARY KEY (user_id, item_id),
-    FOREIGN KEY (item_id) REFERENCES media_items (id, type) ON DELETE CASCADE
+    PRIMARY KEY (user_id, item_id)
+    -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
 );
 
 CREATE INDEX idx_user_item_shares_item_id ON user_item_shares (item_id);
