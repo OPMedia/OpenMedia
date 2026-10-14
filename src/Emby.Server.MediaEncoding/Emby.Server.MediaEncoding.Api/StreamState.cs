@@ -83,7 +83,9 @@ public class StreamState : EncodingJobInfo, IDisposable
 
 	public override void Dispose()
 	{
-		((EncodingJobInfo)this).Dispose();
+		// 反编译产物修正：原 IL 是 base.Dispose()（非虚调用），反编译器误渲染为
+		// ((EncodingJobInfo)this).Dispose()——C# 强转不绕过虚分派，导致自递归栈溢出
+		base.Dispose();
 		TranscodingJob = null;
 	}
 
