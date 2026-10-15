@@ -590,42 +590,13 @@ public class Folder : BaseItem
 			// 根的 Children 实例的 PhysicalFolderIds/PhysicalLocations 依赖刷新时序
 			// （解析实例未刷新为空、缓存实例可能未水合），不可靠；mblink 文件是
 			// 库配置的唯一持久真相。FindByPath 走 DB 拿物理文件夹 Id。
-			var libraryTopParents = new List<Guid>();
-			try
+			// P1 回归修复（Reviewer 预言的债务）：解析结果进程内缓存（TTL 30s）——
+			// 原实现每请求 FS 枚举 + 逐 mblink 读文件 + FindByPath DB 探测，
+			// 高频匿名查询下成为热点；库配置变更低频，TTL 兜底失效足够。
+			var libraryTopParents = GetLibraryTopParentsCached();
+			if (libraryTopParents != null && libraryTopParents.Length > 0)
 			{
-				var defaultDir = System.IO.Path.Combine(BaseItem.ConfigurationManager.ApplicationPaths.RootFolderPath, "default");
-
-				if (System.IO.Directory.Exists(defaultDir))
-				{
-					foreach (var mblink in System.IO.Directory.GetFiles(defaultDir, "*.mblink", System.IO.SearchOption.AllDirectories))
-					{
-						string target;
-						try { target = BaseItem.FileSystem.ReadAllText(mblink); }
-						catch { continue; }
-
-						if (string.IsNullOrWhiteSpace(target)) continue;
-
-						var folder = BaseItem.LibraryManager.FindByPath(target, true);
-						if (folder != null)
-						{
-							libraryTopParents.Add(folder.Id);
-						}
-					}
-				}
-			}
-			catch
-			{
-				// 读取失败退化为全表（现状语义）
-			}
-
-			if (libraryTopParents.Count > 0)
-			{
-				BaseItem.Logger.Debug("Anonymous recursive query limited to library top parents: {0}", string.Join(",", libraryTopParents.Select(i => i.ToString("N")).ToArray()));
-				query.TopParentIds = libraryTopParents.Distinct().ToArray();
-			}
-			else
-			{
-				BaseItem.Logger.Debug("Anonymous recursive query library top parents EMPTY (mblink read failed?), falling back to full-table");
+				query.TopParentIds = libraryTopParents;
 			}
 		}
 		if (query.User != null && !query.User.Policy.EnableAllFolders && query.IncludeItemTypes.Length == 1 && string.Equals(query.IncludeItemTypes[0], typeof(BoxSet).Name, StringComparison.OrdinalIgnoreCase))
@@ -634,6 +605,77 @@ public class Folder : BaseItem
 				select i.Id).ToArray();
 		}
 		return BaseItem.LibraryManager.GetItemsResult(query);
+	}
+
+	/// <summary>
+	/// 匿名库树限定：mblink 解析结果的进程内缓存（TTL 30s）。
+	/// 原实现每请求做 FS 枚举 + 逐 mblink 读文件 + FindByPath DB 探测——
+	/// 高频匿名查询下的热点（P1 部署后 L1 回归的头号嫌疑，Reviewer 审 P1 时
+	/// 预言过"库多会线性涨"）。库配置变更低频，TTL 兜底失效足够；
+	/// 解析失败也缓存（负缓存防抖，避免坏配置下每请求重试 FS+DB）。
+	/// </summary>
+	private static Guid[] _libraryTopParentsCache;
+	private static DateTime _libraryTopParentsCacheTime;
+	private static readonly object _libraryTopParentsCacheLock = new object();
+	private static readonly TimeSpan LibraryTopParentsCacheTtl = TimeSpan.FromSeconds(30);
+
+	private static Guid[] GetLibraryTopParentsCached()
+	{
+		lock (_libraryTopParentsCacheLock)
+		{
+			if (_libraryTopParentsCache != null
+				&& (DateTime.UtcNow - _libraryTopParentsCacheTime) < LibraryTopParentsCacheTtl)
+			{
+				return _libraryTopParentsCache;
+			}
+		}
+
+		var result = new List<Guid>();
+		try
+		{
+			var defaultDir = System.IO.Path.Combine(BaseItem.ConfigurationManager.ApplicationPaths.RootFolderPath, "default");
+
+			if (System.IO.Directory.Exists(defaultDir))
+			{
+				foreach (var mblink in System.IO.Directory.GetFiles(defaultDir, "*.mblink", System.IO.SearchOption.AllDirectories))
+				{
+					string target;
+					try { target = BaseItem.FileSystem.ReadAllText(mblink); }
+					catch { continue; }
+
+					if (string.IsNullOrWhiteSpace(target)) continue;
+
+					var folder = BaseItem.LibraryManager.FindByPath(target, true);
+					if (folder != null)
+					{
+						result.Add(folder.Id);
+					}
+				}
+			}
+		}
+		catch
+		{
+			// 读取失败退化为全表（现状语义）
+		}
+
+		var distinct = result.Distinct().ToArray();
+
+		lock (_libraryTopParentsCacheLock)
+		{
+			_libraryTopParentsCache = distinct;
+			_libraryTopParentsCacheTime = DateTime.UtcNow;
+		}
+
+		if (distinct.Length > 0)
+		{
+			BaseItem.Logger.Debug("Anonymous recursive query limited to library top parents: {0}", string.Join(",", distinct.Select(i => i.ToString("N")).ToArray()));
+		}
+		else
+		{
+			BaseItem.Logger.Debug("Anonymous recursive query library top parents EMPTY (mblink read failed?), falling back to full-table");
+		}
+
+		return distinct;
 	}
 
 	private bool RequiresPostFiltering(InternalItemsQuery query)
