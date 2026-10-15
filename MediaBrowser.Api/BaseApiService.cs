@@ -282,12 +282,21 @@ namespace MediaBrowser.Api
         private static T GetItemByNameIfExists<T>(ILibraryManager libraryManager, string name, DtoOptions dtoOptions)
             where T : BaseItem
         {
-            return libraryManager.GetItemList(new InternalItemsQuery
+            var items = libraryManager.GetItemList(new InternalItemsQuery
             {
                 Name = name,
                 IncludeItemTypes = new[] { typeof(T).Name },
                 DtoOptions = dtoOptions
-            }).OfType<T>().FirstOrDefault();
+            }).OfType<T>();
+
+            // Reviewer 建议：对齐旧 CreateItemByName 的挑选语义——MusicArtist 同名
+            // 双行（真实库内实体 + IBN 行）时真实实体（IsAccessedByName=false）优先
+            if (typeof(T) == typeof(MusicArtist))
+            {
+                items = items.OrderBy(i => ((MusicArtist)(object)i).IsAccessedByName ? 1 : 0);
+            }
+
+            return items.FirstOrDefault();
         }
 
         private T GetItemFromSlugName<T>(ILibraryManager libraryManager, string name, DtoOptions dtoOptions)

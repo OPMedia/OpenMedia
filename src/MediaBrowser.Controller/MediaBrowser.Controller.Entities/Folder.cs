@@ -323,10 +323,34 @@ public class Folder : BaseItem
 			}
 			if (list.Count > 0 || actualChildrenDictionary.Count != validChildren.Count)
 			{
+				// T4.7 根 GUID 扫描侧守卫 v3（phase4-design §3.1 选项 C）：
+				// 共享 DB 多实例拓扑下根行跨实例同 GUID（GetNewItemId 的 ProgramData 前缀剥离），
+				// 本实例配置里没有的库属于其他实例。剪枝分两层：UserRootFolder 的子项是
+				// CollectionFolder（v2 按 Id 判外库），AggregateFolder 的子项是各库的物理
+				// 媒体文件夹（v2 护不到——08:50/09:02 两轮复现实证：库行保住、物理文件夹
+				// 仍被剪枝级联清库）。v3 统一规则：根级文件夹（Aggregate/UserRoot）的剪枝
+				// 受害者，仅当其路径在本实例可解析位置（nonCachedChildren 路径）之下才可删；
+				// 否则跳过 + 警告。守卫语义"实例只管理自己知道的库"。删库正道走 API
+				// （RemoveVirtualFolder 同步清 DB 行）；手动删磁盘目录场景同降级为警告+
+				// 条目保留（设计文档明示）。非根级文件夹（库内部子树）剪枝不受影响。
+				var isRootLevelFolder = this is AggregateFolder || this is UserRootFolder;
+
 				foreach (BaseItem item2 in actualChildrenDictionary.Values.Except(validChildren).ToList())
 				{
 					if (item2.IsFileProtocol)
 					{
+						if (isRootLevelFolder)
+						{
+							var prunable = nonCachedChildren.Any(n =>
+								BaseItem.FileSystem.AreEqual(item2.Path, n.Path) ||
+								BaseItem.FileSystem.ContainsSubPath(n.Path, item2.Path));
+
+							if (!prunable)
+							{
+								BaseItem.Logger.Warn("Root-level pruning skipped for {0} ({1}): path is not under this instance's library locations (foreign instance library or manually removed folder). Preserving items; use the library API to remove libraries.", new object[2] { item2.Name, item2.Path });
+								continue;
+							}
+						}
 						BaseItem.Logger.Debug("Removed item: " + item2.Path, Array.Empty<object>());
 						item2.SetParent(null);
 						BaseItem.LibraryManager.DeleteItem(item2, new DeleteOptions
@@ -551,7 +575,12 @@ public class Folder : BaseItem
 		// （parent 为空、top_parent 为空）带进结果——与内存路径的库树语义不一致。
 		// 仅限"无类型/媒体类型过滤"的裸递归查询（带类型过滤的查询维持全表现状，
 		// 如匿名+MusicArtist=IBN 艺人 3 条的既有行为）。
+		// Reviewer 阻塞项：必须限定 this 为根（UserRootFolder/AggregateFolder）——
+		// 非根文件夹的匿名裸递归语义是"父文件夹子树"，注入全库 TopParentIds 会把
+		// 子树查询变全库（FilterService /Filters?ParentId=X 无 UserId 无类型是
+		// 现成入口，改动前走内存路径被 this 正确圈定）。
 		if (user == null && query.ParentId.Equals(Guid.Empty)
+			&& (this is UserRootFolder || this is AggregateFolder)
 			&& query.IncludeItemTypes.Length == 0 && query.ExcludeItemTypes.Length == 0
 			&& query.MediaTypes.Length == 0
 			&& query.TopParentIds.Length == 0 && query.AncestorIds.Length == 0
