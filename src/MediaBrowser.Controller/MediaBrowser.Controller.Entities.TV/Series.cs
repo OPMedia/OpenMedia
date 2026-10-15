@@ -142,6 +142,24 @@ public class Series : Folder, IHasDisplayOrder, IHasLookupInfo<SeriesInfo>, IMet
 
 		lock (RecursiveChildCountSeriesCacheLock)
 		{
+			// Reviewer 一致性建议：与 Folder 基类/_folderUserDataCountsCache 同款容量上限
+			if (RecursiveChildCountSeriesCache.Count >= RecursiveChildCountSeriesCacheCapacity)
+			{
+				var expiredKeys = RecursiveChildCountSeriesCache
+					.Where(i => (DateTime.UtcNow - i.Value.Item2) >= RecursiveChildCountSeriesCacheTtl)
+					.Select(i => i.Key)
+					.ToList();
+				foreach (var k in expiredKeys)
+				{
+					RecursiveChildCountSeriesCache.Remove(k);
+				}
+
+				if (RecursiveChildCountSeriesCache.Count >= RecursiveChildCountSeriesCacheCapacity)
+				{
+					RecursiveChildCountSeriesCache.Clear();
+				}
+			}
+
 			RecursiveChildCountSeriesCache[cacheKey] = new Tuple<int, DateTime>(count, DateTime.UtcNow);
 		}
 
@@ -152,6 +170,7 @@ public class Series : Folder, IHasDisplayOrder, IHasLookupInfo<SeriesInfo>, IMet
 		new Dictionary<string, Tuple<int, DateTime>>(StringComparer.OrdinalIgnoreCase);
 	private static readonly object RecursiveChildCountSeriesCacheLock = new object();
 	private static readonly TimeSpan RecursiveChildCountSeriesCacheTtl = TimeSpan.FromSeconds(30);
+	private const int RecursiveChildCountSeriesCacheCapacity = 10000;
 
 	public override List<string> GetUserDataKeys()
 	{

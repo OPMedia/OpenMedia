@@ -542,6 +542,7 @@ public class Folder : BaseItem
 		new Dictionary<string, Tuple<int, DateTime>>(StringComparer.OrdinalIgnoreCase);
 	private static readonly object _recursiveChildCountCacheLock = new object();
 	private static readonly TimeSpan RecursiveChildCountCacheTtl = TimeSpan.FromSeconds(30);
+	private const int RecursiveChildCountCacheCapacity = 10000;
 
 	public virtual int GetRecursiveChildCount(User user)
 	{
@@ -571,6 +572,25 @@ public class Folder : BaseItem
 
 		lock (_recursiveChildCountCacheLock)
 		{
+			// Reviewer 一致性建议：与 _folderUserDataCountsCache 同款容量上限
+			// （同批次姊妹缓存不裸奔——S3/S4 无界字典禁令无例外）
+			if (_recursiveChildCountCache.Count >= RecursiveChildCountCacheCapacity)
+			{
+				var expiredKeys = _recursiveChildCountCache
+					.Where(i => (DateTime.UtcNow - i.Value.Item2) >= RecursiveChildCountCacheTtl)
+					.Select(i => i.Key)
+					.ToList();
+				foreach (var k in expiredKeys)
+				{
+					_recursiveChildCountCache.Remove(k);
+				}
+
+				if (_recursiveChildCountCache.Count >= RecursiveChildCountCacheCapacity)
+				{
+					_recursiveChildCountCache.Clear();
+				}
+			}
+
 			_recursiveChildCountCache[cacheKey] = new Tuple<int, DateTime>(count, DateTime.UtcNow);
 		}
 
