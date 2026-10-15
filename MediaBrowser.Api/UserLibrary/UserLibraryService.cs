@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -347,6 +347,11 @@ namespace MediaBrowser.Api.UserLibrary
                 _libraryManager.GetUserRootFolder() :
                 _libraryManager.GetItemById(request.Id);
 
+            if (item == null)
+            {
+                throw new MediaBrowser.Common.Extensions.ResourceNotFoundException(string.Format("Item {0} not found", request.Id));
+            }
+
             var dtoOptions = GetDtoOptions(_authContext, request);
 
             var dtos = item.GetDisplayExtras()
@@ -365,6 +370,11 @@ namespace MediaBrowser.Api.UserLibrary
             var user = _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
+
+            if (item == null)
+            {
+                throw new MediaBrowser.Common.Extensions.ResourceNotFoundException(string.Format("Item {0} not found", request.Id));
+            }
 
             var dtoOptions = GetDtoOptions(_authContext, request);
 
@@ -385,6 +395,11 @@ namespace MediaBrowser.Api.UserLibrary
             var user = _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
+
+            if (item == null)
+            {
+                throw new MediaBrowser.Common.Extensions.ResourceNotFoundException(string.Format("Item {0} not found", request.Id));
+            }
 
             await RefreshItemOnDemandIfNeeded(item).ConfigureAwait(false);
 
@@ -444,6 +459,11 @@ namespace MediaBrowser.Api.UserLibrary
             var user = _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
+
+            if (item == null)
+            {
+                throw new MediaBrowser.Common.Extensions.ResourceNotFoundException(string.Format("Item {0} not found", request.Id));
+            }
 
             var items = await _libraryManager.GetIntros(item, user).ConfigureAwait(false);
 
