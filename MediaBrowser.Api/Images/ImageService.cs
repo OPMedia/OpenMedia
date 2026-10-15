@@ -410,6 +410,11 @@ namespace MediaBrowser.Api.Images
             var type = GetPathValue(0);
 
             var item = GetItemByName(request.Name, type, _libraryManager, new DtoOptions(false));
+            if (item == null)
+            {
+                // 读端点不建行：不存在的名字 → 404（原行为：顺手创建幽灵 ByName 行）
+                throw new ResourceNotFoundException(string.Format("{0} {1} not found", type, request.Name));
+            }
 
             return GetImage(request, item.Id, item, false);
         }
@@ -419,6 +424,11 @@ namespace MediaBrowser.Api.Images
             var type = GetPathValue(0);
 
             var item = GetItemByName(request.Name, type, _libraryManager, new DtoOptions(false));
+            if (item == null)
+            {
+                // 读端点不建行：不存在的名字 → 404（原行为：顺手创建幽灵 ByName 行）
+                throw new ResourceNotFoundException(string.Format("{0} {1} not found", type, request.Name));
+            }
 
             return GetImage(request, item.Id, item, true);
         }

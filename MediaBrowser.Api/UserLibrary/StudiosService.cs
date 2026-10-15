@@ -1,3 +1,4 @@
+using MediaBrowser.Common.Extensions;
 ﻿using System;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -69,6 +70,12 @@ namespace MediaBrowser.Api.UserLibrary
             var dtoOptions = GetDtoOptions(AuthorizationContext, request);
 
             var item = GetStudio(request.Name, LibraryManager, dtoOptions);
+
+            if (item == null)
+            {
+                // 读端点不建行：不存在的名字 → 404（原行为：顺手创建幽灵 ByName 行，矩阵每轮播种）
+                throw new ResourceNotFoundException(string.Format("Studio {0} not found", request.Name));
+            }
 
             if (!request.UserId.Equals(Guid.Empty))
             {

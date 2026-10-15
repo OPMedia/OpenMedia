@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Controller.Dto;
+using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -195,7 +195,7 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetArtist(name, dtoOptions);
+            return GetItemByNameIfExists<MusicArtist>(libraryManager, name, dtoOptions);
         }
 
         protected Studio GetStudio(string name, ILibraryManager libraryManager, DtoOptions dtoOptions)
@@ -210,7 +210,7 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetStudio(name);
+            return GetItemByNameIfExists<Studio>(libraryManager, name, dtoOptions);
         }
 
         protected Genre GetGenre(string name, ILibraryManager libraryManager, DtoOptions dtoOptions)
@@ -225,7 +225,7 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetGenre(name);
+            return GetItemByNameIfExists<Genre>(libraryManager, name, dtoOptions);
         }
 
         protected MusicGenre GetMusicGenre(string name, ILibraryManager libraryManager, DtoOptions dtoOptions)
@@ -240,7 +240,7 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetMusicGenre(name);
+            return GetItemByNameIfExists<MusicGenre>(libraryManager, name, dtoOptions);
         }
 
         protected GameGenre GetGameGenre(string name, ILibraryManager libraryManager, DtoOptions dtoOptions)
@@ -255,7 +255,7 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetGameGenre(name);
+            return GetItemByNameIfExists<GameGenre>(libraryManager, name, dtoOptions);
         }
 
         protected Person GetPerson(string name, ILibraryManager libraryManager, DtoOptions dtoOptions)
@@ -270,7 +270,24 @@ namespace MediaBrowser.Api
                 }
             }
 
-            return libraryManager.GetPerson(name);
+            return GetItemByNameIfExists<Person>(libraryManager, name, dtoOptions);
+        }
+
+        /// <summary>
+        /// 按名只读查询（不建行）。ByName 读端点（/{Name} 路由与图片路由）的取条目入口——
+        /// 旧实现走 libraryManager.GetXxx(name) 会在未命中时创建条目（读副作用），
+        /// 任意名字的 GET 都会播种幽灵 ByName 行（10-15 诊断③：矩阵 /Artists/Movie1 实证）。
+        /// 创建职责保留给 validator（postscan）与 DtoService（真实引用自愈）。
+        /// </summary>
+        private static T GetItemByNameIfExists<T>(ILibraryManager libraryManager, string name, DtoOptions dtoOptions)
+            where T : BaseItem
+        {
+            return libraryManager.GetItemList(new InternalItemsQuery
+            {
+                Name = name,
+                IncludeItemTypes = new[] { typeof(T).Name },
+                DtoOptions = dtoOptions
+            }).OfType<T>().FirstOrDefault();
         }
 
         private T GetItemFromSlugName<T>(ILibraryManager libraryManager, string name, DtoOptions dtoOptions)
