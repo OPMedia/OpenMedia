@@ -96,11 +96,14 @@ public class DynamicHlsService : BaseHlsService
 			return await GetSegmentResult(state, playlistPath, segmentPath, segmentExtension, requestedIndex, transcodingJob, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 		}
 		SemaphoreSlim transcodingLock = ApiEntryPoint.Instance.GetTranscodingLock(playlistPath);
-		await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
 		bool released = false;
+		bool lockAcquired = false;
 		bool flag = false;
 		try
 		{
+			// S3：WaitAsync 挪进 try——取消抛出时未持有信号量，finally 按 lockAcquired 决定 Release
+			await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
+			lockAcquired = true;
 			if (FileSystem.FileExists(segmentPath))
 			{
 				transcodingJob = ApiEntryPoint.Instance.OnTranscodeBeginRequest(playlistPath, TranscodingJobType);
@@ -155,7 +158,7 @@ public class DynamicHlsService : BaseHlsService
 		}
 		finally
 		{
-			if (!released)
+			if (lockAcquired && !released)
 			{
 				transcodingLock.Release();
 			}

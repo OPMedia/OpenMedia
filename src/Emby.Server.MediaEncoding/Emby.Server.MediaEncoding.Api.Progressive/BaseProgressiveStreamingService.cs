@@ -263,9 +263,12 @@ public abstract class BaseProgressiveStreamingService : BaseStreamingService
 			return result;
 		}
 		SemaphoreSlim transcodingLock = ApiEntryPoint.Instance.GetTranscodingLock(outputPath);
-		await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
+		var lockAcquired = false;
 		try
 		{
+			// S3：WaitAsync 挪进 try——取消抛出时未持有信号量，finally 按 lockAcquired 决定 Release
+			await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
+			lockAcquired = true;
 			TranscodingJob job;
 			if (!FileSystem.FileExists(outputPath))
 			{
@@ -286,7 +289,10 @@ public abstract class BaseProgressiveStreamingService : BaseStreamingService
 		}
 		finally
 		{
-			transcodingLock.Release();
+			if (lockAcquired)
+			{
+				transcodingLock.Release();
+			}
 		}
 	}
 

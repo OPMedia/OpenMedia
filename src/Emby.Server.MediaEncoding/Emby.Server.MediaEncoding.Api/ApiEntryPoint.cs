@@ -39,7 +39,27 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 
 	private readonly List<TranscodingJob> _activeTranscodingJobs = new List<TranscodingJob>();
 
-	private readonly Dictionary<string, SemaphoreSlim> _transcodingLocks = new Dictionary<string, SemaphoreSlim>();
+	// S3（scale-design §2 #4）：lock striping 代替按路径键的无界字典——原 Dictionary
+	// 在"GetTranscodingLock 创建条目后 WaitAsync(cancellationToken) 取消抛出"路径泄漏
+	// （条目创建于 try 之前，退出回调不覆盖启动失败场景）；固定桶数无增长可能。
+	// 同桶不同路径互斥的并发度损失在 64 桶下可忽略。
+	private const int TranscodeLockStripeCount = 64;
+	private readonly SemaphoreSlim[] _transcodeLockStripes = CreateTranscodeLockStripes();
+
+	private static SemaphoreSlim[] CreateTranscodeLockStripes()
+	{
+		var stripes = new SemaphoreSlim[TranscodeLockStripeCount];
+		for (var i = 0; i < stripes.Length; i++)
+		{
+			stripes[i] = new SemaphoreSlim(1, 1);
+		}
+		return stripes;
+	}
+
+	public SemaphoreSlim GetTranscodingLock(string outputPath)
+	{
+		return _transcodeLockStripes[(uint)outputPath.GetHashCode() % TranscodeLockStripeCount];
+	}
 
 	internal ILogger Logger { get; private set; }
 
@@ -68,19 +88,6 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 			return _fileSystem.GetDirectoryName(transcodingJob.Path);
 		}
 		return _config.ApplicationPaths.GetTranscodingTempPath();
-	}
-
-	public SemaphoreSlim GetTranscodingLock(string outputPath)
-	{
-		lock (_transcodingLocks)
-		{
-			if (!_transcodingLocks.TryGetValue(outputPath, out var value))
-			{
-				value = new SemaphoreSlim(1, 1);
-				_transcodingLocks[outputPath] = value;
-			}
-			return value;
-		}
 	}
 
 	private void _sessionManager_PlaybackStart(object sender, PlaybackProgressEventArgs e)
@@ -247,10 +254,7 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 				_activeTranscodingJobs.Remove(transcodingJob);
 			}
 		}
-		lock (_transcodingLocks)
-		{
-			_transcodingLocks.Remove(path);
-		}
+		// S3：_transcodingLocks 已改 lock striping（固定桶，无条目可删）
 		if (!string.IsNullOrWhiteSpace(((BaseEncodingJobOptions)state.Request).DeviceId))
 		{
 			_sessionManager.ClearTranscodingInfo(((BaseEncodingJobOptions)state.Request).DeviceId);
@@ -415,10 +419,7 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 				job.CancellationTokenSource.Cancel();
 			}
 		}
-		lock (_transcodingLocks)
-		{
-			_transcodingLocks.Remove(job.Path);
-		}
+		// S3：_transcodingLocks 已改 lock striping（固定桶，无条目可删）
 		await job.ProcessLock.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
 		try
 		{

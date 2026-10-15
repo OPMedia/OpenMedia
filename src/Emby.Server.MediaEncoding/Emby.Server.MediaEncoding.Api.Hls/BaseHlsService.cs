@@ -47,9 +47,12 @@ public abstract class BaseHlsService : BaseStreamingService
 		if (!FileSystem.FileExists(playlist))
 		{
 			SemaphoreSlim transcodingLock = ApiEntryPoint.Instance.GetTranscodingLock(playlist);
-			await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
+			var lockAcquired = false;
 			try
 			{
+				// S3：WaitAsync 挪进 try——取消抛出时未持有信号量，finally 按 acquired 决定 Release
+				await transcodingLock.WaitAsync(cancellationTokenSource.Token).ConfigureAwait(continueOnCapturedContext: false);
+				lockAcquired = true;
 				if (!FileSystem.FileExists(playlist))
 				{
 					try
@@ -71,7 +74,10 @@ public abstract class BaseHlsService : BaseStreamingService
 			}
 			finally
 			{
-				transcodingLock.Release();
+				if (lockAcquired)
+				{
+					transcodingLock.Release();
+				}
 			}
 		}
 		job = job ?? ApiEntryPoint.Instance.OnTranscodeBeginRequest(playlist, TranscodingJobType);

@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Extensions;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
@@ -275,10 +275,13 @@ namespace Emby.Drawing
 
             var lockInfo = GetLock(cacheFilePath);
 
-            await lockInfo.Lock.WaitAsync().ConfigureAwait(false);
-
+            var lockAcquired = false;
             try
             {
+                // S3：WaitAsync 挪进 try——取消/异常路径未持有信号量不 Release
+                await lockInfo.WaitAsync().ConfigureAwait(false);
+                lockAcquired = true;
+
                 if (!_fileSystem.FileExists(cacheFilePath))
                 {
                     if (options.CropWhiteSpace && !SupportsTransparency(originalImagePath))
@@ -317,7 +320,10 @@ namespace Emby.Drawing
             }
             finally
             {
-                ReleaseLock(cacheFilePath, lockInfo);
+                if (lockAcquired)
+                {
+                    lockInfo.Release();
+                }
             }
         }
 
@@ -717,10 +723,14 @@ namespace Emby.Drawing
 
             var lockInfo = GetLock(enhancedImagePath);
 
-            await lockInfo.Lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-
+            var lockAcquired = false;
             try
             {
+                // S3：WaitAsync 挪进 try——取消抛出（本处带 cancellationToken）时
+                // 未持有信号量，finally 按 lockAcquired 决定 Release
+                await lockInfo.WaitAsync(cancellationToken).ConfigureAwait(false);
+                lockAcquired = true;
+
                 // Check again in case of contention
                 if (_fileSystem.FileExists(enhancedImagePath))
                 {
@@ -735,7 +745,10 @@ namespace Emby.Drawing
             }
             finally
             {
-                ReleaseLock(enhancedImagePath, lockInfo);
+                if (lockAcquired)
+                {
+                    lockInfo.Release();
+                }
             }
         }
 
@@ -860,43 +873,26 @@ namespace Emby.Drawing
             return list == null ? Array.Empty<IImageEnhancer>() : list.ToArray();
         }
 
-        private Dictionary<string, LockInfo> _locks = new Dictionary<string, LockInfo>();
-        private class LockInfo
+        // S3（scale-design §2 #3）：lock striping 代替按缓存路径键的无界字典——
+        // 原实现"GetLock 计数创建 → WaitAsync(cancellationToken) 取消抛出（在 try 之前）
+        // → ReleaseLock 不执行"路径泄漏条目（Count 永驻）；1M 条目 × 图片参数组合的
+        // 键空间无上界。固定 64 桶无增长可能，同桶不同路径互斥的并发损失可忽略。
+        private const int LockStripeCount = 64;
+        private readonly SemaphoreSlim[] _lockStripes = CreateLockStripes();
+
+        private static SemaphoreSlim[] CreateLockStripes()
         {
-            public SemaphoreSlim Lock = new SemaphoreSlim(1, 1);
-            public int Count = 1;
-        }
-        private LockInfo GetLock(string key)
-        {
-            lock (_locks)
+            var stripes = new SemaphoreSlim[LockStripeCount];
+            for (var i = 0; i < stripes.Length; i++)
             {
-                LockInfo info;
-                if (_locks.TryGetValue(key, out info))
-                {
-                    info.Count++;
-                }
-                else
-                {
-                    info = new LockInfo();
-                    _locks[key] = info;
-                }
-                return info;
+                stripes[i] = new SemaphoreSlim(1, 1);
             }
+            return stripes;
         }
 
-        private void ReleaseLock(string key, LockInfo info)
+        private SemaphoreSlim GetLock(string key)
         {
-            info.Lock.Release();
-
-            lock (_locks)
-            {
-                info.Count--;
-                if (info.Count <= 0)
-                {
-                    _locks.Remove(key);
-                    info.Lock.Dispose();
-                }
-            }
+            return _lockStripes[(uint)key.GetHashCode() % LockStripeCount];
         }
 
         private bool _disposed;
