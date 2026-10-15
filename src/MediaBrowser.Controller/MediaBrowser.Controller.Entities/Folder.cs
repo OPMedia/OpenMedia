@@ -546,6 +546,59 @@ public class Folder : BaseItem
 		{
 			query.Parent = this;
 		}
+		// 匿名无类型查询改走 SQL 后（CollapseBoxSetItems 匿名短路）需限定库树：
+		// 原 SQL 路径无 TopParentIds 过滤会全表扫描，把 Person 等 IBN 孤儿条目
+		// （parent 为空、top_parent 为空）带进结果——与内存路径的库树语义不一致。
+		// 仅限"无类型/媒体类型过滤"的裸递归查询（带类型过滤的查询维持全表现状，
+		// 如匿名+MusicArtist=IBN 艺人 3 条的既有行为）。
+		if (user == null && query.ParentId.Equals(Guid.Empty)
+			&& query.IncludeItemTypes.Length == 0 && query.ExcludeItemTypes.Length == 0
+			&& query.MediaTypes.Length == 0
+			&& query.TopParentIds.Length == 0 && query.AncestorIds.Length == 0
+			&& query.ItemIds.Length == 0)
+		{
+			// 直接读 root/default 下的 .mblink（与 CollectionFolder 解析器同源的真相）：
+			// 根的 Children 实例的 PhysicalFolderIds/PhysicalLocations 依赖刷新时序
+			// （解析实例未刷新为空、缓存实例可能未水合），不可靠；mblink 文件是
+			// 库配置的唯一持久真相。FindByPath 走 DB 拿物理文件夹 Id。
+			var libraryTopParents = new List<Guid>();
+			try
+			{
+				var defaultDir = System.IO.Path.Combine(BaseItem.ConfigurationManager.ApplicationPaths.RootFolderPath, "default");
+
+				if (System.IO.Directory.Exists(defaultDir))
+				{
+					foreach (var mblink in System.IO.Directory.GetFiles(defaultDir, "*.mblink", System.IO.SearchOption.AllDirectories))
+					{
+						string target;
+						try { target = BaseItem.FileSystem.ReadAllText(mblink); }
+						catch { continue; }
+
+						if (string.IsNullOrWhiteSpace(target)) continue;
+
+						var folder = BaseItem.LibraryManager.FindByPath(target, true);
+						if (folder != null)
+						{
+							libraryTopParents.Add(folder.Id);
+						}
+					}
+				}
+			}
+			catch
+			{
+				// 读取失败退化为全表（现状语义）
+			}
+
+			if (libraryTopParents.Count > 0)
+			{
+				BaseItem.Logger.Debug("Anonymous recursive query limited to library top parents: {0}", string.Join(",", libraryTopParents.Select(i => i.ToString("N")).ToArray()));
+				query.TopParentIds = libraryTopParents.Distinct().ToArray();
+			}
+			else
+			{
+				BaseItem.Logger.Debug("Anonymous recursive query library top parents EMPTY (mblink read failed?), falling back to full-table");
+			}
+		}
 		if (query.User != null && !query.User.Policy.EnableAllFolders && query.IncludeItemTypes.Length == 1 && string.Equals(query.IncludeItemTypes[0], typeof(BoxSet).Name, StringComparison.OrdinalIgnoreCase))
 		{
 			query.BoxSetLibraryFolders = (from i in BaseItem.LibraryManager.GetUserRootFolder().GetChildren(user, includeLinkedChildren: true)
@@ -690,7 +743,11 @@ public class Folder : BaseItem
 		bool? flag = query.CollapseBoxSetItems;
 		if (!flag.HasValue)
 		{
-			if (user != null && !configurationManager.Configuration.EnableGroupingIntoCollections)
+			// 匿名查询（user==null）无用户视图上下文，BoxSet 折叠（把合集内电影藏进 BoxSet）
+			// 无意义；且原逻辑把"匿名+无类型过滤"劫持进内存后过滤路径（RequiresPostFiltering），
+			// 小库即 250ms（perf-baseline L1b P95 657ms 主因），SQL 路径仅 40ms。
+			// 用户路径语义不变（EnableGroupingIntoCollections 开关照旧生效）。
+			if (user == null || !configurationManager.Configuration.EnableGroupingIntoCollections)
 			{
 				return false;
 			}

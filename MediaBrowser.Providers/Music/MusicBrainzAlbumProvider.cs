@@ -759,7 +759,8 @@ namespace MediaBrowser.Providers.Music
                         var options = new HttpRequestOptions
                         {
                             Url = musicbrainzadminurl,
-                            UserAgent = _appHost.Name + "/" + _appHost.ApplicationVersion
+                            // 与 GetMusicBrainzResponse 统一：含空格 UA 会触发 MB 503（实测）
+                            UserAgent = "OpenMedia/" + _appHost.ApplicationVersion
                         };
 
                         using (var response = await _httpClient.SendAsync(options, "GET").ConfigureAwait(false))

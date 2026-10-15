@@ -443,6 +443,11 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 		}
 		catch
 		{
+		}
+		finally
+		{
+			// Reviewer 指出的预存缺陷：原实现只在 catch 里 Release，成功路径信号量
+			// 永久不还（当前全仓仅一处等待者暂无害，但后续加等待逻辑即死锁）
 			job.ProcessLock.Release();
 		}
 		if (delete)
