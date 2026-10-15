@@ -619,6 +619,19 @@ public class Folder : BaseItem
 	private static readonly object _libraryTopParentsCacheLock = new object();
 	private static readonly TimeSpan LibraryTopParentsCacheTtl = TimeSpan.FromSeconds(30);
 
+	/// <summary>
+	/// 库配置变更钩子：AddVirtualFolder/RemoveVirtualFolder 后主动失效
+	/// mblink 解析缓存（消除 TTL 窗口内的旧值）。
+	/// </summary>
+	public static void InvalidateLibraryTopParentsCache()
+	{
+		lock (_libraryTopParentsCacheLock)
+		{
+			_libraryTopParentsCache = null;
+			_libraryTopParentsCacheTime = DateTime.MinValue;
+		}
+	}
+
 	private static Guid[] GetLibraryTopParentsCached()
 	{
 		lock (_libraryTopParentsCacheLock)
