@@ -890,6 +890,10 @@ namespace Emby.Server.PgData
                 "A.guid",
                 "A.type",
                 "A.type_name",
+                // P8：partial hydration 路径摘掉 data 列（~1.5KB/行的传输+PG 成本白付，
+                // Reviewer 建议②）——query 非 null 且无需 data 独有字段时不选；
+                // query == null（RetrieveItem 单条全量）或需要 data 字段时保留。
+                // GetItem 的 skipDataHydration 短路保证不读该列，两侧判定一致。
                 "A.data::text",
                 "A.path",
                 "A.parent_id",
@@ -986,6 +990,15 @@ namespace Emby.Server.PgData
             if (query != null && !string.IsNullOrEmpty(query.SearchTerm))
             {
                 columns.Add(GetSearchScoreExpression(query) + " AS search_score");
+            }
+
+            // P8：partial hydration 路径摘掉 data 列（~1.5KB/行的 PG 读取+网络传输
+            // 白付，Reviewer 建议②）——判定与 GetItem 的 skipDataHydration 同源
+            // （RequiresFullHydration），两侧一致不会出现"列在但没读/列不在却要读"。
+            // query == null（RetrieveItem 单条全量）不摘。
+            if (query != null && !RequiresFullHydration(query))
+            {
+                columns.Remove("A.data::text");
             }
 
             // 只返回 SELECT 列清单，不带 FROM——由调用方提供（Query/Aggregates 各自拼 FROM，
