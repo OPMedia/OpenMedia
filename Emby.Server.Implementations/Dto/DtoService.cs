@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common;
+using MediaBrowser.Common;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -10,6 +10,7 @@ using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
+using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Drawing;
@@ -101,41 +102,47 @@ namespace Emby.Server.Implementations.Dto
             var index = 0;
             var allCollectionFolders = _libraryManager.GetUserRootFolder().Children.OfType<Folder>().ToList();
 
-            foreach (var item in items)
+            // 水合批量化：批量序列化开请求级 ByName 缓存 scope——循环内 GetPerson/
+            // GetCollectionFolders 的重复查询（人名高度重复、父链解析重复）在 scope
+            // 内命中，Dispose 恢复（L1 残余 2× 修复，语句数 201 → 目标个位数）
+            using (LibraryManager.BeginByNameBatch())
             {
-                var dto = GetBaseItemDtoInternal(item, options, allCollectionFolders, user, owner);
-
-                var tvChannel = item as LiveTvChannel;
-                if (tvChannel != null)
+                foreach (var item in items)
                 {
-                    channelTuples.Add(new Tuple<BaseItemDto, LiveTvChannel>(dto, tvChannel));
-                }
-                else if (item is LiveTvProgram)
-                {
-                    programTuples.Add(new Tuple<BaseItem, BaseItemDto>(item, dto));
-                }
+                    var dto = GetBaseItemDtoInternal(item, options, allCollectionFolders, user, owner);
 
-                var byName = item as IItemByName;
-
-                if (byName != null)
-                {
-                    if (options.ContainsField(ItemFields.ItemCounts))
+                    var tvChannel = item as LiveTvChannel;
+                    if (tvChannel != null)
                     {
-                        var libraryItems = byName.GetTaggedItems(new InternalItemsQuery(user)
-                        {
-                            Recursive = true,
-                            DtoOptions = new DtoOptions(false)
-                            {
-                                EnableImages = false
-                            }
-                        });
-
-                        SetItemByNameInfo(item, dto, libraryItems, user);
+                        channelTuples.Add(new Tuple<BaseItemDto, LiveTvChannel>(dto, tvChannel));
                     }
-                }
+                    else if (item is LiveTvProgram)
+                    {
+                        programTuples.Add(new Tuple<BaseItem, BaseItemDto>(item, dto));
+                    }
 
-                returnItems[index] = dto;
-                index++;
+                    var byName = item as IItemByName;
+
+                    if (byName != null)
+                    {
+                        if (options.ContainsField(ItemFields.ItemCounts))
+                        {
+                            var libraryItems = byName.GetTaggedItems(new InternalItemsQuery(user)
+                            {
+                                Recursive = true,
+                                DtoOptions = new DtoOptions(false)
+                                {
+                                    EnableImages = false
+                                }
+                            });
+
+                            SetItemByNameInfo(item, dto, libraryItems, user);
+                        }
+                    }
+
+                    returnItems[index] = dto;
+                    index++;
+                }
             }
 
             if (programTuples.Count > 0)
