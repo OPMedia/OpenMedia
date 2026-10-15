@@ -1340,10 +1340,13 @@ public class Folder : BaseItem
 	// UnplayedItemCount）在 DTO 批量序列化时逐 Folder 触发两个完整查询
 	// （DISTINCT ON 包装，实测 7 Folder × 2 = 14 次/请求，占 L1 语句数 93%）。
 	// 跨请求 TTL 缓存（user+folder 维度）：用户播放后徽章 30s 内延迟更新，可接受。
+	// Reviewer 建议：无界字典加上限——超阈值时锁内清过期项（S3/S4 同规矩，
+	// 10k 用户 × 访问过的 folder 对的基数有界但别裸奔）
 	private static readonly Dictionary<string, Tuple<int, int, DateTime>> _folderUserDataCountsCache =
 		new Dictionary<string, Tuple<int, int, DateTime>>(StringComparer.OrdinalIgnoreCase);
 	private static readonly object _folderUserDataCountsCacheLock = new object();
 	private static readonly TimeSpan FolderUserDataCountsCacheTtl = TimeSpan.FromSeconds(30);
+	private const int FolderUserDataCountsCacheCapacity = 10000;
 
 	public override void FillUserDataDtoValues(UserItemDataDto dto, UserItemData userData, BaseItemDto itemDto, User user, DtoOptions options)
 	{
@@ -1406,6 +1409,25 @@ public class Folder : BaseItem
 
 			lock (_folderUserDataCountsCacheLock)
 			{
+				// Reviewer 建议：超容量时锁内清过期项（TTL 30s，过期项即失效数据）
+				if (_folderUserDataCountsCache.Count >= FolderUserDataCountsCacheCapacity)
+				{
+					var expiredKeys = _folderUserDataCountsCache
+						.Where(i => (DateTime.UtcNow - i.Value.Item3) >= FolderUserDataCountsCacheTtl)
+						.Select(i => i.Key)
+						.ToList();
+					foreach (var k in expiredKeys)
+					{
+						_folderUserDataCountsCache.Remove(k);
+					}
+
+					// 过期清理后仍超限（极端：全部活跃）——整体重置（缓存语义可丢）
+					if (_folderUserDataCountsCache.Count >= FolderUserDataCountsCacheCapacity)
+					{
+						_folderUserDataCountsCache.Clear();
+					}
+				}
+
 				_folderUserDataCountsCache[cacheKey] = new Tuple<int, int, DateTime>(recursiveCount, unplayedCount, DateTime.UtcNow);
 			}
 		}

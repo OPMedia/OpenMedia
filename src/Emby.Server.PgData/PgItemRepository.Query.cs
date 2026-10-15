@@ -358,10 +358,16 @@ namespace Emby.Server.PgData
         {
             if (EnableGroupByPresentationUniqueKey(query))
             {
-                // P5（scale-measurement P0）：全局 PUK 无重复时 DISTINCT ON 是空转
-                // （数学等价跳过）——1M 库实测 1.58s→576ms（2.7×，20 万行全库形态）。
-                // 探测缓存 5min：全局无重复 ⇒ 任何结果集无重复（安全）；有重复（多
-                // 版本库）退回包装现状。探测本身全表聚合 ~1s@1M，缓存摊薄。
+                // P5（scale-measurement P0）：全局 PUK 无重复时跳过 DISTINCT ON 包装——
+                // 1M 库实测 1.58s→576ms（2.7×，20 万行全库形态）。
+                // 语义口径（Reviewer 澄清）：非 NULL 键的去重语义不变（全局无重复 ⇒
+                // 任何结果集无非 NULL 重复）；**NULL-pukey 组不再折叠**——旧包装路径
+                // 把所有 NULL 键行折叠成 1 行（DISTINCT ON 视 NULL 为同组），跳过后
+                // 各 NULL 行独立出现。这是有意改善（不同条目本不该因键 NULL 被折叠，
+                // 旧行为才是 bug；实测两个 LiveTvProgram fixture 行从折叠 1 行变
+                // 各自出现）。探测 SQL 只看非 NULL 键（IS NOT NULL），NULL 组的
+                // 折叠差异即上述有意行为。探测结果缓存 5min：新扫入多版本库最多
+                // 5min 窗口内未折叠（瞬态自愈）；探测失败退回保守包装。
                 if (!HasPresentationUniqueKeyDuplicates())
                 {
                     return null;

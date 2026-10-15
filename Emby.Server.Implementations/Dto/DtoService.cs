@@ -104,7 +104,10 @@ namespace Emby.Server.Implementations.Dto
 
             // 水合批量化：批量序列化开请求级 ByName 缓存 scope——循环内 GetPerson/
             // GetCollectionFolders 的重复查询（人名高度重复、父链解析重复）在 scope
-            // 内命中，Dispose 恢复（L1 残余 2× 修复，语句数 201 → 目标个位数）
+            // 内命中，Dispose 恢复（L1 残余 2× 修复，语句数 201 → 目标个位数）。
+            // ⚠ 线程安全前提（Reviewer 指出）：scope 内的 Dictionary 非线程安全，
+            // 下面的 foreach 必须保持顺序执行——将来若把本循环并行化（Parallel.For
+            // 等），必须先把 scope 字典换成 ConcurrentDictionary，否则静默踩雷。
             using (LibraryManager.BeginByNameBatch())
             {
                 foreach (var item in items)
