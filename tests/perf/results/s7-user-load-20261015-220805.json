@@ -1,0 +1,59 @@
+{
+  "runAt": "2026-10-15 22:08:05",
+  "target": "http://127.0.0.1:8098",
+  "generator": "v2 keep-alive（线程本地持久连接）",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "U1-认证-100用户",
+      "requests": 100,
+      "durationS": 0.3,
+      "rps": 345.2,
+      "p50Ms": 241.0,
+      "p95Ms": 260.2,
+      "p99Ms": 272.1,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 100
+      }
+    },
+    {
+      "label": "U1-认证-500用户",
+      "requests": 500,
+      "durationS": 22.0,
+      "rps": 22.7,
+      "p50Ms": 19037.3,
+      "p95Ms": 21728.7,
+      "p99Ms": 21778.7,
+      "errorRate": 0.2,
+      "codes": {
+        "200": 499,
+        "500": 1
+      }
+    },
+    {
+      "label": "U1-认证-2000用户",
+      "requests": 2000,
+      "durationS": 7.8,
+      "rps": 256.9,
+      "p50Ms": 43.2,
+      "p95Ms": 734.2,
+      "p99Ms": 878.5,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 2000
+      }
+    },
+    {
+      "label": "U2-用户列表-500用户×5次",
+      "requests": 0,
+      "durationS": 1.1,
+      "rps": 0.0,
+      "p50Ms": 0.0,
+      "p95Ms": 0.0,
+      "p99Ms": 0.0,
+      "errorRate": 100.0,
+      "codes": {}
+    }
+  ]
+}
