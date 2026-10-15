@@ -109,6 +109,19 @@ public class Series : Folder, IHasDisplayOrder, IHasLookupInfo<SeriesInfo>, IMet
 
 	public override int GetRecursiveChildCount(User user)
 	{
+		// P7 批次：方法级 TTL 缓存（与 Folder 基类同款——本重写走 GetCount 路径，
+		// 基类缓存覆盖不到；trace 实测 Series 的 count-per-folder 是 12 条大头之一）
+		var cacheKey = (user == null ? string.Empty : user.Id.ToString("N")) + "|" + Id.ToString("N");
+
+		lock (RecursiveChildCountSeriesCacheLock)
+		{
+			if (RecursiveChildCountSeriesCache.TryGetValue(cacheKey, out var cached)
+				&& (DateTime.UtcNow - cached.Item2) < RecursiveChildCountSeriesCacheTtl)
+			{
+				return cached.Item1;
+			}
+		}
+
 		string uniqueSeriesKey = GetUniqueSeriesKey(this);
 		InternalItemsQuery internalItemsQuery = new InternalItemsQuery(user)
 		{
@@ -125,8 +138,20 @@ public class Series : Folder, IHasDisplayOrder, IHasLookupInfo<SeriesInfo>, IMet
 		}
 		internalItemsQuery.IsVirtualItem = false;
 		internalItemsQuery.Limit = 0;
-		return BaseItem.LibraryManager.GetCount(internalItemsQuery);
+		var count = BaseItem.LibraryManager.GetCount(internalItemsQuery);
+
+		lock (RecursiveChildCountSeriesCacheLock)
+		{
+			RecursiveChildCountSeriesCache[cacheKey] = new Tuple<int, DateTime>(count, DateTime.UtcNow);
+		}
+
+		return count;
 	}
+
+	private static readonly Dictionary<string, Tuple<int, DateTime>> RecursiveChildCountSeriesCache =
+		new Dictionary<string, Tuple<int, DateTime>>(StringComparer.OrdinalIgnoreCase);
+	private static readonly object RecursiveChildCountSeriesCacheLock = new object();
+	private static readonly TimeSpan RecursiveChildCountSeriesCacheTtl = TimeSpan.FromSeconds(30);
 
 	public override List<string> GetUserDataKeys()
 	{

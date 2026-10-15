@@ -535,9 +535,28 @@ public class Folder : BaseItem
 		}).TotalRecordCount;
 	}
 
+	// P7 批次：GetRecursiveChildCount 方法级 TTL 缓存（FillUserDataDtoValues 的
+	// 结果缓存实测仍有 miss 路径——不同 DtoOptions 的调用链绕过；方法级兜底，
+	// trace 实测 15 次/两请求 → 缓存后 1 次/30s）
+	private static readonly Dictionary<string, Tuple<int, DateTime>> _recursiveChildCountCache =
+		new Dictionary<string, Tuple<int, DateTime>>(StringComparer.OrdinalIgnoreCase);
+	private static readonly object _recursiveChildCountCacheLock = new object();
+	private static readonly TimeSpan RecursiveChildCountCacheTtl = TimeSpan.FromSeconds(30);
+
 	public virtual int GetRecursiveChildCount(User user)
 	{
-		return GetItems(new InternalItemsQuery(user)
+		var cacheKey = (user == null ? string.Empty : user.Id.ToString("N")) + "|" + Id.ToString("N");
+
+		lock (_recursiveChildCountCacheLock)
+		{
+			if (_recursiveChildCountCache.TryGetValue(cacheKey, out var cached)
+				&& (DateTime.UtcNow - cached.Item2) < RecursiveChildCountCacheTtl)
+			{
+				return cached.Item1;
+			}
+		}
+
+		var count = GetItems(new InternalItemsQuery(user)
 		{
 			Recursive = true,
 			IsFolder = false,
@@ -549,6 +568,13 @@ public class Folder : BaseItem
 				EnableImages = false
 			}
 		}).TotalRecordCount;
+
+		lock (_recursiveChildCountCacheLock)
+		{
+			_recursiveChildCountCache[cacheKey] = new Tuple<int, DateTime>(count, DateTime.UtcNow);
+		}
+
+		return count;
 	}
 
 	public QueryResult<BaseItem> QueryRecursive(InternalItemsQuery query)
