@@ -998,8 +998,14 @@ namespace Emby.Server.PgData
         /// 1) data JSONB 反序列化（旧 data BLOB 路径）；
         /// 2) 失败或类型不需要序列化 → Activator.CreateInstance + 扁平列赋值；
         /// 3) 与旧实现一致，扁平列在反序列化结果上再覆盖一次（查询可见字段以列为准）。
+        /// P7 partial hydration：skipDataHydration=true 时跳过 data JSONB 反序列化
+        /// （~1.5KB/行的全量反序列化是列表页水合主成本，S6 实测 0.37-1.56ms/条）——
+        /// 列表 DTO 的核心字段全在扁平/聚合列（Name/Images/ProviderIds/Genres/
+        /// Studios/Tags/Artists/排序字段），data 独有的 Overview/People/Taglines
+        /// 仅详情页 DtoOptions 需要；partial 实例不进 LibraryItemsCache（GetItemList
+        /// 路径无 RegisterItem），不会污染缓存。
         /// </summary>
-        internal BaseItem GetItem(NpgsqlDataReader reader, NpgsqlConnection connection)
+        internal BaseItem GetItem(NpgsqlDataReader reader, NpgsqlConnection connection, bool skipDataHydration = false)
         {
             var typeName = ReadStringOrNull(reader, "type_name");
 
@@ -1022,7 +1028,7 @@ namespace Emby.Server.PgData
 
             BaseItem item = null;
 
-            var data = ReadStringOrNull(reader, "data");
+            var data = skipDataHydration ? null : ReadStringOrNull(reader, "data");
 
             if (!string.IsNullOrEmpty(data) && TypeRequiresDeserialization(type))
             {

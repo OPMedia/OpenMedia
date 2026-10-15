@@ -317,6 +317,38 @@ namespace Emby.Server.PgData
             return types.Any(i => query.IncludeItemTypes.Contains(i, StringComparer.OrdinalIgnoreCase));
         }
 
+        /// <summary>
+        /// P7 partial hydration 判定：查询的 DtoOptions 是否需要 data JSONB 独有字段。
+        /// data 独有：Overview/People/Taglines/TrailerUrls/HomePageUrl 等（序列化软字段）；
+        /// 列表核心字段全在扁平/聚合列（Name/Images/ProviderIds/Genres/Studios/Tags/
+        /// Artists/排序字段）。需要任一 data 独有字段时全量水合，否则列表路径跳过
+        /// data 反序列化（S6 实测水合主成本 0.37-1.56ms/条，预期 2-4×）。
+        /// </summary>
+        private static bool RequiresFullHydration(InternalItemsQuery query)
+        {
+            var options = query.DtoOptions;
+            if (options == null)
+            {
+                return false;
+            }
+
+            var fields = options.Fields;
+
+            for (var i = 0; fields != null && i < fields.Length; i++)
+            {
+                switch (fields[i])
+                {
+                    case ItemFields.Overview:
+                    case ItemFields.People:
+                    case ItemFields.Taglines:
+                    case ItemFields.Settings:
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool EnableDistinctOn(InternalItemsQuery query)
         {
             return EnableGroupByPresentationUniqueKey(query) || query.GroupBySeriesPresentationUniqueKey;
@@ -2084,11 +2116,14 @@ namespace Emby.Server.PgData
                 {
                     BindQueryParameters(cmd, query);
 
+                    // P7：列表路径 partial 水合（DtoOptions 无 data 独有字段时跳过全量反序列化）
+                    var skipDataHydration = !RequiresFullHydration(query);
+
                     using (var reader = cmd.ExecuteReader())
                     {
                         while (reader.Read())
                         {
-                            var item = GetItem(reader, connection);
+                            var item = GetItem(reader, connection, skipDataHydration);
                             if (item != null)
                             {
                                 list.Add(item);
@@ -2336,11 +2371,14 @@ namespace Emby.Server.PgData
                     {
                         BindQueryParameters(cmd, query);
 
+                        // P7：列表路径 partial 水合（同 GetItemList）
+                        var skipDataHydration = !RequiresFullHydration(query);
+
                         using (var reader = cmd.ExecuteReader())
                         {
                             while (reader.Read())
                             {
-                                var item = GetItem(reader, connection);
+                                var item = GetItem(reader, connection, skipDataHydration);
                                 if (item != null)
                                 {
                                     list.Add(item);
