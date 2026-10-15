@@ -51,7 +51,7 @@ warmup（一轮混合负载）→ gcdump #1 → N 轮负载（扫描+刷新+浏�
 | 5 | **水合路径** | PgItemRepository.cs:1030 逐行全量 JSONB 反序列化 | 1M 库列表页 50 条 × 全量 blob → **CPU+GC 双杀**；P7 从"五期再说"升必做 | **S6 先测量后实施**：列表页按 DtoOptions 需要的字段做 partial hydration 或投影直出 DTO |
 | 6 | **DtoService 中间对象** | BaseItemDto 161 公有成员 × 每请求 N 条 | gen0/1 GC 压力；大数组（图片 tags）LOH 风险 | soak 观测 GC 暂停；必要时 DTO 池化（低优先，S8 后评估） |
 | 7 | **WebSocket 广播扇出** | SessionsStart 全订阅者广播会话变更 | 10k 会话 × 每变更广播 → **O(N²) 风险** | **S7 压测坐实**；若坐实属架构级（评估是否六期） |
-| 8 | **Npgsql 连接池** | BasePgRepository.cs:58 Pooling=true，无显式 MaxPoolSize → 默认 100 | 10k 并发下 100 连接排队（短查询大概率够，需数据） | **S7**：k6 验证排队延迟；必要时 MaxPoolSize 显式配置 + PG max_connections 对齐 |
+| 8 | **Npgsql 连接池** | BasePgRepository.cs:58 Pooling=true，无显式 MaxPoolSize → 默认 100 | U2 实证雪崩链：500 并发长查询 → 池 100 **贴脸** PG max_connections=100（7 仓储共用一个池）→ 15s 池等待超时连接不释放 → 池干涸 60s 雪崩；2000 认证=排队主导（RunInTransaction 三步串行持连接） | **✅ 定案（P8，2026-10-16）**：主方案=查询级信号量（PgData 查询入口，50 并发可配置）+ 池等待 15s→3s 快速失败——不扩池、不动查询语义、雪崩结构上不可能；池扩容（需 PG 重启+每连接 10MB）等信号量上线后看真实需求。详见 docs/p8-analysis.md；Architect 评审护栏见 §5 S9 |
 
 ---
 
@@ -95,6 +95,7 @@ warmup（一轮混合负载）→ gcdump #1 → N 轮负载（扫描+刷新+浏�
 | S6 | 1M 全链路测量（EXPLAIN 复跑+水合占比+缓存命中）→ P7 实施决策 | S5 | 1.5d | 测量报告；P7 改造范围定案 |
 | S7 | 10k 用户 k6 三场景 | S5（用户 fixture） | 1d | L5/L6/L7 数字入档；池零耗尽 |
 | S8 | soak 4h 收口 + 堆快照 diff 终验 | S2–S4, S6 | 1d | §0 总验收全过 |
+| S9 | **P8 实施**（池防护）：查询信号量 + 池等待 3s + 池参数显式化 + 认证事务瘦身 | Reviewer 审 + Chief 拍板（✅ 已倾向③） | 1d | U2 复跑零雪崩、错误率 <5%（503 可接受）、恢复 <5s；U1 2000 档 P95 <5s；正常负载（L1 暖 21ms）零回归。**Architect 护栏四条**：① 信号量单一全局门（7 仓储一个池→一个门，可配置默认 50，不按仓储 ×7）；② 只守 DB 执行点不包整个请求管道；③ 实施前验证持门槽位内无嵌套二次取连接（防死锁）；④ 503 语义进中间件映射 + U2 复跑进负路径用例 |
 
 **分工建议**：S1/S3 先行（小）；S2 独立大项；S5 生成器给一人专做（S6/S7 都等它）；S8 收尾全员回归。四期部署窗口与 L1b 复测不受影响，先行。
 
