@@ -28,8 +28,8 @@ api-gap-map §4.2 全量 25 个（user_usage_stats 19 + Reports 4 + ThumbnailSet
 
 - **TunerHosts 已有**：M3UTunerHost（免费）、HdHomerun（硬件）——`Emby.Server.Implementations/LiveTv/TunerHosts/`
 - **Listings 只有 SchedulesDirect**（付费订阅，无 fixture 可测）→ guide 永远空，LiveTv 域是死的
-- **XmlTv 解析库存在但零接线**：`src/Emby.XmlTv` 被 csproj 引用但全解决方案无任何 .cs 使用——死引用，三期接上
-- **web UI 的 XmlTv 配置页已存在**（`dashboard-ui/components/tvproviders/xmltv.js`）——服务端 provider 接上即有现成 UI（注意该页带 Premiere 提示，P3-C3 一并清）
+- **XmlTv provider 已存在**（v2 误判更正）：`src/Emby.Server.MediaEncoding/Emby.Server.Implementations.LiveTv.Listings/XmlTvProvider.cs`（C01 反编译恢复，IListingsProvider 实现），经 GetExports DI 自动发现，Type="xmltv" 直接可用。v2 曾断言"零接线死引用需新建 provider 1.5d"——**扫描范围失误**（只查了根目录 Emby.Server.Implementations/，漏了 src/Emby.Server.MediaEncoding/），实际 B 轨道零代码改动完成
+- **web UI 的 XmlTv 配置页已存在**（`dashboard-ui/components/tvproviders/xmltv.js`）——服务端 provider 与 UI 均现成
 - ⚠️ **新发现——DVR 门禁是真阻断**：
   - `LiveTvManager.cs:2193` CreateSeriesTimer：`GetRegistrationInfo("seriesrecordings")` → `!IsValid` 时 **log + return**——系列录制静默失败
   - `EmbyTV.cs:1193`：`GetRegistrationInfo("dvr")` → `!IsValid` 时 **log + OnTimerOutOfDate + return**——DVR 录制静默失败
@@ -97,19 +97,19 @@ api-gap-map §4.2 全量 25 个（user_usage_stats 19 + Reports 4 + ThumbnailSet
 
 **PremiereDate（首播日期）是正常元数据字段，与会员无关，严禁误伤**（LiveTvManager 里大量 IsPremiere/PremiereDate 是节目元数据）。
 
-### 2.3 LiveTv：XmlTv + M3U 免费全链路
+### 2.3 LiveTv：XmlTv + M3U 免费全链路（✅ 已完成，零代码改动）
 
 - SchedulesDirect 付费无 fixture 不做；HdHomerun 无硬件不做
-- 新建 **XmlTvListingsProvider**（复用 `src/Emby.XmlTv` 解析库，实现 ILiveTvListingsProvider）+ 现成 M3UTunerHost；web UI 配置页现成（xmltv.js）
-- 全链路验收：M3U+XMLTV fixture → /LiveTv/Channels 非空 → guide 有 program → 频道可播放 → timer 录制出文件（**依赖 P3-C2 先拆 DVR 门禁**）
+- ~~新建 XmlTvListingsProvider~~（v2 误判：provider 已存在于 Emby.Server.MediaEncoding，见 §1.2 更正）——实际执行：纯 fixture+配置（`tests/setup-livetv.ps1`：guide.xml 2 频道×2 节目 + channels.m3u 指向自身 Movie1 静态流 + 幂等 provider/tuner 注册），commit `daa1dd269f`
+- 全链路验收实测全过：/LiveTv/Channels 2 频道、guide 真实节目、频道 PlaybackInfo 200、DVR timer 录制出真实 mpegts 文件可回放（门禁由 P3-C2 `7b773d9ca4` 先行解除）
 
 ### 2.4 元数据：逐 provider 验证与修复
 
 TMDb 优先（电影+剧集主源，v3 API 在服务，key 已硬编码）；音乐三件套跟随 D2 音频 fixture；**TVDB v3 默认禁用**（外部停服，不修死源，TMDb 顶上）；每 provider 一份验证记录，修一个 commit 一个；图片下载链路（ProviderManager 远程图入库）单独验证。
 
-### 2.5 Web UI：Emby.Web 4.1 接入 spike（只出结论不承诺）
+### 2.5 Web UI：Emby.Web 4.1 接入 spike（⛔ 已否决，license 依据）
 
-半天~1 天：Emby.Web 4.1.x 构建产物 → 替换 dashboard-ui（保留回滚）→ 连本地服务器 → 逐页面可用性/API 缺口清单。**spike 结论必须计入两项成本**：①API 缺口补齐量；②**Emby.Web 自带 premiere/iap/registrationservices 耦合，去 Emby 化要重做一遍**——该成本会抬高"老 UI 补丁"路线权重。license 合规 Chief 核实后才能转正式轨道。
+**否决结论（2026-10-15，Chief 核实）**：Emby 的 web 仓库（emby-web-defaultskin / emby-webcomponents）公开源码但**没有 LICENSE 文件**——默认全版权保留，二次分发属灰色地带；且 4.1 前端自带 premiere/iap 耦合，与去 Emby 化方向直接冲突。**UI 升级以后单独立项**（改造 3.5.3 皮肤或自研前端），不碰 Emby 4.1 资产。spike 未执行，P3-D 任务取消。
 
 ---
 
@@ -158,4 +158,18 @@ TMDb 优先（电影+剧集主源，v3 API 在服务，key 已硬编码）；音
 ## 5. 与二期/四期的衔接
 
 - 二期收尾（T1 健壮性 + T2 基线 + 音乐/剧集 fixture）= 三期启动条件，无空窗
-- 三期产出决定四期方向：P3-D 结论（含去 Emby 化重做成本）→ Web UI 大轨道 or 老 UI 补丁；P3-E 基线 → 性能优化批次；插件系统 → 用户拍板"先逆向再议"，四期另立设计
+- 三期产出决定四期方向：~~P3-D 结论~~（D 已否决，UI 单独立项）；P3-E 基线 → 性能优化 P1–P7 转四期正式轨道（Developer 进行中）；插件系统 → 用户拍板"先逆向再议"，四期另立设计
+
+---
+
+## 6. 三期终态（v3 修订，2026-10-15）
+
+| 轨道 | 状态 | 交付 |
+|------|------|------|
+| P3-A 元数据 | ✅ 完成 | A1/A4（`6ee30b8071`：TMDb 电影链路验证 + TVDB 死源禁用 + Omdb 图片源修复）、A2/A3（`ec82eb4deb`：TMDb 剧集 + 音乐链路验证）；产出 docs/provider-validation.md |
+| P3-B LiveTv | ✅ 完成（零代码改动，v2 误判见 §1.2 更正） | `daa1dd269f`：XmlTv+M3U 全链路（频道/guide/播放/DVR 录制出文件），fixture tests/setup-livetv.ps1 |
+| P3-C 去Emby化 | ✅ 完成 | C1/C2（`7b773d9ca4` 注册门禁恒有效+外连清零、`de50f35f5d` ProductNews 空列表）、C3+死代码（`a72a8ff29e` -367 行、`1026604761` web UI 清理，19 处 emby.media 外链清零） |
+| P3-D Web UI spike | ⛔ 否决 | license 无 LICENSE 文件 + premiere 耦合冲突（§2.5）；UI 现代化单独立项 |
+| P3-E 性能 | ➡️ 转四期 | 基线已出（docs/perf-baseline.md，Tester `2f2e73f6cc`）；P1–P7 优化候选转四期轨道实施 |
+
+**v2→v3 修订记录**：①XmlTv"零接线"误判更正（provider 在 Emby.Server.MediaEncoding，B 轨道实际零代码）；②D 否决及 license 依据入档；③各轨道终态对账。**经验教训**：断言"全解决方案零使用"前必须扫全部路由/服务承载程序集（src/ 与根目录两套布局都要扫）——v2 的扫描只覆盖了根目录。
