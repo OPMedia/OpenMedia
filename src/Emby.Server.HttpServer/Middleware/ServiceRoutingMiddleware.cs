@@ -389,7 +389,9 @@ namespace Emby.Server.HttpServer.Middleware
                 {typeof (ArgumentException), 400},
                 // 二期 T1.1：用户输入解析失败（int/long/Uri/bool TryParse 之外的漏网点）兜底 400；
                 // IOE/NRE/InvalidCastException 保持 500 作回归探测器（docs/phase2-design.md §1.2）
-                {typeof (FormatException), 400}
+                {typeof (FormatException), 400},
+                // P8：查询门满（50 并发长查询在跑）——服务过载快速失败不雪崩（U2 止损层）
+                {typeof (MediaBrowser.Model.Net.PoolExhaustedException), 503}
             };
 
         private Exception GetActualException(Exception ex)

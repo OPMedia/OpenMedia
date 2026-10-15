@@ -193,6 +193,7 @@ namespace Emby.Server.PgData
         /// 选出 returnType 类型的 item-by-name 项（其 clean_name 出现在符合 innerQuery 条件
         /// 的媒体的 extradata 中），附带 itemTypes 统计列与 outerQuery 过滤。
         /// 旧 "group by PresentationUniqueKey" → DISTINCT ON + 外层重排序。
+        /// P8：纳入查询门（Reviewer 备注②——1M 规模的重查询入口，不留第二个 U2 形态）。
         /// </summary>
         private QueryResult<Tuple<BaseItem, ItemCounts>> GetItemValues(InternalItemsQuery query, int[] itemValueTypes, string returnType)
         {
@@ -201,6 +202,11 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException("query");
             }
 
+            return WithQueryGate(() => GetItemValuesCore(query, itemValueTypes, returnType));
+        }
+
+        private QueryResult<Tuple<BaseItem, ItemCounts>> GetItemValuesCore(InternalItemsQuery query, int[] itemValueTypes, string returnType)
+        {
             if (!query.Limit.HasValue)
             {
                 query.EnableTotalRecordCount = false;
@@ -374,9 +380,12 @@ namespace Emby.Server.PgData
 
                         using (var reader = cmd.ExecuteReader())
                         {
+                            // P7/P8：与 GetItemList 同款 partial 水合 + data 列摘除判定
+                            var skipDataHydration = !RequiresFullHydration(query);
+
                             while (reader.Read())
                             {
-                                var item = GetItem(reader, connection);
+                                var item = GetItem(reader, connection, skipDataHydration);
                                 if (item != null)
                                 {
                                     // item_types 列仅在 typesToCount 非空时进入 SELECT；

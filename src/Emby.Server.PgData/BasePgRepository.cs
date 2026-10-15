@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Net;
 using Npgsql;
 
 namespace Emby.Server.PgData
@@ -12,6 +15,53 @@ namespace Emby.Server.PgData
     /// </summary>
     public abstract class BasePgRepository : IDisposable
     {
+        /// <summary>
+        /// P8 并发防护（docs/p8-analysis.md ③方案，Chief 拍板 + Reviewer/Architect 护栏）：
+        /// 全局单门信号量——所有仓储共用同一个池（同连接串=同一 NpgsqlDataSource），
+        /// 门也必须全局一个（Architect 护栏①：不能按仓储×N，否则 N×50 > 池 100 自己打穿）。
+        /// 只守 DB 执行点（护栏②），不包请求管道。
+        /// 嵌套连接检查（护栏③）已做：GetItem 的 connection 参数零使用、
+        /// GetItems/GetItemList 执行体内无嵌套仓储调用——持门槽位内不开第二条连接。
+        /// </summary>
+        private static readonly SemaphoreSlim QueryGate = new SemaphoreSlim(QueryGateCapacity, QueryGateCapacity);
+        private const int QueryGateCapacity = 50;
+
+        /// <summary>
+        /// 池等待快速失败（P8 ③方案 B）：15s 默认收窄到 3s——池耗尽时快速失败
+        /// 不雪崩（U2 的 60s 超时级联止损层）。
+        /// </summary>
+        private const int PoolWaitTimeoutMs = 3000;
+
+        /// <summary>
+        /// 查询门：获取槽位（等待 3s 后 503），执行查询，释放。
+        /// 覆盖：GetItems/GetItemList/GetItemValues（Reviewer 备注②：不留第二个 U2 形态）。
+        /// 不覆盖：单条 RetrieveItem/认证/写入（信号量 50 < 池 100 留 50 余量）。
+        /// </summary>
+        protected static T WithQueryGate<T>(Func<T> action)
+        {
+            if (!QueryGate.Wait(PoolWaitTimeoutMs))
+            {
+                throw new PoolExhaustedException(QueryGateCapacity);
+            }
+
+            try
+            {
+                return action();
+            }
+            finally
+            {
+                QueryGate.Release();
+            }
+        }
+
+        protected static void WithQueryGate(Action action)
+        {
+            WithQueryGate<object>(() =>
+            {
+                action();
+                return null;
+            });
+        }
         /// <summary>
         /// 默认连接串（方案 §5.1；可被 OPENMEDIA_PGCONN 环境变量覆盖——ApplicationHost.GetPostgresConnectionString）。
         /// 端口 15432：2026-10-15 起本机安全软件屏蔽数据库端口（5432/5433/3306 回环全堵，高位端口正常），
@@ -59,8 +109,10 @@ namespace Emby.Server.PgData
             {
                 var builder = new NpgsqlConnectionStringBuilder(cs)
                 {
-                    // 与旧 ManagedConnection 语义对齐：池化由 Npgsql 自带，默认即可
-                    Pooling = true
+                    // 与旧 ManagedConnection 语义对齐：池化由 Npgsql 自带，默认即可。
+                    // P8：池等待超时 15s→3s（快速失败不雪崩——U2 60s 级联的止损层）
+                    Pooling = true,
+                    Timeout = 3
                 };
                 return NpgsqlDataSource.Create(builder.ConnectionString);
             });

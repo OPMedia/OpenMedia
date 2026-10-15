@@ -52,29 +52,32 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException("info");
             }
 
-            RunInTransaction((connection, transaction) =>
+            // P8 认证事务瘦身（Chief 拍板）：三步里 device upsert 幂等（ON CONFLICT）、
+            // user 查找是读——去事务改为单连接顺序执行，缩短连接持有时间
+            // （2000 并发认证的池排队主导，RunInTransaction 持连接跨三步是放大器）
+            using (var connection = CreateConnection())
             {
-                var deviceId = GetOrInsertDevice(connection, transaction, info.DeviceId, info.DeviceName);
+                var deviceId = GetOrInsertDevice(connection, null, info.DeviceId, info.DeviceName);
 
                 using (var cmd = new NpgsqlCommand(
                     @"INSERT INTO tokens
                         (access_token, device_id, app_name, app_version, user_id, is_active, date_created, date_last_activity)
                       VALUES (@access_token, @device_id, @app_name, @app_version, @user_id, @is_active, @date_created, @date_last_activity)
                       RETURNING id",
-                    connection, transaction))
+                    connection))
                 {
                     cmd.Parameters.Add(new NpgsqlParameter("access_token", NpgsqlDbType.Text) { Value = info.AccessToken });
                     cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Integer) { Value = deviceId });
                     cmd.Parameters.Add(new NpgsqlParameter("app_name", NpgsqlDbType.Text) { Value = (object)info.AppName ?? DBNull.Value });
                     cmd.Parameters.Add(new NpgsqlParameter("app_version", NpgsqlDbType.Text) { Value = (object)info.AppVersion ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = (object)ResolveInternalUserId(connection, transaction, info.UserId) ?? DBNull.Value });
+                    cmd.Parameters.Add(new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = (object)ResolveInternalUserId(connection, null, info.UserId) ?? DBNull.Value });
                     cmd.Parameters.Add(new NpgsqlParameter("is_active", NpgsqlDbType.Boolean) { Value = true });
                     cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateCreated) });
                     cmd.Parameters.Add(new NpgsqlParameter("date_last_activity", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateLastActivity) });
 
                     info.Id = Convert.ToInt64(cmd.ExecuteScalar());
                 }
-            });
+            }
         }
 
         /// <summary>

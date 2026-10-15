@@ -2098,6 +2098,8 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 获取媒体项列表（旧 GetItemList）。
+        /// P8：公共入口包查询门（全局单门 50 并发）；GetItems 的内部委托走
+        /// GetItemListCore（unwrapped——Reviewer 自死锁约束：双占槽位 = 全部持 1 等 2）。
         /// </summary>
         public List<BaseItem> GetItemList(InternalItemsQuery query)
         {
@@ -2106,6 +2108,11 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException("query");
             }
 
+            return WithQueryGate(() => GetItemListCore(query));
+        }
+
+        private List<BaseItem> GetItemListCore(InternalItemsQuery query)
+        {
             CheckDisposed();
 
             var now = DateTime.UtcNow;
@@ -2336,6 +2343,7 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 分页查询（旧 GetItems：列表 + 总数）。
+        /// P8：公共入口包查询门；内部委托 GetItemList 走 Core（不双占槽位）。
         /// </summary>
         public QueryResult<BaseItem> GetItems(InternalItemsQuery query)
         {
@@ -2344,11 +2352,16 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException("query");
             }
 
+            return WithQueryGate(() => GetItemsCore(query));
+        }
+
+        private QueryResult<BaseItem> GetItemsCore(InternalItemsQuery query)
+        {
             CheckDisposed();
 
             if (!query.EnableTotalRecordCount || (!query.Limit.HasValue && (query.StartIndex ?? 0) == 0))
             {
-                var returnList = GetItemList(query);
+                var returnList = GetItemListCore(query);
                 return new QueryResult<BaseItem>
                 {
                     Items = returnList.ToArray(),
