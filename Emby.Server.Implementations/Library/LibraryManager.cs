@@ -142,12 +142,12 @@ namespace Emby.Server.Implementations.Library
         /// <summary>
         /// The _library items cache
         /// </summary>
-        private readonly ConcurrentDictionary<Guid, BaseItem> _libraryItemsCache;
+        private readonly ItemLruCache _libraryItemsCache;
         /// <summary>
         /// Gets the library items cache.
         /// </summary>
         /// <value>The library items cache.</value>
-        private ConcurrentDictionary<Guid, BaseItem> LibraryItemsCache
+        private ItemLruCache LibraryItemsCache
         {
             get
             {
@@ -177,7 +177,7 @@ namespace Emby.Server.Implementations.Library
             _providerManagerFactory = providerManagerFactory;
             _userviewManager = userviewManager;
             _appHost = appHost;
-            _libraryItemsCache = new ConcurrentDictionary<Guid, BaseItem>();
+            _libraryItemsCache = new ItemLruCache(_logger);
 
             ConfigurationManager.ConfigurationUpdated += ConfigurationUpdated;
 
@@ -305,7 +305,7 @@ namespace Emby.Server.Implementations.Library
                 }
             }
 
-            LibraryItemsCache.AddOrUpdate(item.Id, item, delegate { return item; });
+            LibraryItemsCache.Set(item);
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options)
@@ -444,8 +444,7 @@ namespace Emby.Server.Implementations.Library
                 ItemRepository.DeleteItem(child.Id, CancellationToken.None);
             }
 
-            BaseItem removed;
-            _libraryItemsCache.TryRemove(item.Id, out removed);
+            _libraryItemsCache.Remove(item.Id);
 
             ReportItemRemoved(item, parent);
         }
@@ -855,7 +854,57 @@ namespace Emby.Server.Implementations.Library
         /// <returns>Task{Person}.</returns>
         public Person GetPerson(string name)
         {
-            return CreateItemByName<Person>(Person.GetPath, name, new DtoOptions(true));
+            // 水合批量化（L1 残余 2× 修复）：DtoService.AttachPeople 对每条 DTO 的每个
+            // 人名调本方法——CreateItemByName 的 GetItemById miss 时逐人 DB 回源
+            // （Tester 实测 guid 查找 ×18/请求）。请求级缓存（BeginByNameBatch scope
+            // 内共享）：同名人只查一次，50 条 DTO 的人名高度重复。
+            var batchCache = _personBatchCache.Value;
+            if (batchCache != null && batchCache.TryGetValue(name, out var cached))
+            {
+                return cached;
+            }
+
+            var person = CreateItemByName<Person>(Person.GetPath, name, new DtoOptions(true));
+
+            if (batchCache != null)
+            {
+                batchCache[name] = person;
+            }
+
+            return person;
+        }
+
+        // ===== 水合批量化：DTO 批量序列化的请求级缓存（AsyncLocal scope）=====
+        // GetBaseItemDtos 批量入口 BeginByNameBatch() 开 scope，循环内 GetPerson/
+        // GetCollectionFolders 的重复查询在 scope 内命中，Dispose 恢复（无泄漏）。
+        private static readonly AsyncLocal<Dictionary<string, Person>> _personBatchCache = new();
+        private static readonly AsyncLocal<Dictionary<Guid, List<Folder>>> _collectionFoldersBatchCache = new();
+
+        public sealed class ByNameBatchScope : IDisposable
+        {
+            private readonly Dictionary<string, Person> _personCache = new(StringComparer.OrdinalIgnoreCase);
+            private readonly Dictionary<Guid, List<Folder>> _foldersCache = new();
+            private readonly Dictionary<string, Person> _prevPerson;
+            private readonly Dictionary<Guid, List<Folder>> _prevFolders;
+
+            internal ByNameBatchScope()
+            {
+                _prevPerson = _personBatchCache.Value;
+                _prevFolders = _collectionFoldersBatchCache.Value;
+                _personBatchCache.Value = _personCache;
+                _collectionFoldersBatchCache.Value = _foldersCache;
+            }
+
+            public void Dispose()
+            {
+                _personBatchCache.Value = _prevPerson;
+                _collectionFoldersBatchCache.Value = _prevFolders;
+            }
+        }
+
+        public static ByNameBatchScope BeginByNameBatch()
+        {
+            return new ByNameBatchScope();
         }
 
         /// <summary>
@@ -1197,6 +1246,12 @@ namespace Emby.Server.Implementations.Library
 
             ItemRepository.UpdateInheritedValues(cancellationToken);
 
+            // S2 验收：条目缓存命中率报告（每轮扫描时点；容量/TTL 可用
+            // OPENMEDIA_ITEM_CACHE_SIZE / OPENMEDIA_ITEM_CACHE_TTL_SECONDS 调）
+            var cacheStats = _libraryItemsCache.GetStats();
+            _logger.Info("Item cache stats: {0} entries, hit rate {1}% ({2} hits / {3} misses, {4} capacity evictions, {5} TTL expiries)",
+                new object[] { cacheStats.Count, Math.Round(cacheStats.HitRatePercent, 1), cacheStats.Hits, cacheStats.Misses, cacheStats.CapacityEvictions, cacheStats.TtlExpiries });
+
             progress.Report(100);
         }
 
@@ -1293,7 +1348,7 @@ namespace Emby.Server.Implementations.Library
 
             BaseItem item;
 
-            if (LibraryItemsCache.TryGetValue(id, out item))
+            if (LibraryItemsCache.TryGet(id, out item))
             {
                 return item;
             }
@@ -2019,6 +2074,27 @@ namespace Emby.Server.Implementations.Library
         }
 
         public List<Folder> GetCollectionFolders(BaseItem item)
+        {
+            // 水合批量化：DTO 批量序列化时逐条调用（DtoService 1293 行）——父链爬升
+            // 中 GetParent 对 miss 父条目逐个 DB 回源（ancestor_ids ×18/请求）。
+            // 请求级缓存（item.Id → 结果）：同条目重复解析只算一次。
+            var batchCache = _collectionFoldersBatchCache.Value;
+            if (batchCache != null && batchCache.TryGetValue(item.Id, out var cachedFolders))
+            {
+                return cachedFolders;
+            }
+
+            var result = GetCollectionFoldersUncached(item);
+
+            if (batchCache != null)
+            {
+                batchCache[item.Id] = result;
+            }
+
+            return result;
+        }
+
+        private List<Folder> GetCollectionFoldersUncached(BaseItem item)
         {
             while (item != null)
             {
@@ -3175,8 +3251,7 @@ namespace Emby.Server.Implementations.Library
                 {
                     _logger.ErrorException("Error deleting collection folder item for {0}", ex, name);
                 }
-                BaseItem removedFromCache;
-                _libraryItemsCache.TryRemove(folderId, out removedFromCache);
+                _libraryItemsCache.Remove(folderId);
 
                 if (refreshLibrary)
                 {
