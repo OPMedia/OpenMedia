@@ -977,9 +977,10 @@ namespace Emby.Server.PgData
             }
 
             // 相似度/搜索评分列（旧 SimilarityScore/SearchScore；PG ORDER BY 可引用输出别名）
+            // P2：similarity_score 含 sim.match_count 引用，调用方 FROM 必须拼 GetSimilarityJoinText
             if (query != null && query.SimilarTo != null)
             {
-                columns.Add(GetSimilarityScoreExpression() + " AS similarity_score");
+                columns.Add(GetSimilarityScoreExpressionFull() + " AS similarity_score");
             }
 
             if (query != null && !string.IsNullOrEmpty(query.SearchTerm))
