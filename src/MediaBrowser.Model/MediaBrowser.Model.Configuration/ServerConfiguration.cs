@@ -21,7 +21,11 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public bool EnableHttps { get; set; }
 
-	public bool EnableNormalizedItemByNameIds { get; set; }
+	/// <summary>
+	/// ByName 条目 GUID 键是否统一小写（T4.10 定案：默认 true，消除配置 false 窗口期
+	/// 产生原大小写键 divergent GUID 的同名重复行；既有小写键行 GUID 不受影响）。
+	/// </summary>
+	public bool EnableNormalizedItemByNameIds { get; set; } = true;
 
 	public string CertificatePath { get; set; }
 
