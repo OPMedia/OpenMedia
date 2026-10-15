@@ -10,47 +10,43 @@ T2.3 负载测试（k6 替代：Python stdlib 实现，无第三方依赖）
 指标：P50/P95/P99、错误率、吞吐。输出 tests/perf/results/load-<ts>.json
 """
 import json, time, threading, statistics, uuid, sys, os
-import urllib.request, urllib.error
+import http.client as hc
 from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from keepalive import make_client
 
 BASE = 'http://127.0.0.1:8096/emby'
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
 
+_ka = make_client(BASE, timeout=30)
+
 def http(method, url, headers=None, body=None, timeout=30):
-    req = urllib.request.Request(url, method=method)
-    for k, v in (headers or {}).items():
-        req.add_header(k, v)
+    """v2 keep-alive：每线程一条持久连接（消除连接层伪影）"""
+    path = url[len(BASE):] if url.startswith(BASE) else url
     data = json.dumps(body).encode() if body is not None else None
-    t0 = time.perf_counter()
-    try:
-        with urllib.request.urlopen(req, data=data, timeout=timeout) as resp:
-            resp.read()
-            code = resp.status
-    except urllib.error.HTTPError as e:
-        e.read()
-        code = e.code
-    except Exception:
-        code = -1
-    return (time.perf_counter() - t0) * 1000.0, code
+    hdrs = dict(headers or {})
+    if data is not None:
+        hdrs['Content-Type'] = hdrs.get('Content-Type', 'application/json')
+    code, ms, _ = _ka.request(method, path, hdrs, data)
+    return ms, code
 
 def authenticate():
-    ms, code = http('POST', BASE + '/Users/AuthenticateByName',
-                    {'Content-Type': 'application/json',
-                     'X-Emby-Authorization': 'MediaBrowser Client="PerfTest", Device="LoadGen", DeviceId="perf-01", Version="4.1.1.0"'},
-                    {'Username': 'admin', 'Pw': ''})
+    auth_hdrs = {'Content-Type': 'application/json',
+                 'X-Emby-Authorization': 'MediaBrowser Client="PerfTest", Device="LoadGen", DeviceId="perf-01", Version="4.1.1.0"'}
+    ms, code = http('POST', BASE + '/Users/AuthenticateByName', auth_hdrs, {'Username': 'admin', 'Pw': ''})
     if code != 200:
-        ms, code = http('POST', BASE + '/Users/AuthenticateByName',
-                        {'Content-Type': 'application/json',
-                         'X-Emby-Authorization': 'MediaBrowser Client="PerfTest", Device="LoadGen", DeviceId="perf-01", Version="4.1.1.0"'},
-                        {'Username': 'admin', 'Pw': 'admin'})
+        ms, code = http('POST', BASE + '/Users/AuthenticateByName', auth_hdrs, {'Username': 'admin', 'Pw': 'admin'})
     if code != 200:
         print('auth failed', code); sys.exit(1)
-    # token: re-auth with read of body
-    req = urllib.request.Request(BASE + '/Users/AuthenticateByName', method='POST')
-    req.add_header('Content-Type', 'application/json')
-    req.add_header('X-Emby-Authorization', 'MediaBrowser Client="PerfTest", Device="LoadGen", DeviceId="perf-01", Version="4.1.1.0"')
-    with urllib.request.urlopen(req, json.dumps({'Username': 'admin', 'Pw': ''}).encode(), timeout=30) as r:
-        tok = json.loads(r.read().decode())['AccessToken']
+    # token: 再发一次读 body（认证幂等）
+    conn = hc.HTTPConnection('127.0.0.1', 8096, timeout=30)
+    try:
+        conn.request('POST', '/emby/Users/AuthenticateByName', body=json.dumps({'Username': 'admin', 'Pw': ''}), headers=auth_hdrs)
+        resp = conn.getresponse()
+        tok = json.loads(resp.read().decode())['AccessToken']
+    finally:
+        conn.close()
     return tok
 
 def pct(lat, p):
