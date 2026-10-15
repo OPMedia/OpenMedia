@@ -1310,35 +1310,91 @@ public class Folder : BaseItem
 		return !IsPlayed(user);
 	}
 
+	// 水合批量化（L1 残余修复）：Folder 的 UserData 计数（RecursiveItemCount +
+	// UnplayedItemCount）在 DTO 批量序列化时逐 Folder 触发两个完整查询
+	// （DISTINCT ON 包装，实测 7 Folder × 2 = 14 次/请求，占 L1 语句数 93%）。
+	// 跨请求 TTL 缓存（user+folder 维度）：用户播放后徽章 30s 内延迟更新，可接受。
+	private static readonly Dictionary<string, Tuple<int, int, DateTime>> _folderUserDataCountsCache =
+		new Dictionary<string, Tuple<int, int, DateTime>>(StringComparer.OrdinalIgnoreCase);
+	private static readonly object _folderUserDataCountsCacheLock = new object();
+	private static readonly TimeSpan FolderUserDataCountsCacheTtl = TimeSpan.FromSeconds(30);
+
 	public override void FillUserDataDtoValues(UserItemDataDto dto, UserItemData userData, BaseItemDto itemDto, User user, DtoOptions options)
 	{
 		if (!SupportsUserDataFromChildren)
 		{
 			return;
 		}
+
+		var cacheKey = user == null ? Id.ToString("N") : user.Id.ToString("N") + "|" + Id.ToString("N");
+		Tuple<int, int, DateTime> cached = null;
+
+		lock (_folderUserDataCountsCacheLock)
+		{
+			if (_folderUserDataCountsCache.TryGetValue(cacheKey, out cached)
+				&& (DateTime.UtcNow - cached.Item3) < FolderUserDataCountsCacheTtl)
+			{
+				// 命中：直接用缓存的两个计数，跳过两次完整查询
+			}
+			else
+			{
+				cached = null;
+			}
+		}
+
+		int recursiveCount;
+		int unplayedCount;
+
+		if (cached != null)
+		{
+			recursiveCount = cached.Item1;
+			unplayedCount = cached.Item2;
+		}
+		else
+		{
+			recursiveCount = GetRecursiveChildCount(user);
+
+			if (!SupportsPlayedStatus)
+			{
+				if (itemDto != null && options.ContainsField((ItemFields)26))
+				{
+					itemDto.RecursiveItemCount = recursiveCount;
+				}
+				return;
+			}
+
+			QueryResult<BaseItem> items = GetItems(new InternalItemsQuery(user)
+			{
+				Recursive = true,
+				IsFolder = false,
+				IsVirtualItem = false,
+				EnableTotalRecordCount = true,
+				Limit = 0,
+				IsPlayed = false,
+				DtoOptions = new DtoOptions(allFields: false)
+				{
+					EnableImages = false
+				}
+			});
+			unplayedCount = items.TotalRecordCount;
+
+			lock (_folderUserDataCountsCacheLock)
+			{
+				_folderUserDataCountsCache[cacheKey] = new Tuple<int, int, DateTime>(recursiveCount, unplayedCount, DateTime.UtcNow);
+			}
+		}
+
 		if (itemDto != null && options.ContainsField((ItemFields)26))
 		{
-			itemDto.RecursiveItemCount = GetRecursiveChildCount(user);
+			itemDto.RecursiveItemCount = recursiveCount;
 		}
 		if (!SupportsPlayedStatus)
 		{
 			return;
 		}
-		QueryResult<BaseItem> items = GetItems(new InternalItemsQuery(user)
-		{
-			Recursive = true,
-			IsFolder = false,
-			IsVirtualItem = false,
-			EnableTotalRecordCount = true,
-			Limit = 0,
-			IsPlayed = false,
-			DtoOptions = new DtoOptions(allFields: false)
-			{
-				EnableImages = false
-			}
-		});
-		double num = items.TotalRecordCount;
-		dto.UnplayedItemCount = items.TotalRecordCount;
+
+		double num = unplayedCount;
+		dto.UnplayedItemCount = unplayedCount;
 		if (itemDto != null && itemDto.RecursiveItemCount.HasValue)
 		{
 			if (itemDto.RecursiveItemCount.Value > 0)

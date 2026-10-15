@@ -2585,6 +2585,27 @@ namespace Emby.Server.PgData
             slowThreshold = 10;
 #endif
 
+            // 诊断开关：环境变量 OM_TRACE_ALL_QUERIES=1 时全量输出（水合批量化排障）。
+            // 注意：Start-Process 环境变量继承不可靠时可用 true 短路临时全开（测完移除）
+            if (Environment.GetEnvironmentVariable("OM_TRACE_ALL_QUERIES") == "1"
+                || Environment.GetEnvironmentVariable("OM_TRACE_ALL_QUERIES") == "true")
+            {
+                var sqlHead = commandText == null ? "" : (commandText.Length > 160 ? commandText.Substring(0, 160) : commandText);
+                // 调用栈摘要（跳过 System/PgItemRepository 帧，取业务帧）
+                var st = new System.Diagnostics.StackTrace(2, false);
+                var frames = new List<string>();
+                for (var i = 0; i < st.FrameCount && frames.Count < 5; i++)
+                {
+                    var m = st.GetFrame(i).GetMethod();
+                    if (m == null || m.DeclaringType == null) continue;
+                    var n = m.DeclaringType.Name + "." + m.Name;
+                    if (n.StartsWith("PgItemRepository")) continue;
+                    frames.Add(n);
+                }
+                Logger.Info("{2} query: {0}ms. SQL: {1} | CALL: {3}", Convert.ToInt32(elapsed), sqlHead, methodName, string.Join(" <- ", frames));
+                return;
+            }
+
             if (elapsed >= slowThreshold)
             {
                 Logger.Debug("{2} query time (slow): {0}ms. Query: {1}",
