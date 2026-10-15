@@ -1,4 +1,4 @@
-﻿using MediaBrowser.Common.Events;
+using MediaBrowser.Common.Events;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
@@ -110,6 +110,112 @@ namespace Emby.Server.Implementations.Session
             _mediaSourceManager = mediaSourceManager;
             _timerFactory = timerFactory;
             _deviceManager.DeviceOptionsUpdated += _deviceManager_DeviceOptionsUpdated;
+
+            // S4（scale-design §2 #2）：空闲会话清理 + 容量策略——10k 用户 × 多设备下
+            // _activeConnections 无清理则无界累积（每 SessionInfo 持 NowPlayingItem/
+            // TranscodingInfo/AdditionalUsers）。旧逻辑仅登出/显式结束时移除。
+            // 阈值默认 6h（OPENMEDIA_SESSION_IDLE_HOURS 可调）：任何 API 调用都会刷新
+            // LastActivityDate，超阈值 = 该设备确实离线；清理不登出用户（token 独立，
+            // 下次带 token 的请求经 LogSessionActivity 重建会话），仅重置会话态。
+            var idleHours = 6.0;
+            var envIdle = Environment.GetEnvironmentVariable("OPENMEDIA_SESSION_IDLE_HOURS");
+            if (!string.IsNullOrEmpty(envIdle))
+            {
+                double parsedIdle;
+                if (double.TryParse(envIdle, out parsedIdle) && parsedIdle > 0)
+                {
+                    idleHours = parsedIdle;
+                }
+            }
+            _idleSessionThreshold = TimeSpan.FromHours(idleHours);
+
+            _maxSessions = 50000;
+            var envMax = Environment.GetEnvironmentVariable("OPENMEDIA_SESSION_MAX");
+            if (!string.IsNullOrEmpty(envMax))
+            {
+                int parsedMax;
+                if (int.TryParse(envMax, out parsedMax) && parsedMax > 0)
+                {
+                    _maxSessions = parsedMax;
+                }
+            }
+
+            _sessionCleanupTimer = _timerFactory.Create(CleanupIdleSessions, null, TimeSpan.FromMinutes(_cleanupPeriodMinutes), TimeSpan.FromMinutes(_cleanupPeriodMinutes));
+        }
+
+        private readonly TimeSpan _idleSessionThreshold;
+        private readonly int _maxSessions;
+        private readonly ITimer _sessionCleanupTimer;
+        private readonly double _cleanupPeriodMinutes = GetCleanupPeriodMinutes();
+
+        private static double GetCleanupPeriodMinutes()
+        {
+            var period = 15.0;
+            var envPeriod = Environment.GetEnvironmentVariable("OPENMEDIA_SESSION_CLEANUP_MINUTES");
+            if (!string.IsNullOrEmpty(envPeriod))
+            {
+                double parsed;
+                if (double.TryParse(envPeriod, out parsed) && parsed > 0)
+                {
+                    period = parsed;
+                }
+            }
+            return period;
+        }
+
+        /// <summary>
+        /// 空闲会话清理（15min 周期）：超阈值且无播放、无活跃控制器的会话移除；
+        /// 容量超限时按 LastActivityDate 升序逐出最空闲者（活跃会话不受影响）。
+        /// </summary>
+        private void CleanupIdleSessions(object state)
+        {
+            try
+            {
+                var cutoff = DateTime.UtcNow - _idleSessionThreshold;
+                var victims = _activeConnections.Values
+                    .Where(i => i.LastActivityDate < cutoff
+                        && i.NowPlayingItem == null
+                        && !i.SessionControllers.Any(c => c.IsSessionActive))
+                    .ToList();
+
+                foreach (var session in victims)
+                {
+                    var key = GetSessionKey(session.Client, session.DeviceId);
+                    SessionInfo removed;
+                    if (_activeConnections.TryRemove(key, out removed))
+                    {
+                        _logger.Info("Removed idle session {0} (device {1}, last activity {2})", new object[] { session.Id, session.DeviceId, session.LastActivityDate });
+                        OnSessionEnded(session);
+                    }
+                }
+
+                // 容量策略：超上限逐出最空闲的无控制器会话（安全阀，正常靠空闲清理兜住）
+                if (_activeConnections.Count > _maxSessions)
+                {
+                    var overflow = _activeConnections.Count - _maxSessions;
+                    var evictable = _activeConnections.Values
+                        .Where(i => i.NowPlayingItem == null
+                            && !i.SessionControllers.Any(c => c.IsSessionActive))
+                        .OrderBy(i => i.LastActivityDate)
+                        .Take(overflow)
+                        .ToList();
+
+                    foreach (var session in evictable)
+                    {
+                        var key = GetSessionKey(session.Client, session.DeviceId);
+                        SessionInfo removed;
+                        if (_activeConnections.TryRemove(key, out removed))
+                        {
+                            _logger.Info("Evicted session {0} (device {1}) for capacity (count exceeded {2})", new object[] { session.Id, session.DeviceId, _maxSessions });
+                            OnSessionEnded(session);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error cleaning idle sessions", ex);
+            }
         }
 
         private void _deviceManager_DeviceOptionsUpdated(object sender, GenericEventArgs<Tuple<string, DeviceOptions>> e)
@@ -136,6 +242,11 @@ namespace Emby.Server.Implementations.Session
         {
             _disposed = true;
             _deviceManager.DeviceOptionsUpdated -= _deviceManager_DeviceOptionsUpdated;
+
+            if (_sessionCleanupTimer != null)
+            {
+                _sessionCleanupTimer.Dispose();
+            }
         }
 
         public void CheckDisposed()
