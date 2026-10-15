@@ -14,9 +14,11 @@ namespace Emby.Server.PgData
     {
         /// <summary>
         /// 默认连接串（方案 §5.1；可被 system.xml 的 Postgres 节点或 OPENMEDIA_PGCONN 环境变量覆盖）。
+        /// 端口 15432：2026-10-15 起本机安全软件屏蔽数据库端口（5432/5433/3306 回环全堵，高位端口正常），
+        /// PG 已迁移至 15432。若日后解除屏蔽可改回 5432。
         /// </summary>
         public const string DefaultConnectionString =
-            "Host=localhost;Port=5432;Database=openmedia;Username=postgres;Password=123456";
+            "Host=localhost;Port=15432;Database=openmedia;Username=postgres;Password=123456";
 
         /// <summary>
         /// 按连接串共享的 DataSource 缓存（NpgsqlDataSource 自带连接池，进程内只需一份）。
