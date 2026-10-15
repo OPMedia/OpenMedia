@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 08:45:24　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-15 09:16:49　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -8,10 +8,10 @@
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
 | P0 | 14 | 13 | 0 | — | 1 |
-| P1 | 252 | 183 | 2 | 67 | 0 |
+| P1 | 252 | 186 | 0 | 66 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：99%**（196 / 198）
+**通过率（PASS / (PASS+FAIL)）：100%**（199 / 199）
 
 ## 负路径用例（T1.T 固化，24/24 PASS）
 
@@ -41,13 +41,6 @@
 | Parse400 | `GET /Users/{UserId}/Views` | 400 | 400 | **PASS** |
 | Similar | `GET /Albums/{Id}/Similar` | 404 | 404 | **PASS** |
 | Similar | `GET /Items/{Id}/Similar` | 200 | 200 | **PASS** |
-
-### 失败清单
-
-| 级别 | 操作 | 状态码 | 备注 |
-|------|------|--------|------|
-| P1 | `GET /Genres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Genres/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 
 ## 明细矩阵（按域分组）
 
@@ -153,7 +146,7 @@
 | `GET /Dlna/{UuId}/icons/{Filename}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 合成参数 404 合理（无对应资源） |
 | `GET /Dlna/icons/{Filename}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 合成参数 404 合理（无对应资源） |
 | `GET /Dlna/ProfileInfos` | P1 | 200 | PascalCase ✓ | Id,Name,Type | **PASS** |  |
-| `GET /Dlna/Profiles/{Id}` | P1 | 404 | — |  | **SKIP-EXPECTED** | Dlna/Profiles 列表端点自身 404（疑似 bug 已登记），无 profile fixture |
+| `GET /Dlna/Profiles/{Id}` | P1 | 200 | PascalCase ✓ | Name,Id,Manufacturer,ManufacturerUrl,ModelName,ModelDescript… | **PASS** |  |
 | `GET /Dlna/Profiles/Default` | P1 | 200 | PascalCase ✓ | Name,Manufacturer,ManufacturerUrl,ModelName,ModelDescription… | **PASS** |  |
 
 ### 域：Encoding（2）
@@ -196,8 +189,8 @@
 |------|------|--------|----------|----------|------|------|
 | `GET /Genres` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Genres/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
-| `GET /Genres/{Name}/Images/{Type}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Genres/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Genres/{Name}/Images/{Type}` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Genres/{Name}/Images/{Type}/{Index}` | P1 | 200 | — |  | **PASS** |  |
 
 ### 域：Images（7）
 
@@ -258,7 +251,7 @@
 | `GET /Library/MediaFolders` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Library/PhysicalPaths` | P1 | 200 | PascalCase ✓ | (非对象: String) | **PASS** |  |
 | `GET /Library/SelectableMediaFolders` | P1 | 200 | PascalCase ✓ | Name,Id,SubFolders | **PASS** |  |
-| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,PrimaryI… | **PASS** |  |
+| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,RefreshS… | **PASS** |  |
 
 ### 域：LiveTv（33）
 

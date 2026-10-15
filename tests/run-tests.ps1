@@ -160,7 +160,7 @@ $provider = Get-FirstItem -Url "$ApiBase/LiveTv/ListingProviders"
 if ($provider) { $ctx.ListingProviderId = "$($provider.Id)" } else { $ctx.ListingProviderId = '' }
 $task = Get-FirstItem -Url "$ApiBase/ScheduledTasks?IsEnabled=true&Limit=1"
 if ($task) { $ctx.TaskId = "$($task.Id)" } else { $ctx.TaskId = '' }
-$dlnaProfile = Get-FirstItem -Url "$ApiBase/Dlna/Profiles"
+$dlnaProfile = Get-FirstItem -Url "$ApiBase/Dlna/ProfileInfos"
 if ($dlnaProfile) { $ctx.DlnaProfileId = "$($dlnaProfile.Id)" } else { $ctx.DlnaProfileId = '' }
 $ctx.MediaSourceId = $ctx.ItemId
 $movieFull = Get-FirstItem -Url "$ApiBase/Items?Recursive=true&IncludeItemTypes=Movie&Limit=1&Fields=Path"

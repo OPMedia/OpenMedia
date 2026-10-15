@@ -14401,8 +14401,7 @@
       "paramCount": 1,
       "responseSchema": "Dlna.DeviceProfile",
       "responseIsArray": false,
-      "requestSchema": "",
-      "expected404": "Dlna/Profiles 列表端点自身 404（疑似 bug 已登记），无 profile fixture"
+      "requestSchema": ""
     },
     {
       "id": "POST /Dlna/Profiles/{Id}",
