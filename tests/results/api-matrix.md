@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 08:41:39　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-15 08:45:24　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -8,10 +8,10 @@
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
 | P0 | 14 | 13 | 0 | — | 1 |
-| P1 | 252 | 179 | 6 | 67 | 0 |
+| P1 | 252 | 183 | 2 | 67 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：97%**（192 / 198）
+**通过率（PASS / (PASS+FAIL)）：99%**（196 / 198）
 
 ## 负路径用例（T1.T 固化，24/24 PASS）
 
@@ -46,12 +46,8 @@
 
 | 级别 | 操作 | 状态码 | 备注 |
 |------|------|--------|------|
-| P1 | `GET /Artists/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Genres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Studios/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Artists/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Genres/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Studios/{Name}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 
 ## 明细矩阵（按域分组）
 
@@ -69,8 +65,8 @@
 | `GET /Artists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/{Id}/Similar` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
-| `GET /Artists/{Name}/Images/{Type}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Artists/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Artists/{Name}/Images/{Type}` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Artists/{Name}/Images/{Type}/{Index}` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Artists/AlbumArtists` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/InstantMix` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Artists/Prefixes` | P1 | 200 | PascalCase ✓ | Name,Value | **PASS** |  |
@@ -456,8 +452,8 @@
 |------|------|--------|----------|----------|------|------|
 | `GET /Studios` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Studios/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
-| `GET /Studios/{Name}/Images/{Type}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
-| `GET /Studios/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
+| `GET /Studios/{Name}/Images/{Type}` | P1 | 200 | — |  | **PASS** |  |
+| `GET /Studios/{Name}/Images/{Type}/{Index}` | P1 | 200 | — |  | **PASS** |  |
 
 ### 域：SubtitleCodecs（1）
 
