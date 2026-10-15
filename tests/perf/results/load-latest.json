@@ -1,104 +1,105 @@
 {
-  "runAt": "2026-10-15 16:52:40",
+  "runAt": "2026-10-15 17:48:49",
   "tool": "python-stdlib-loadgen (k6 未安装的替代，等价口径)",
   "note": "每档时长 30s（设计值 60s，在线实例缩减，偏差已记录）",
-  "serverAliveAtEnd": true,
+  "serverAliveAtEnd": false,
   "scenarios": [
     {
       "label": "L1-Items分页-10rps",
-      "requests": 378,
-      "durationS": 30.3,
-      "rps": 12.5,
-      "p50Ms": 488.0,
-      "p95Ms": 3251.0,
-      "p99Ms": 4337.4,
-      "errorRate": 0.0,
+      "requests": 1700,
+      "durationS": 38.4,
+      "rps": 44.3,
+      "p50Ms": 83.0,
+      "p95Ms": 108.8,
+      "p99Ms": 163.2,
+      "errorRate": 0.59,
       "codes": {
-        "200": 378
+        "200": 1690,
+        "-1": 10
       }
     },
     {
       "label": "L1-Items分页-50rps",
-      "requests": 508,
-      "durationS": 41.8,
-      "rps": 12.2,
-      "p50Ms": 1244.3,
-      "p95Ms": 21016.5,
-      "p99Ms": 21033.6,
-      "errorRate": 6.3,
+      "requests": 3115,
+      "durationS": 48.1,
+      "rps": 64.8,
+      "p50Ms": 276.5,
+      "p95Ms": 419.9,
+      "p99Ms": 18927.7,
+      "errorRate": 1.03,
       "codes": {
-        "200": 476,
+        "200": 3083,
         "-1": 32
       }
     },
     {
       "label": "L1-Items分页-100rps",
-      "requests": 1223,
-      "durationS": 30.4,
-      "rps": 40.2,
-      "p50Ms": 782.9,
-      "p95Ms": 1075.4,
-      "p99Ms": 1205.7,
-      "errorRate": 0.0,
+      "requests": 775,
+      "durationS": 48.0,
+      "rps": 16.1,
+      "p50Ms": 277.6,
+      "p95Ms": 21026.1,
+      "p99Ms": 21042.2,
+      "errorRate": 8.26,
       "codes": {
-        "200": 1223
+        "200": 711,
+        "-1": 64
       }
     },
     {
       "label": "L1b-Ids批量-50rps",
-      "requests": 3040,
-      "durationS": 49.0,
-      "rps": 62.1,
-      "p50Ms": 70.4,
-      "p95Ms": 158.6,
-      "p99Ms": 21026.3,
-      "errorRate": 2.07,
+      "requests": 4383,
+      "durationS": 46.8,
+      "rps": 93.7,
+      "p50Ms": 33.5,
+      "p95Ms": 62.7,
+      "p99Ms": 21019.7,
+      "errorRate": 1.46,
       "codes": {
-        "200": 2977,
-        "-1": 63
+        "200": 4319,
+        "-1": 64
       }
     },
     {
       "label": "L2-扫描并发-50rps",
-      "requests": 1234,
-      "durationS": 33.3,
-      "rps": 37.1,
-      "p50Ms": 480.4,
-      "p95Ms": 1145.7,
-      "p99Ms": 21032.5,
-      "errorRate": 1.05,
+      "requests": 863,
+      "durationS": 30.2,
+      "rps": 28.6,
+      "p50Ms": 350.5,
+      "p95Ms": 552.6,
+      "p99Ms": 21034.4,
+      "errorRate": 3.71,
       "codes": {
-        "200": 1221,
-        "-1": 13
+        "200": 831,
+        "-1": 32
       }
     },
     {
       "label": "L3-静态流-并发10",
-      "requests": 2514,
-      "durationS": 44.4,
-      "rps": 56.7,
-      "p50Ms": 8.7,
-      "p95Ms": 13.0,
-      "p99Ms": 23.5,
+      "requests": 1768,
+      "durationS": 44.1,
+      "rps": 40.1,
+      "p50Ms": 10.2,
+      "p95Ms": 18.0,
+      "p99Ms": 21021.1,
       "errorRate": 100.0,
       "codes": {
-        "206": 2494,
+        "206": 1748,
         "-1": 20
       }
     },
     {
       "label": "L4-认证-并发20",
-      "requests": 3087,
-      "durationS": 48.3,
-      "rps": 63.9,
-      "p50Ms": 37.5,
-      "p95Ms": 94.2,
-      "p99Ms": 21018.0,
-      "errorRate": 1.3,
+      "requests": 3000,
+      "durationS": 47.9,
+      "rps": 62.6,
+      "p50Ms": 35.2,
+      "p95Ms": 79.3,
+      "p99Ms": 21018.5,
+      "errorRate": 1.33,
       "codes": {
-        "200": 3047,
-        "-1": 39,
-        "500": 1
+        "200": 2960,
+        "-1": 40
       }
     }
   ]

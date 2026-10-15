@@ -1,0 +1,106 @@
+{
+  "runAt": "2026-10-15 17:48:49",
+  "tool": "python-stdlib-loadgen (k6 未安装的替代，等价口径)",
+  "note": "每档时长 30s（设计值 60s，在线实例缩减，偏差已记录）",
+  "serverAliveAtEnd": false,
+  "scenarios": [
+    {
+      "label": "L1-Items分页-10rps",
+      "requests": 1700,
+      "durationS": 38.4,
+      "rps": 44.3,
+      "p50Ms": 83.0,
+      "p95Ms": 108.8,
+      "p99Ms": 163.2,
+      "errorRate": 0.59,
+      "codes": {
+        "200": 1690,
+        "-1": 10
+      }
+    },
+    {
+      "label": "L1-Items分页-50rps",
+      "requests": 3115,
+      "durationS": 48.1,
+      "rps": 64.8,
+      "p50Ms": 276.5,
+      "p95Ms": 419.9,
+      "p99Ms": 18927.7,
+      "errorRate": 1.03,
+      "codes": {
+        "200": 3083,
+        "-1": 32
+      }
+    },
+    {
+      "label": "L1-Items分页-100rps",
+      "requests": 775,
+      "durationS": 48.0,
+      "rps": 16.1,
+      "p50Ms": 277.6,
+      "p95Ms": 21026.1,
+      "p99Ms": 21042.2,
+      "errorRate": 8.26,
+      "codes": {
+        "200": 711,
+        "-1": 64
+      }
+    },
+    {
+      "label": "L1b-Ids批量-50rps",
+      "requests": 4383,
+      "durationS": 46.8,
+      "rps": 93.7,
+      "p50Ms": 33.5,
+      "p95Ms": 62.7,
+      "p99Ms": 21019.7,
+      "errorRate": 1.46,
+      "codes": {
+        "200": 4319,
+        "-1": 64
+      }
+    },
+    {
+      "label": "L2-扫描并发-50rps",
+      "requests": 863,
+      "durationS": 30.2,
+      "rps": 28.6,
+      "p50Ms": 350.5,
+      "p95Ms": 552.6,
+      "p99Ms": 21034.4,
+      "errorRate": 3.71,
+      "codes": {
+        "200": 831,
+        "-1": 32
+      }
+    },
+    {
+      "label": "L3-静态流-并发10",
+      "requests": 1768,
+      "durationS": 44.1,
+      "rps": 40.1,
+      "p50Ms": 10.2,
+      "p95Ms": 18.0,
+      "p99Ms": 21021.1,
+      "errorRate": 100.0,
+      "codes": {
+        "206": 1748,
+        "-1": 20
+      }
+    },
+    {
+      "label": "L4-认证-并发20",
+      "requests": 3000,
+      "durationS": 47.9,
+      "rps": 62.6,
+      "p50Ms": 35.2,
+      "p95Ms": 79.3,
+      "p99Ms": 21018.5,
+      "errorRate": 1.33,
+      "codes": {
+        "200": 2960,
+        "-1": 40
+      }
+    }
+  ]
+}

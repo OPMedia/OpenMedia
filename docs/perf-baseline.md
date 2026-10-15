@@ -142,3 +142,27 @@ pg_stat_statements 补测（待 Chief 排期管理员重启 PG）：conf 设 `sh
 - **21s 停顿定性**：连接层连锁——慢响应 × 持续负载 → urllib 每请求新建连接 → TIME_WAIT/临时端口耗尽 → TCP 连接超时（~21s 是 Windows SYN 重传窗口）；主因仍是每请求延迟
 - **L2 级联污染**：load-test.py 的 L2 触发 /Library/Refresh 后，扫描+元数据刷新（TMDb/MBZ 网络 + T4.8 最多 ~9s 重试）**在测试结束后仍后台运行数分钟**，污染后续 L3/L4 与背靠背轮次（L4 的 500/5.2s 认证即此因）。**建议 load-test.py 把 L2 挪到最后或独立跑**
 - Chief 归因修正：openmedia_scale 库尚不存在（D2 灌库未开始）；16:25 窗口的污染源是 D3 内存审计（8099 共享 PG，672 转码+10 扫描）；持续存在的停顿是服务器侧连锁
+
+### 7.5 水合修复后正式数字（17:45，PID 22796，a05156ce6b 部署后，PG 零活动）
+
+| 指标 | 基线（05:14） | 回归峰值 | **修复后** | 结论 |
+|---|---|---|---|---|
+| L1 用户分页 P50@10rps | 40.8ms | 488ms | **83ms** | 修复收回 ~83%（残余 2× 见下） |
+| L1 用户分页 P95@10rps | 57ms | 3251ms | **109ms** | ✓ |
+| L1b Ids P50/P95 | 340/657ms | — | **33.5/62.7ms** | 历史最佳 |
+| L3 静态流 P95 | 12.7ms | — | 18ms | ✓ |
+| L4 认证 P95 | 221ms | — | 79ms | ✓ |
+| 单请求 PG 语句数（N+1 口径） | 未测 | **464** | **~201** | GetArtist TTL 缓存生效；剩余 N+1 见下 |
+| 单请求延迟（Limit=30） | ~40ms | 215ms | **60-75ms** | ✓ |
+
+**残余 N+1（每请求 ~201 条语句，给 Developer 下一轮批量化）**：count(DISTINCT) ×21、
+string_agg(item_extradata) ×27、ancestor_ids ×18、guid 查找 ×18、series/parent 相关子查询 ×15+15、
+水合 SELECT ×9、DISTINCT ON ×6、token ×10。批量化后 L1 预期回到 ~40ms 基线。
+**50-100 RPS 档的 21s P99 为负载发生器连接层伪影**（urllib 每请求新建连接 + TIME_WAIT 耗尽），
+10 RPS 档干净；后续换 keep-alive 会话池的发生器可消除。
+
+### 7.6 S7 准备（10k 用户压测）
+
+`tests/perf/s7-user-load.py` 已入库：U1 多用户认证阶梯（100/500/2000）+ U2 用户隔离列表查询。
+前置：整份复制部署目录起 scale 实例 + `OPENMEDIA_PGCONN=...Database=openmedia_scale`（用户
+scale-user-00001..10000，空密码，user_datas 1M 就绪）。跑法：`python tests/perf/s7-user-load.py 8098`。
