@@ -323,6 +323,9 @@ namespace Emby.Server.PgData
         /// 列表核心字段全在扁平/聚合列（Name/Images/ProviderIds/Genres/Studios/Tags/
         /// Artists/排序字段）。需要任一 data 独有字段时全量水合，否则列表路径跳过
         /// data 反序列化（S6 实测水合主成本 0.37-1.56ms/条，预期 2-4×）。
+        /// 清单口径＝"data JSONB 独有且 DTO 可读"的字段集：Overview/People/Taglines/Settings/RemoteTrailers。
+        /// 审计结论（Reviewer 核过）：Chapters 走 chapters 表、MediaSources 运行时计算、ExternalUrls DTO 现算、
+        /// SeriesStudio 不依赖 data JSONB——partial 下安全，无需进本清单。
         /// </summary>
         private static bool RequiresFullHydration(InternalItemsQuery query)
         {
@@ -342,6 +345,7 @@ namespace Emby.Server.PgData
                     case ItemFields.People:
                     case ItemFields.Taglines:
                     case ItemFields.Settings:
+                    case ItemFields.RemoteTrailers:
                         return true;
                 }
             }
