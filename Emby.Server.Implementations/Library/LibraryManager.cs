@@ -946,9 +946,40 @@ namespace Emby.Server.Implementations.Library
             return GetArtist(name, new DtoOptions(true));
         }
 
+        // 水合回归修复（perf-baseline §7）：DtoService 序列化 Audio/Album DTO 时对每个
+        // 艺人名逐个调 GetArtist——每次一个 DB 往返 + 水合（实测 ~4.5ms/次），列表页
+        // N+1：9 Audio × 3.5 艺人 = 31 次往返（Audio 13ms/条 vs Episode 2.5ms/条，
+        // Limit 50 数学吻合 363ms）。基线 40.8ms 时库无音乐条目，非部署批次回归。
+        // 跨请求 TTL 缓存：艺人条目变更低频，30s 兜底足够；DTO 只读 Name/Id，
+        // 共享实例安全。
+        private static readonly Dictionary<string, Tuple<MusicArtist, DateTime>> _artistNameCache =
+            new Dictionary<string, Tuple<MusicArtist, DateTime>>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object _artistNameCacheLock = new object();
+        private static readonly TimeSpan ArtistNameCacheTtl = TimeSpan.FromSeconds(30);
+
         public MusicArtist GetArtist(string name, DtoOptions options)
         {
-            return CreateItemByName<MusicArtist>(MusicArtist.GetPath, name, options);
+            lock (_artistNameCacheLock)
+            {
+                Tuple<MusicArtist, DateTime> cached;
+                if (_artistNameCache.TryGetValue(name, out cached)
+                    && (DateTime.UtcNow - cached.Item2) < ArtistNameCacheTtl)
+                {
+                    return cached.Item1;
+                }
+            }
+
+            var artist = CreateItemByName<MusicArtist>(MusicArtist.GetPath, name, options);
+
+            if (artist != null)
+            {
+                lock (_artistNameCacheLock)
+                {
+                    _artistNameCache[name] = new Tuple<MusicArtist, DateTime>(artist, DateTime.UtcNow);
+                }
+            }
+
+            return artist;
         }
 
         private T CreateItemByName<T>(Func<string, string> getPathFn, string name, DtoOptions options)
