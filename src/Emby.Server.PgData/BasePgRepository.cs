@@ -13,7 +13,7 @@ namespace Emby.Server.PgData
     public abstract class BasePgRepository : IDisposable
     {
         /// <summary>
-        /// 默认连接串（方案 §5.1；可被 system.xml 的 Postgres 节点或 OPENMEDIA_PGCONN 环境变量覆盖）。
+        /// 默认连接串（方案 §5.1；可被 OPENMEDIA_PGCONN 环境变量覆盖——ApplicationHost.GetPostgresConnectionString）。
         /// 端口 15432：2026-10-15 起本机安全软件屏蔽数据库端口（5432/5433/3306 回环全堵，高位端口正常），
         /// PG 已迁移至 15432。若日后解除屏蔽可改回 5432。
         /// </summary>

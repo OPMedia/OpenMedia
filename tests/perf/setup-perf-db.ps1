@@ -1,11 +1,11 @@
-﻿# ============================================================
+# ============================================================
 # T2.1 性能审计独立库搭建（openmedia_perf）
 # 幂等：drop 若存在 → 重建 → schema → fixture-10k.sql
 # 严禁指向共享库 openmedia（R2）；连接串与 BasePgRepository.DefaultConnectionString 一致
 # ============================================================
 param(
     [string]$PgHost = 'localhost',
-    [int]$PgPort = 5432,
+    [int]$PgPort = 15432,
     [string]$PgUser = 'postgres',
     [string]$PgPassword = '123456',
     [string]$PerfDb = 'openmedia_perf'
