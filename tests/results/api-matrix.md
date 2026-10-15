@@ -1,7 +1,7 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 16:25:44　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
-> 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
+> 运行时间：2026-10-15 22:00:27　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c40cea18fc9c413b93aca7bad1a80d92（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
 
@@ -226,9 +226,9 @@
 | `GET /Items/{Id}/ExternalIdInfos` | P1 | 200 | PascalCase ✓ | Name,Key,UrlFormatString | **PASS** |  |
 | `GET /Items/{Id}/File` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Items/{Id}/Images` | P0 | 200 | PascalCase ✓ | ImageType,Path,Height,Width,Size | **PASS** |  |
-| `GET /Items/{Id}/Images/{Type}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
-| `GET /Items/{Id}/Images/{Type}/{Index}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
-| `GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
+| `GET /Items/{Id}/Images/{Type}` | P0 | 200 | — |  | **PASS** | image/jpeg, 66556B |
+| `GET /Items/{Id}/Images/{Type}/{Index}` | P0 | 200 | — |  | **PASS** | image/jpeg, 66556B |
+| `GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}` | P0 | 200 | — |  | **PASS** | image/jpeg, 23149B |
 | `GET /Items/{Id}/InstantMix` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Items/{Id}/PlaybackInfo` | P1 | 200 | PascalCase ✓ | MediaSources,PlaySessionId | **PASS** |  |
 | `GET /Items/{Id}/RemoteImages` | P1 | 200 | PascalCase ✓ | Images,TotalRecordCount,Providers | **PASS** |  |
@@ -493,7 +493,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /System/ActivityLog/Entries` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
+| `GET /System/ActivityLog/Entries` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /System/Configuration` | P1 | 200 | PascalCase ✓ | EnableUPnP,PublicPort,PublicHttpsPort,HttpServerPortNumber,H… | **PASS** |  |
 | `GET /System/Configuration/{Key}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 合成参数 404 合理（无对应资源） |
 | `GET /System/Endpoint` | P1 | 200 | PascalCase ✓ | IsLocal,IsInNetwork | **PASS** |  |

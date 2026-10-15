@@ -1,0 +1,62 @@
+{
+  "runAt": "2026-10-15 22:01:31",
+  "target": "http://127.0.0.1:8098/emby",
+  "note": "S7 规模化用户压测（scale-design §S7）；前置=scale 实例 + openmedia_scale 库",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "U1-认证-100用户",
+      "requests": 100,
+      "durationS": 0.4,
+      "rps": 250.5,
+      "p50Ms": 191.2,
+      "p95Ms": 377.8,
+      "p99Ms": 388.4,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 100
+      }
+    },
+    {
+      "label": "U1-认证-500用户",
+      "requests": 500,
+      "durationS": 0.7,
+      "rps": 712.0,
+      "p50Ms": 175.5,
+      "p95Ms": 269.0,
+      "p99Ms": 298.0,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 500
+      }
+    },
+    {
+      "label": "U1-认证-2000用户",
+      "requests": 2000,
+      "durationS": 22.4,
+      "rps": 89.4,
+      "p50Ms": 267.7,
+      "p95Ms": 21042.3,
+      "p99Ms": 21047.5,
+      "errorRate": 12.55,
+      "codes": {
+        "200": 1749,
+        "-1": 251
+      }
+    },
+    {
+      "label": "U2-用户列表-500用户×5次",
+      "requests": 2500,
+      "durationS": 27.7,
+      "rps": 90.1,
+      "p50Ms": 1115.3,
+      "p95Ms": 21041.5,
+      "p99Ms": 21068.7,
+      "errorRate": 10.16,
+      "codes": {
+        "200": 2246,
+        "-1": 254
+      }
+    }
+  ]
+}

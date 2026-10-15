@@ -1,6 +1,6 @@
 ﻿# OpenMedia JSON 契约抽查报告
 
-> 运行时间：2026-10-15 16:24:50　基址：http://localhost:8096/emby
+> 运行时间：2026-10-15 22:00:29　基址：http://localhost:8096/emby
 
 **结果：PASS 16 / FAIL 2 / SKIP 0（共 18）**
 

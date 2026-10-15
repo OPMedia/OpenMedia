@@ -1,11 +1,11 @@
 ﻿{
-    "runAt":  "2026-10-15 16:25:44",
+    "runAt":  "2026-10-15 22:00:27",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
     "authMode":  "已认证（admin/空密码回退）",
     "context":  {
                     "UserId":  "ac49142474fd4c49b85427f29fc4ba9b",
-                    "ItemId":  "c3f6962891668fc8365e3dfaa24bb3ea",
+                    "ItemId":  "c40cea18fc9c413b93aca7bad1a80d92",
                     "HasRealItem":  true,
                     "PluginId":  "",
                     "SessionId":  "29e9e0a447d57a2a7821b45e79ba36ed"
@@ -35,7 +35,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  9,
+                                "elapsedMs":  7,
                                 "bodySnippet":  "LiveTv channel with Id ffffffffffffffffffffffffffffffff not found",
                                 "error":  ""
                             },
@@ -47,7 +47,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  7,
+                                "elapsedMs":  8,
                                 "bodySnippet":  "LiveTv recording with Id ffffffffffffffffffffffffffffffff not found",
                                 "error":  ""
                             },
@@ -107,7 +107,7 @@
                                 "expect":  "200",
                                 "status":  200,
                                 "verdict":  "PASS",
-                                "elapsedMs":  15,
+                                "elapsedMs":  14,
                                 "bodySnippet":  "{\"Items\":[{\"Name\":\"Recordings\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"79a2726d3c50e769a8af1e4184e4fccf\",\"Et…",
                                 "error":  ""
                             },
@@ -119,7 +119,7 @@
                                 "expect":  "404/400",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  0,
+                                "elapsedMs":  1,
                                 "bodySnippet":  "Live stream file with Id ffffffffffffffffffffffffffffffff not found",
                                 "error":  ""
                             },
@@ -179,7 +179,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  4,
+                                "elapsedMs":  3,
                                 "bodySnippet":  "Plugin with Id ffffffffffffffffffffffffffffffff not found",
                                 "error":  ""
                             },
@@ -203,7 +203,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  2,
+                                "elapsedMs":  3,
                                 "bodySnippet":  "Log file ghost.log not found",
                                 "error":  ""
                             },
@@ -223,24 +223,24 @@
                                 "family":  "Playlists",
                                 "op":  "GET /Playlists/{Id}/Items",
                                 "method":  "GET",
-                                "path":  "/Playlists/c3f6962891668fc8365e3dfaa24bb3ea/Items",
+                                "path":  "/Playlists/c40cea18fc9c413b93aca7bad1a80d92/Items",
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
                                 "elapsedMs":  2,
-                                "bodySnippet":  "Playlist with Id c3f69628-9166-8fc8-365e-3dfaa24bb3ea not found",
+                                "bodySnippet":  "Playlist with Id c40cea18-fc9c-413b-93ac-a7bad1a80d92 not found",
                                 "error":  ""
                             },
                             {
                                 "family":  "Playlists",
                                 "op":  "GET /Playlists/{Id}/InstantMix",
                                 "method":  "GET",
-                                "path":  "/Playlists/c3f6962891668fc8365e3dfaa24bb3ea/InstantMix",
+                                "path":  "/Playlists/c40cea18fc9c413b93aca7bad1a80d92/InstantMix",
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
                                 "elapsedMs":  2,
-                                "bodySnippet":  "Playlist with Id c3f6962891668fc8365e3dfaa24bb3ea not found",
+                                "bodySnippet":  "Playlist with Id c40cea18fc9c413b93aca7bad1a80d92 not found",
                                 "error":  ""
                             },
                             {
@@ -263,7 +263,7 @@
                                 "expect":  "400",
                                 "status":  400,
                                 "verdict":  "PASS",
-                                "elapsedMs":  1,
+                                "elapsedMs":  0,
                                 "bodySnippet":  "Invalid ImageUrl:",
                                 "error":  ""
                             },
@@ -271,7 +271,7 @@
                                 "family":  "Parse400",
                                 "op":  "GET /Videos/{Id}/index.bif",
                                 "method":  "GET",
-                                "path":  "/Videos/c3f6962891668fc8365e3dfaa24bb3ea/index.bif?Width=test",
+                                "path":  "/Videos/c40cea18fc9c413b93aca7bad1a80d92/index.bif?Width=test",
                                 "expect":  "400",
                                 "status":  400,
                                 "verdict":  "PASS",
@@ -287,7 +287,7 @@
                                 "expect":  "400",
                                 "status":  400,
                                 "verdict":  "PASS",
-                                "elapsedMs":  1,
+                                "elapsedMs":  0,
                                 "bodySnippet":  "The input string \u0027test\u0027 was not in a correct format.",
                                 "error":  ""
                             },
@@ -295,24 +295,24 @@
                                 "family":  "Similar",
                                 "op":  "GET /Albums/{Id}/Similar",
                                 "method":  "GET",
-                                "path":  "/Albums/c3f6962891668fc8365e3dfaa24bb3ea/Similar",
+                                "path":  "/Albums/c40cea18fc9c413b93aca7bad1a80d92/Similar",
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
                                 "elapsedMs":  2,
-                                "bodySnippet":  "Album with Id c3f6962891668fc8365e3dfaa24bb3ea not found",
+                                "bodySnippet":  "Album with Id c40cea18fc9c413b93aca7bad1a80d92 not found",
                                 "error":  ""
                             },
                             {
                                 "family":  "Similar",
                                 "op":  "GET /Items/{Id}/Similar",
                                 "method":  "GET",
-                                "path":  "/Items/c3f6962891668fc8365e3dfaa24bb3ea/Similar?UserId=ac49142474fd4c49b85427f29fc4ba9b",
+                                "path":  "/Items/c40cea18fc9c413b93aca7bad1a80d92/Similar?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                                 "expect":  "200",
                                 "status":  200,
                                 "verdict":  "PASS",
-                                "elapsedMs":  20,
-                                "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Contai…",
+                                "elapsedMs":  15,
+                                "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Contai…",
                                 "error":  ""
                             },
                             {
@@ -323,7 +323,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  20,
+                                "elapsedMs":  17,
                                 "bodySnippet":  "Artist ghost-name-xyz not found",
                                 "error":  ""
                             },
@@ -335,7 +335,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  18,
+                                "elapsedMs":  16,
                                 "bodySnippet":  "Genre ghost-name-xyz not found",
                                 "error":  ""
                             },
@@ -395,7 +395,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  7,
+                                "elapsedMs":  5,
                                 "bodySnippet":  "Item ffffffffffffffffffffffffffffffff not found.",
                                 "error":  ""
                             },
@@ -407,7 +407,7 @@
                                 "expect":  "404",
                                 "status":  404,
                                 "verdict":  "PASS",
-                                "elapsedMs":  9,
+                                "elapsedMs":  8,
                                 "bodySnippet":  "Item ffffffffffffffffffffffffffffffff not found",
                                 "error":  ""
                             },
@@ -447,7 +447,7 @@
                         "url":  "http://localhost:8096/emby/Artists",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  8,
+                        "elapsedMs":  10,
                         "bodyBytes":  1057,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -468,7 +468,7 @@
                         "url":  "http://localhost:8096/emby/AudioCodecs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  75,
+                        "elapsedMs":  77,
                         "bodyBytes":  78,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -510,7 +510,7 @@
                         "url":  "http://localhost:8096/emby/Containers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  17,
+                        "elapsedMs":  15,
                         "bodyBytes":  70,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -531,8 +531,8 @@
                         "url":  "http://localhost:8096/emby/Devices",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  176,
-                        "bodyBytes":  1108958,
+                        "elapsedMs":  318,
+                        "bodyBytes":  2612858,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -552,7 +552,7 @@
                         "url":  "http://localhost:8096/emby/GameGenres",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  9,
+                        "elapsedMs":  8,
                         "bodyBytes":  345,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -573,7 +573,7 @@
                         "url":  "http://localhost:8096/emby/Genres",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  11,
+                        "elapsedMs":  8,
                         "bodyBytes":  2107,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -594,7 +594,7 @@
                         "url":  "http://localhost:8096/emby/Items?Recursive=true\u0026Limit=4",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  44,
+                        "elapsedMs":  33,
                         "bodyBytes":  1171,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -615,7 +615,7 @@
                         "url":  "http://localhost:8096/emby/MusicGenres",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  8,
+                        "elapsedMs":  9,
                         "bodyBytes":  662,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -699,7 +699,7 @@
                         "url":  "http://localhost:8096/emby/Packages",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  8,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -720,8 +720,8 @@
                         "url":  "http://localhost:8096/emby/Persons",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  11,
-                        "bodyBytes":  350,
+                        "elapsedMs":  4,
+                        "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -729,7 +729,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Manami Konishi\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"bd3e8eb69a8977011df48eb0e9ce491c\"…"
+                        "bodySnippet":  "{\"Items\":[],\"TotalRecordCount\":0}"
                     },
                     {
                         "op":  "GET /Plugins",
@@ -741,7 +741,7 @@
                         "url":  "http://localhost:8096/emby/Plugins",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  1,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -763,7 +763,7 @@
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
-                        "bodyBytes":  6249,
+                        "bodyBytes":  6287,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -784,12 +784,12 @@
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
-                        "bodyBytes":  11212,
+                        "bodyBytes":  11681,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
-                        "topKeys":  "PlayState,AdditionalUsers,Capabilities,RemoteEndPoint,PlayableMediaTypes,Id,ServerId,UserId,UserName,UserPrimaryImageTag,Client,LastActivityDate,DeviceName,DeviceId,ApplicationVersion,SupportedCommands,TranscodingInfo,SupportsRemoteControl",
+                        "topKeys":  "PlayState,AdditionalUsers,Capabilities,RemoteEndPoint,PlayableMediaTypes,Id,ServerId,UserId,UserName,UserPrimaryImageTag,Client,LastActivityDate,DeviceName,DeviceId,ApplicationVersion,SupportedCommands,SupportsRemoteControl",
                         "notes":  "",
                         "error":  "",
                         "bodySnippet":  "[{\"PlayState\":{\"CanSeek\":false,\"IsPaused\":false,\"IsMuted\":false,\"RepeatMode\":\"RepeatNone\"},\"AdditionalUsers\":[],\"Capabil…"
@@ -804,7 +804,7 @@
                         "url":  "http://localhost:8096/emby/Studios",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  9,
+                        "elapsedMs":  7,
                         "bodyBytes":  359,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -825,7 +825,7 @@
                         "url":  "http://localhost:8096/emby/SubtitleCodecs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  77,
+                        "elapsedMs":  60,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -867,7 +867,7 @@
                         "url":  "http://localhost:8096/emby/swagger.json",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  0,
                         "bodyBytes":  34,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -888,7 +888,7 @@
                         "url":  "http://localhost:8096/emby/Tags",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  20,
+                        "elapsedMs":  16,
                         "bodyBytes":  83,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -909,7 +909,7 @@
                         "url":  "http://localhost:8096/emby/Trailers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
+                        "elapsedMs":  12,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -930,7 +930,7 @@
                         "url":  "http://localhost:8096/emby/Users",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
+                        "elapsedMs":  2,
                         "bodyBytes":  1707,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -951,7 +951,7 @@
                         "url":  "http://localhost:8096/emby/VideoCodecs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  85,
+                        "elapsedMs":  58,
                         "bodyBytes":  48,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -972,7 +972,7 @@
                         "url":  "http://localhost:8096/emby/Years",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  184,
+                        "elapsedMs":  155,
                         "bodyBytes":  1604,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -981,7 +981,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"2020\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"ed00b5b8bc89dd6e2a09006c4d9c5309\",\"ChannelI…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"2021\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"0bd82b0460e37942d75ee31c488a1ba1\",\"ChannelI…"
                     },
                     {
                         "op":  "GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}",
@@ -990,19 +990,19 @@
                         "domain":  "Items",
                         "priority":  "P0",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Images/Primary/0/0/original/200/200/0/0",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Images/Primary/0/0/original/200/200/0/0",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  1,
-                        "bodyBytes":  633,
+                        "elapsedMs":  16,
+                        "bodyBytes":  23149,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
                         "topKeys":  "",
-                        "notes":  "image/jpeg, 633B",
+                        "notes":  "image/jpeg, 23149B",
                         "error":  "",
-                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0001\u0000`\u0000`\u0000\u0000��\u0000C\u0000\u0003\u0002\u0002\u0003\u0002\u0002\u0003\u0003\u0003\u0003\u0004\u0003\u0003\u0004\u0005\b\u0005\u0005\u0004\u0004\u0005 \u0007\u0007\u0006\b \u000e\u0012\u0010 \u000e\u0011\u000e \u0010\u0016\u0010\u0011\u0013\u0014\u0015\u0015\u0015 \u000f\u0017\u0018\u0016\u0014\u0018\u0012\u0014\u0015\u0014��\u0000C\u0001\u0003\u0004\u0004\u0005\u0004\u0005 \u0005\u0005 \u0014 \u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014…"
+                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0000\u0000\u0001\u0000\u0001\u0000\u0000��\u0000C\u0000\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001��\u0000C\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001\u0001…"
                     },
                     {
                         "op":  "GET /Artists/{Name}",
@@ -1014,7 +1014,7 @@
                         "url":  "http://localhost:8096/emby/Artists/Alpha%20Artist",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  14,
+                        "elapsedMs":  16,
                         "bodyBytes":  1093,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1035,7 +1035,7 @@
                         "url":  "http://localhost:8096/emby/Artists/AlbumArtists",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  9,
+                        "elapsedMs":  8,
                         "bodyBytes":  1057,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1077,7 +1077,7 @@
                         "url":  "http://localhost:8096/emby/Artists/InstantMix?Id=23d93240ce61e6425b859999b55323aa\u0026UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  131,
+                        "elapsedMs":  42,
                         "bodyBytes":  7477,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1086,7 +1086,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Third Tone\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"0543dce7d37e829eecb1ad8a696aceb…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha First Tone\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"f568b545e8897717a5b39a4f0d9db73…"
                     },
                     {
                         "op":  "GET /Auth/Providers",
@@ -1098,7 +1098,7 @@
                         "url":  "http://localhost:8096/emby/Auth/Providers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  93,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1119,7 +1119,7 @@
                         "url":  "http://localhost:8096/emby/Auth/Keys",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
+                        "elapsedMs":  7,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1140,7 +1140,7 @@
                         "url":  "http://localhost:8096/emby/Branding/Configuration",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  0,
+                        "elapsedMs":  1,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1245,7 +1245,7 @@
                         "url":  "http://localhost:8096/emby/Devices/Options?Id=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1266,7 +1266,7 @@
                         "url":  "http://localhost:8096/emby/Devices/Info?Id=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
+                        "elapsedMs":  4,
                         "bodyBytes":  216,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1287,7 +1287,7 @@
                         "url":  "http://localhost:8096/emby/Devices/CameraUploads?DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  51,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1305,10 +1305,10 @@
                         "domain":  "DisplayPreferences",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/DisplayPreferences/c3f6962891668fc8365e3dfaa24bb3ea?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026Client=test",
+                        "url":  "http://localhost:8096/emby/DisplayPreferences/c40cea18fc9c413b93aca7bad1a80d92?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026Client=test",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  251,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1317,7 +1317,7 @@
                         "topKeys":  "Id,RememberIndexing,PrimaryImageHeight,PrimaryImageWidth,CustomPrefs,ScrollDirection,ShowBackdrop,RememberSorting,SortOrder,ShowSidebar",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Id\":\"78a95e76ab4a82fc388261db7db53249\",\"RememberIndexing\":false,\"PrimaryImageHeight\":250,\"PrimaryImageWidth\":250,\"Cust…"
+                        "bodySnippet":  "{\"Id\":\"a76dc71acaca27160b35a12fc59d8158\",\"RememberIndexing\":false,\"PrimaryImageHeight\":250,\"PrimaryImageWidth\":250,\"Cust…"
                     },
                     {
                         "op":  "GET /Dlna/ProfileInfos",
@@ -1329,7 +1329,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/ProfileInfos",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  2252,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1350,7 +1350,7 @@
                         "url":  "http://localhost:8096/emby/Environment/DefaultDirectoryBrowser",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1368,10 +1368,10 @@
                         "domain":  "Environment",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Environment/DirectoryContents?Path=test\u0026Path=D%3A%5CDev%5COpenMedia%5Ctests%5Cmedia%5CMovie1",
+                        "url":  "http://localhost:8096/emby/Environment/DirectoryContents?Path=test\u0026Path=D%3A%5CDev%5COpenMedia%5Ctests%5Cmedia%5CMovie2",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  42,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -1392,7 +1392,7 @@
                         "url":  "http://localhost:8096/emby/Environment/NetworkShares?Path=test",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  6,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1413,7 +1413,7 @@
                         "url":  "http://localhost:8096/emby/Environment/Drives",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  6,
                         "bodyBytes":  99,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1497,7 +1497,7 @@
                         "url":  "http://localhost:8096/emby/Games/SystemSummaries?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  15,
+                        "elapsedMs":  12,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1518,7 +1518,7 @@
                         "url":  "http://localhost:8096/emby/Genres/Comedy",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  14,
+                        "elapsedMs":  17,
                         "bodyBytes":  1079,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1539,7 +1539,7 @@
                         "url":  "http://localhost:8096/emby/Images/MediaInfo",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1560,7 +1560,7 @@
                         "url":  "http://localhost:8096/emby/Images/Ratings",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1581,7 +1581,7 @@
                         "url":  "http://localhost:8096/emby/Images/General",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1602,7 +1602,7 @@
                         "url":  "http://localhost:8096/emby/Images/Remote?ImageUrl=test",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  3,
                         "bodyBytes":  22,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -1623,7 +1623,7 @@
                         "url":  "http://localhost:8096/emby/Items/Filters2",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  10,
+                        "elapsedMs":  11,
                         "bodyBytes":  441,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1644,7 +1644,7 @@
                         "url":  "http://localhost:8096/emby/Items/Filters",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  38,
+                        "elapsedMs":  15,
                         "bodyBytes":  156,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1686,7 +1686,7 @@
                         "url":  "http://localhost:8096/emby/Items/Counts",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  7,
+                        "elapsedMs":  10,
                         "bodyBytes":  226,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1704,11 +1704,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/File?Id=D%3A%5CDev%5COpenMedia%5Ctests%5Cmedia%5CMovie1%5CMovie1.mkv",
+                        "url":  "http://localhost:8096/emby/Items/File?Id=D%3A%5CDev%5COpenMedia%5Ctests%5Cmedia%5CMovie2%5CMovie2.mkv",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  71,
-                        "bodyBytes":  1102938,
+                        "elapsedMs":  52,
+                        "bodyBytes":  886795,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -1716,7 +1716,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0010�\u0026\u0011M�t����oًM��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS��\u0010Ӻ�\u0001\u0000…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000 ��\u0011M�t�������M��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS�� ��…"
                     },
                     {
                         "op":  "GET /Libraries/AvailableOptions",
@@ -1728,7 +1728,7 @@
                         "url":  "http://localhost:8096/emby/Libraries/AvailableOptions",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  81,
+                        "elapsedMs":  103,
                         "bodyBytes":  2539,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1749,7 +1749,7 @@
                         "url":  "http://localhost:8096/emby/Library/SelectableMediaFolders",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  42,
+                        "elapsedMs":  40,
                         "bodyBytes":  965,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1770,7 +1770,7 @@
                         "url":  "http://localhost:8096/emby/Library/MediaFolders",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  4963,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1791,7 +1791,7 @@
                         "url":  "http://localhost:8096/emby/Library/PhysicalPaths",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  8,
                         "bodyBytes":  230,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1833,7 +1833,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/ChannelMappings?ProviderId=eebfd22ff606496ab7595f3729675bbc",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
+                        "elapsedMs":  30,
                         "bodyBytes":  477,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1938,7 +1938,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/TunerHosts",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  209,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1959,7 +1959,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Info",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  8,
                         "bodyBytes":  170,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -1980,7 +1980,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Channels",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  10,
+                        "elapsedMs":  9,
                         "bodyBytes":  678,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2001,7 +2001,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Programs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  6,
+                        "elapsedMs":  9,
                         "bodyBytes":  857,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2064,7 +2064,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Timers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  1,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2106,7 +2106,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/GuideInfo",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  85,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2115,7 +2115,7 @@
                         "topKeys":  "StartDate,EndDate",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"StartDate\":\"2026-10-15T08:25:26.2757384Z\",\"EndDate\":\"2026-10-22T08:25:26.2757384Z\"}"
+                        "bodySnippet":  "{\"StartDate\":\"2026-10-15T14:00:06.9548229Z\",\"EndDate\":\"2026-10-22T14:00:06.9548229Z\"}"
                     },
                     {
                         "op":  "GET /Localization/ParentalRatings",
@@ -2127,7 +2127,7 @@
                         "url":  "http://localhost:8096/emby/Localization/ParentalRatings",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  590,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2148,7 +2148,7 @@
                         "url":  "http://localhost:8096/emby/Localization/Options",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  1686,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2169,7 +2169,7 @@
                         "url":  "http://localhost:8096/emby/Localization/Countries",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  14224,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2190,7 +2190,7 @@
                         "url":  "http://localhost:8096/emby/Localization/Cultures",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  5,
                         "bodyBytes":  28845,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2211,7 +2211,7 @@
                         "url":  "http://localhost:8096/emby/Movies/Recommendations?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  37,
+                        "elapsedMs":  47,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2253,7 +2253,7 @@
                         "url":  "http://localhost:8096/emby/MusicGenres/InstantMix?Id=8ecb9c5acfe9f556d922d71d7ccb6e7b\u0026UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  23,
+                        "elapsedMs":  20,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2274,7 +2274,7 @@
                         "url":  "http://localhost:8096/emby/News/Product",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  0,
+                        "elapsedMs":  2,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2295,7 +2295,7 @@
                         "url":  "http://localhost:8096/emby/Notifications/Types",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  6,
                         "bodyBytes":  2153,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2316,7 +2316,7 @@
                         "url":  "http://localhost:8096/emby/Notifications/Services",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2337,7 +2337,7 @@
                         "url":  "http://localhost:8096/emby/Notifications/ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  7,
                         "bodyBytes":  22,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2358,7 +2358,7 @@
                         "url":  "http://localhost:8096/emby/Packages/Updates?PackageType=test",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2379,7 +2379,7 @@
                         "url":  "http://localhost:8096/emby/Packages/Movie1",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  25,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -2397,11 +2397,11 @@
                         "domain":  "Persons",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Persons/Manami%20Konishi",
+                        "url":  "http://localhost:8096/emby/Persons/Movie1",
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  15,
-                        "bodyBytes":  1133,
+                        "bodyBytes":  1119,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -2409,7 +2409,7 @@
                         "topKeys":  "Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,SortName,ForcedSortName,ExternalUrls,Path,EnableMediaSourceDisplay,ChannelId,Taglines,Genres,RemoteTrailers,ProviderIds,ParentId,Type,People,Studios,GenreItems,LocalTrailerCount,ChildCount,…(47)",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Name\":\"Manami Konishi\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c5d3c29ea0f5c6ca86d765f028a23c32\",\"Etag\":\"9…"
+                        "bodySnippet":  "{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"a5a21fa68378884e6049b2e154a5faa7\",\"Etag\":\"8bd7b72bd…"
                     },
                     {
                         "op":  "GET /Playback/BitrateTest",
@@ -2505,7 +2505,7 @@
                         "url":  "http://localhost:8096/emby/ScheduledTasks/241d4fcb19a1d557ee62428e411da609",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  514,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2526,8 +2526,8 @@
                         "url":  "http://localhost:8096/emby/Search/Hints?SearchTerm=test",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  10,
-                        "bodyBytes":  1460,
+                        "elapsedMs":  21,
+                        "bodyBytes":  1223,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -2568,7 +2568,7 @@
                         "url":  "http://localhost:8096/emby/Shows/NextUp?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  34,
+                        "elapsedMs":  27,
                         "bodyBytes":  1577,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2589,7 +2589,7 @@
                         "url":  "http://localhost:8096/emby/Studios/Fuji%20Television%20Network",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  13,
+                        "elapsedMs":  14,
                         "bodyBytes":  1166,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2694,7 +2694,7 @@
                         "url":  "http://localhost:8096/emby/System/Configuration",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  13,
                         "bodyBytes":  3539,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2715,7 +2715,7 @@
                         "url":  "http://localhost:8096/emby/System/Ping",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  36,
                         "bodyBytes":  11,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2736,7 +2736,7 @@
                         "url":  "http://localhost:8096/emby/System/WakeOnLanInfo",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  46,
                         "bodyBytes":  1687,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2757,8 +2757,8 @@
                         "url":  "http://localhost:8096/emby/System/Logs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  4,
-                        "bodyBytes":  45620,
+                        "elapsedMs":  3,
+                        "bodyBytes":  46558,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -2766,7 +2766,7 @@
                         "topKeys":  "DateCreated,DateModified,Size,Name",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "[{\"DateCreated\":\"2026-10-13T19:46:46.4521038Z\",\"DateModified\":\"2026-10-15T08:25:26.5736760Z\",\"Size\":566184,\"Name\":\"serve…"
+                        "bodySnippet":  "[{\"DateCreated\":\"2026-10-13T19:46:46.4521038Z\",\"DateModified\":\"2026-10-15T14:00:07.3618792Z\",\"Size\":95566,\"Name\":\"server…"
                     },
                     {
                         "op":  "GET /System/Info",
@@ -2779,7 +2779,7 @@
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
-                        "bodyBytes":  1045,
+                        "bodyBytes":  1044,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -2820,7 +2820,7 @@
                         "url":  "http://localhost:8096/emby/Users/Public",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  1707,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -2862,7 +2862,7 @@
                         "url":  "http://localhost:8096/emby/Users/AuthenticateByName",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  44,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -2946,7 +2946,7 @@
                         "url":  "http://localhost:8096/emby/user_usage_stats/load_backup?backupfile=test",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  0,
                         "bodyBytes":  34,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -3177,7 +3177,7 @@
                         "url":  "http://localhost:8096/emby/web/ConfigurationPage",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  2,
                         "bodyBytes":  88,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -3198,7 +3198,7 @@
                         "url":  "http://localhost:8096/emby/web/ConfigurationPages",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  0,
+                        "elapsedMs":  4,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3219,7 +3219,7 @@
                         "url":  "http://localhost:8096/emby/Albums/4d75acea1b8759e7717841b1ec258eb6/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  132,
+                        "elapsedMs":  21,
                         "bodyBytes":  7477,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3228,7 +3228,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Lossless\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"54c64ff14b1f2b1677774b72b101fced\"…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha First Tone\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"f568b545e8897717a5b39a4f0d9db73…"
                     },
                     {
                         "op":  "GET /Albums/{Id}/Similar",
@@ -3240,7 +3240,7 @@
                         "url":  "http://localhost:8096/emby/Albums/4d75acea1b8759e7717841b1ec258eb6/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  47,
+                        "elapsedMs":  16,
                         "bodyBytes":  1852,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3261,7 +3261,7 @@
                         "url":  "http://localhost:8096/emby/Artists/23d93240ce61e6425b859999b55323aa/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  13,
+                        "elapsedMs":  12,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3279,11 +3279,11 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/universal.mkv?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/universal.mkv?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  2378,
-                        "bodyBytes":  87658,
+                        "elapsedMs":  2456,
+                        "bodyBytes":  84280,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3291,7 +3291,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0001V6\u0011M�t¿�c?\u0014�M��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0002M��S��\u0012T�gS��\u0011�M��S��\u001cS�kS��\u0001V\b�…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0001I\u0004\u0011M�t¿�V�\u001a�M��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0000M��S��\u0012T�gS��\u0011�M��S��\u001cS�kS��\u0001H��…"
                     },
                     {
                         "op":  "GET /Audio/{Id}/universal",
@@ -3300,11 +3300,11 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/universal?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/universal?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
-                        "contentType":  "audio/mpeg",
-                        "elapsedMs":  28,
-                        "bodyBytes":  120881,
+                        "contentType":  "audio/flac",
+                        "elapsedMs":  26,
+                        "bodyBytes":  171526,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3312,7 +3312,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "ID3\u0004\u0000\u0000\u0000\u0000\u0001:TIT2\u0000\u0000\u0000\u0012\u0000\u0000\u0003Alpha Third Tone\u0000TPE1\u0000\u0000\u0000\u000e\u0000\u0000\u0003Alpha Artist\u0000TPE2\u0000\u0000\u0000\u000e\u0000\u0000\u0003Alpha Artist\u0000TALB\u0000\u0000\u0000\u0011\u0000\u0000\u0003Alpha Album One\u0000TRCK\u0000\u0000\u0000…"
+                        "bodySnippet":  "fLaC\u0000\u0000\u0000\"\u0004\u0000\u0004\u0000\u0000\u0001!\u0000\u0001� �@�\u0000\u0006��r�6Cf�\u0002���\b����\u0004\u0000\u0000� \u0000\u0000\u0000Lavf63.1.102\b\u0000\u0000\u0000\u0014\u0000\u0000\u0000title=Alpha Lossless\u0013\u0000\u0000\u0000artist=Alpha Artist\u0018\u0000\u0000\u0000ALBU…"
                     },
                     {
                         "op":  "GET /Audio/{Id}/stream.{Container}",
@@ -3321,11 +3321,11 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/stream.mkv",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/stream.mkv",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  2367,
-                        "bodyBytes":  26815,
+                        "elapsedMs":  2361,
+                        "bodyBytes":  28783,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3333,7 +3333,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0000h�\u0011M�t���R��\u000fM��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0002M��S��\u0012T�gS��\u000eYM��S��\u001cS�kS��hK�…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0000p;\u0011M�t���\u0010ɹ�M��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0000M��S��\u0012T�gS��\u000eWM��S��\u001cS�kS��o��\u0001…"
                     },
                     {
                         "op":  "GET /Audio/{Id}/stream",
@@ -3342,11 +3342,11 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/stream?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/stream?Container=mkv",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  2137,
-                        "bodyBytes":  26815,
+                        "elapsedMs":  2177,
+                        "bodyBytes":  28783,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3354,7 +3354,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0000h�\u0011M�t���R��\u000fM��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0002M��S��\u0012T�gS��\u000eYM��S��\u001cS�kS��hK�…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0000p;\u0011M�t���\u0010ɹ�M��S��\u0015I�fS���M��S��\u0016T�kS��\u0001\u0000M��S��\u0012T�gS��\u000eWM��S��\u001cS�kS��o��\u0001…"
                     },
                     {
                         "op":  "GET /Audio/{Id}/master.m3u8",
@@ -3363,10 +3363,10 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/master.m3u8?Container=mkv\u0026MediaSourceId=0543dce7d37e829eecb1ad8a696acebf",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/master.m3u8?Container=mkv\u0026MediaSourceId=54c64ff14b1f2b1677774b72b101fced",
                         "status":  200,
                         "contentType":  "application/x-mpegURL",
-                        "elapsedMs":  8,
+                        "elapsedMs":  13,
                         "bodyBytes":  179,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3384,10 +3384,10 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/main.m3u8?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/main.m3u8?Container=mkv",
                         "status":  200,
                         "contentType":  "application/x-mpegURL",
-                        "elapsedMs":  9,
+                        "elapsedMs":  14,
                         "bodyBytes":  335,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3408,7 +3408,7 @@
                         "url":  "http://localhost:8096/emby/Channels/9f066be7817567792272fbf8c9833c98/Items",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  11,
                         "bodyBytes":  43,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -3429,7 +3429,7 @@
                         "url":  "http://localhost:8096/emby/Channels/Items/Latest",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  5,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3450,7 +3450,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/test/description.xml",
                         "status":  200,
                         "contentType":  "text/xml",
-                        "elapsedMs":  0,
+                        "elapsedMs":  10,
                         "bodyBytes":  2529,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3471,7 +3471,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/test/description",
                         "status":  200,
                         "contentType":  "text/xml",
-                        "elapsedMs":  0,
+                        "elapsedMs":  1,
                         "bodyBytes":  2529,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3492,7 +3492,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/icons/test",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  24,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -3513,7 +3513,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/Profiles/eb548a48aa92cc56e07eccf8d9fd1cb8",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2772,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3534,7 +3534,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/Profiles/Default",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  7,
                         "bodyBytes":  2732,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3555,7 +3555,7 @@
                         "url":  "http://localhost:8096/emby/Encoding/CodecInformation/Video",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  390,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3576,7 +3576,7 @@
                         "url":  "http://localhost:8096/emby/Encoding/CodecConfiguration/Defaults",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3594,11 +3594,11 @@
                         "domain":  "Games",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Games/c3f6962891668fc8365e3dfaa24bb3ea/Similar",
+                        "url":  "http://localhost:8096/emby/Games/c40cea18fc9c413b93aca7bad1a80d92/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  8,
-                        "bodyBytes":  571,
+                        "elapsedMs":  10,
+                        "bodyBytes":  519,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3606,7 +3606,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Contai…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Contai…"
                     },
                     {
                         "op":  "GET /Items/{Id}/ExternalIdInfos",
@@ -3615,10 +3615,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/ExternalIdInfos",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/ExternalIdInfos",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  291,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3639,7 +3639,7 @@
                         "url":  "http://localhost:8096/emby/Items/RemoteSearch/Image?ImageUrl=test\u0026ProviderName=test",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  4,
                         "bodyBytes":  26,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -3657,10 +3657,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/MetadataEditor",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/MetadataEditor",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  4,
+                        "elapsedMs":  5,
                         "bodyBytes":  44044,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3678,7 +3678,7 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
@@ -3699,10 +3699,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/DeleteInfo",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/DeleteInfo",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  66,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3711,7 +3711,7 @@
                         "topKeys":  "Paths",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Paths\":[\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Movie1\\\\Movie1.mkv\"]}"
+                        "bodySnippet":  "{\"Paths\":[\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Movie2\\\\Movie2.mkv\"]}"
                     },
                     {
                         "op":  "GET /Items/{Id}/Similar",
@@ -3720,11 +3720,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Similar",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  9,
-                        "bodyBytes":  571,
+                        "elapsedMs":  8,
+                        "bodyBytes":  519,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3732,7 +3732,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Contai…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Contai…"
                     },
                     {
                         "op":  "GET /Items/{Id}/Download",
@@ -3741,11 +3741,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Download",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Download",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  41,
-                        "bodyBytes":  1102938,
+                        "elapsedMs":  30,
+                        "bodyBytes":  886795,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3753,7 +3753,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0010�\u0026\u0011M�t����oًM��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS��\u0010Ӻ�\u0001\u0000…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000 ��\u0011M�t�������M��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS�� ��…"
                     },
                     {
                         "op":  "GET /Items/{Id}/File",
@@ -3762,11 +3762,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/File",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/File",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  67,
-                        "bodyBytes":  1102938,
+                        "elapsedMs":  69,
+                        "bodyBytes":  886795,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3774,7 +3774,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0010�\u0026\u0011M�t����oًM��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS��\u0010Ӻ�\u0001\u0000…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000 ��\u0011M�t�������M��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS�� ��…"
                     },
                     {
                         "op":  "GET /Items/{Id}/Ancestors",
@@ -3783,10 +3783,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Ancestors",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Ancestors",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  1683,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3804,7 +3804,7 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/CriticReviews",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/CriticReviews",
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
@@ -3825,10 +3825,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/ThemeMedia",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/ThemeMedia",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  9,
                         "bodyBytes":  271,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3837,7 +3837,7 @@
                         "topKeys":  "ThemeVideosResult,ThemeSongsResult,SoundtrackSongsResult",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"ThemeVideosResult\":{\"OwnerId\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Items\":[],\"TotalRecordCount\":0},\"ThemeSongsResult\":{…"
+                        "bodySnippet":  "{\"ThemeVideosResult\":{\"OwnerId\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Items\":[],\"TotalRecordCount\":0},\"ThemeSongsResult\":{…"
                     },
                     {
                         "op":  "GET /Items/{Id}/ThemeSongs",
@@ -3846,10 +3846,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/ThemeSongs",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/ThemeSongs",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  78,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -3858,7 +3858,7 @@
                         "topKeys":  "OwnerId,Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"OwnerId\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Items\":[],\"TotalRecordCount\":0}"
+                        "bodySnippet":  "{\"OwnerId\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Items\":[],\"TotalRecordCount\":0}"
                     },
                     {
                         "op":  "GET /Items/{Id}/ThemeVideos",
@@ -3867,7 +3867,7 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/ThemeVideos",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/ThemeVideos",
                         "status":  200,
                         "contentType":  "application/json",
                         "elapsedMs":  2,
@@ -3879,7 +3879,7 @@
                         "topKeys":  "OwnerId,Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"OwnerId\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Items\":[],\"TotalRecordCount\":0}"
+                        "bodySnippet":  "{\"OwnerId\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Items\":[],\"TotalRecordCount\":0}"
                     },
                     {
                         "op":  "GET /Items/{Id}/Images",
@@ -3888,11 +3888,11 @@
                         "domain":  "Items",
                         "priority":  "P0",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Images",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Images",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
-                        "bodyBytes":  121,
+                        "elapsedMs":  13,
+                        "bodyBytes":  301,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3900,7 +3900,7 @@
                         "topKeys":  "ImageType,Path,Height,Width,Size",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "[{\"ImageType\":\"Primary\",\"Path\":\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Movie1\\\\poster.jpg\",\"Height\":16,\"Width\":16,\"Size\":633}…"
+                        "bodySnippet":  "[{\"ImageType\":\"Primary\",\"Path\":\"D:\\\\OpenMedia\\\\ProgramData-Server\\\\metadata\\\\library\\\\c4\\\\c40cea18fc9c413b93aca7bad1a80d…"
                     },
                     {
                         "op":  "GET /Items/{Id}/RemoteImages",
@@ -3909,11 +3909,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/RemoteImages",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/RemoteImages",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3,
-                        "bodyBytes":  319,
+                        "elapsedMs":  959,
+                        "bodyBytes":  709,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3921,7 +3921,7 @@
                         "topKeys":  "Images,TotalRecordCount,Providers",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Images\":[{\"ProviderName\":\"The Open Movie Database\",\"Url\":\"https://m.media-amazon.com/images/M/MV5BNWUyYTZjYjctOWEzZC00…"
+                        "bodySnippet":  "{\"Images\":[{\"ProviderName\":\"TheMovieDb\",\"Url\":\"https://image.tmdb.org/t/p/original/49a2VIVM2ZCx3fUNEGJ1s8Kj2Tl.jpg\",\"Hei…"
                     },
                     {
                         "op":  "GET /Items/{Id}/ThumbnailSet",
@@ -3930,7 +3930,7 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/ThumbnailSet?Width=test",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/ThumbnailSet?Width=test",
                         "status":  404,
                         "contentType":  "text/html",
                         "elapsedMs":  0,
@@ -3951,11 +3951,11 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/PlaybackInfo?UserId=ac49142474fd4c49b85427f29fc4ba9b",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/PlaybackInfo?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
-                        "bodyBytes":  1527,
+                        "elapsedMs":  14,
+                        "bodyBytes":  1526,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3963,7 +3963,7 @@
                         "topKeys":  "MediaSources,PlaySessionId",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"MediaSources\":[{\"Protocol\":\"File\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Path\":\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Mo…"
+                        "bodySnippet":  "{\"MediaSources\":[{\"Protocol\":\"File\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Path\":\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Mo…"
                     },
                     {
                         "op":  "POST /Items/{Id}/PlaybackInfo",
@@ -3972,11 +3972,11 @@
                         "domain":  "Items",
                         "priority":  "P0",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/PlaybackInfo",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/PlaybackInfo",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
-                        "bodyBytes":  1522,
+                        "elapsedMs":  5,
+                        "bodyBytes":  1521,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -3984,7 +3984,7 @@
                         "topKeys":  "MediaSources,PlaySessionId",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"MediaSources\":[{\"Protocol\":\"File\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Path\":\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Mo…"
+                        "bodySnippet":  "{\"MediaSources\":[{\"Protocol\":\"File\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Path\":\"D:\\\\Dev\\\\OpenMedia\\\\tests\\\\media\\\\Mo…"
                     },
                     {
                         "op":  "GET /LiveTv/Programs/{Id}",
@@ -3993,19 +3993,19 @@
                         "domain":  "LiveTv",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/LiveTv/Programs/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/LiveTv/Programs/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  10,
-                        "bodyBytes":  4459,
+                        "elapsedMs":  13,
+                        "bodyBytes":  4662,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
-                        "topKeys":  "Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Container,SortName,ForcedSortName,ExternalUrls,MediaSources,ProductionLocations,Path,EnableMediaSourceDisplay,OfficialRating,ChannelId,Overview,Taglines,Genres,CommunityRating,RunTimeTicks,ProductionYear,…(52)",
+                        "topKeys":  "Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Container,SortName,ForcedSortName,PremiereDate,ExternalUrls,MediaSources,ProductionLocations,Path,EnableMediaSourceDisplay,ChannelId,Overview,Taglines,Genres,CommunityRating,RunTimeTicks,ProductionYear,…(52)",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Name\":\"Movie1\",\"OriginalTitle\":\"movie 1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa…"
+                        "bodySnippet":  "{\"Name\":\"Movie2\",\"OriginalTitle\":\"にゃんこ THE MOVIE2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b9…"
                     },
                     {
                         "op":  "GET /LiveTv/TunerHosts/Types",
@@ -4017,7 +4017,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/TunerHosts/Types",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  72,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4038,7 +4038,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Recordings/Folders",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4059,7 +4059,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Tuners/Discvover",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  3005,
+                        "elapsedMs":  3019,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4101,7 +4101,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/ListingProviders/Lineups",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  88,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4122,7 +4122,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Channels/9f066be7817567792272fbf8c9833c98",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  5,
+                        "elapsedMs":  7,
                         "bodyBytes":  1378,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4143,7 +4143,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Programs/Recommended?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  5,
+                        "elapsedMs":  8,
                         "bodyBytes":  1121,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4164,7 +4164,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Recordings/Series",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4185,7 +4185,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Recordings/5060b16de5efdc0f8153acc67483e409",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  7,
+                        "elapsedMs":  9,
                         "bodyBytes":  3926,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4203,10 +4203,10 @@
                         "domain":  "LiveTv",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/LiveTv/Timers/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/LiveTv/Timers/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  56,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4215,7 +4215,7 @@
                         "topKeys":  "",
                         "notes":  "无活跃 timer fixture（B 轨道 timer 已消费），404 正确",
                         "error":  "",
-                        "bodySnippet":  "Timer with Id c3f6962891668fc8365e3dfaa24bb3ea not found"
+                        "bodySnippet":  "Timer with Id c40cea18fc9c413b93aca7bad1a80d92 not found"
                     },
                     {
                         "op":  "GET /LiveTv/SeriesTimers/{Id}",
@@ -4224,10 +4224,10 @@
                         "domain":  "LiveTv",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/LiveTv/SeriesTimers/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/LiveTv/SeriesTimers/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  62,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4236,7 +4236,7 @@
                         "topKeys":  "",
                         "notes":  "无 series timer fixture，404 正确",
                         "error":  "",
-                        "bodySnippet":  "SeriesTimer with Id c3f6962891668fc8365e3dfaa24bb3ea not found"
+                        "bodySnippet":  "SeriesTimer with Id c40cea18fc9c413b93aca7bad1a80d92 not found"
                     },
                     {
                         "op":  "GET /LiveTv/Timers/Defaults",
@@ -4248,7 +4248,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/Timers/Defaults",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  7,
+                        "elapsedMs":  21,
                         "bodyBytes":  720,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4290,7 +4290,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/ListingProviders/Available",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  3,
                         "bodyBytes":  82,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4308,11 +4308,11 @@
                         "domain":  "Movies",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Movies/c3f6962891668fc8365e3dfaa24bb3ea/Similar",
+                        "url":  "http://localhost:8096/emby/Movies/c40cea18fc9c413b93aca7bad1a80d92/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  7,
-                        "bodyBytes":  571,
+                        "elapsedMs":  8,
+                        "bodyBytes":  519,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4320,7 +4320,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Contai…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Contai…"
                     },
                     {
                         "op":  "GET /MusicGenres/{Name}/InstantMix",
@@ -4332,7 +4332,7 @@
                         "url":  "http://localhost:8096/emby/MusicGenres/Comedy/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  17,
+                        "elapsedMs":  20,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4353,7 +4353,7 @@
                         "url":  "http://localhost:8096/emby/Notifications/ac49142474fd4c49b85427f29fc4ba9b/Summary",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  4,
                         "bodyBytes":  55,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4374,7 +4374,7 @@
                         "url":  "http://localhost:8096/emby/Playlists/326f0697bc47eb8d7bc7120782606ef8/Items",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  3,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4395,7 +4395,7 @@
                         "url":  "http://localhost:8096/emby/Playlists/326f0697bc47eb8d7bc7120782606ef8/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  85,
+                        "elapsedMs":  15,
                         "bodyBytes":  7477,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4404,7 +4404,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Lossless\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"54c64ff14b1f2b1677774b72b101fced\"…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha First Tone\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"f568b545e8897717a5b39a4f0d9db73…"
                     },
                     {
                         "op":  "GET /Plugins/{Id}/Thumb",
@@ -4416,7 +4416,7 @@
                         "url":  "http://localhost:8096/emby/Plugins/11111111111111111111111111111111/Thumb",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  57,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4437,7 +4437,7 @@
                         "url":  "http://localhost:8096/emby/Plugins/11111111111111111111111111111111/Configuration",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  57,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4479,7 +4479,7 @@
                         "url":  "http://localhost:8096/emby/Shows/cf24c990d7ddb53ca1a5d3ba61c3bd07/Seasons?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  12,
+                        "elapsedMs":  22,
                         "bodyBytes":  1170,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4500,7 +4500,7 @@
                         "url":  "http://localhost:8096/emby/Shows/cf24c990d7ddb53ca1a5d3ba61c3bd07/Episodes?UserId=ac49142474fd4c49b85427f29fc4ba9b",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  6,
+                        "elapsedMs":  9,
                         "bodyBytes":  3266,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4521,7 +4521,7 @@
                         "url":  "http://localhost:8096/emby/Shows/cf24c990d7ddb53ca1a5d3ba61c3bd07/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  6,
+                        "elapsedMs":  7,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4539,11 +4539,11 @@
                         "domain":  "Songs",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Songs/0543dce7d37e829eecb1ad8a696acebf/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
+                        "url":  "http://localhost:8096/emby/Songs/54c64ff14b1f2b1677774b72b101fced/InstantMix?UserId=ac49142474fd4c49b85427f29fc4ba9b\u0026DeviceId=openmedia-test-01",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  108,
-                        "bodyBytes":  8329,
+                        "elapsedMs":  25,
+                        "bodyBytes":  8267,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4551,7 +4551,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Third Tone\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"0543dce7d37e829eecb1ad8a696aceb…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Lossless\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"54c64ff14b1f2b1677774b72b101fced\"…"
                     },
                     {
                         "op":  "GET /Sync/Jobs/{Id}",
@@ -4560,7 +4560,7 @@
                         "domain":  "Sync",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Sync/Jobs/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/Sync/Jobs/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  404,
                         "contentType":  "text/html",
                         "elapsedMs":  0,
@@ -4605,7 +4605,7 @@
                         "url":  "http://localhost:8096/emby/System/Configuration/test",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  38,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4626,16 +4626,16 @@
                         "url":  "http://localhost:8096/emby/System/ActivityLog/Entries",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  160,
-                        "bodyBytes":  3308879,
+                        "elapsedMs":  364,
+                        "bodyBytes":  7327240,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
-                        "topKeys":  "Items,TotalRecordCount",
+                        "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Id\":11292,\"Name\":\"admin 正在下载 Movie1\",\"ShortOverview\":\"应用: OpenMediaTest, 设备: TestRunner\",\"Type\":\"UserDownloa…"
+                        "bodySnippet":  "{\"Items\":[{\"Id\":26066,\"Name\":\"admin 正在下载 Movie2\",\"ShortOverview\":\"应用: OpenMediaTest, 设备: TestRunner\",\"Type\":\"UserDownloa…"
                     },
                     {
                         "op":  "GET /System/Logs/Log",
@@ -4647,8 +4647,8 @@
                         "url":  "http://localhost:8096/emby/System/Logs/Log?Name=server.txt",
                         "status":  200,
                         "contentType":  "text/plain",
-                        "elapsedMs":  106,
-                        "bodyBytes":  621478,
+                        "elapsedMs":  10,
+                        "bodyBytes":  153053,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4656,7 +4656,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "2026-10-15 16:18:30.866 Info Main: Emby Command line: D:\\OpenMedia\\MediaBrowser.Server.dll Operating system: Microsoft W…"
+                        "bodySnippet":  "2026-10-15 21:54:57.909 Info Main: Emby Command line: D:\\OpenMedia\\MediaBrowser.Server.dll Operating system: Microsoft W…"
                     },
                     {
                         "op":  "GET /System/Info/Public",
@@ -4668,8 +4668,8 @@
                         "url":  "http://localhost:8096/emby/System/Info/Public",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
-                        "bodyBytes":  163,
+                        "elapsedMs":  0,
+                        "bodyBytes":  162,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4677,7 +4677,7 @@
                         "topKeys":  "LocalAddress,ServerName,Version,OperatingSystem,Id",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"LocalAddress\":\"http://192.168.32.68:8096\",\"ServerName\":\"DESKTOP-5CAN3E7\",\"Version\":\"3.5.3.0\",\"OperatingSystem\":\"Window…"
+                        "bodySnippet":  "{\"LocalAddress\":\"http://192.168.0.68:8096\",\"ServerName\":\"DESKTOP-5CAN3E7\",\"Version\":\"3.5.3.0\",\"OperatingSystem\":\"Windows…"
                     },
                     {
                         "op":  "GET /Trailers/{Id}/Similar",
@@ -4686,11 +4686,11 @@
                         "domain":  "Trailers",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Trailers/c3f6962891668fc8365e3dfaa24bb3ea/Similar",
+                        "url":  "http://localhost:8096/emby/Trailers/c40cea18fc9c413b93aca7bad1a80d92/Similar",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  6,
-                        "bodyBytes":  571,
+                        "elapsedMs":  8,
+                        "bodyBytes":  519,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4698,7 +4698,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b93aca7bad1a80d92\",\"Contai…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Movie1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa24bb3ea\",\"Contai…"
                     },
                     {
                         "op":  "GET /Users/{UserId}/Suggestions",
@@ -4710,8 +4710,8 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Suggestions",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  342,
-                        "bodyBytes":  88505,
+                        "elapsedMs":  238,
+                        "bodyBytes":  88347,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4719,7 +4719,7 @@
                         "topKeys":  "Items,TotalRecordCount",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Aftermath\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"1a194d07247c4b7e78f6b5c983012875\",\"Eta…"
+                        "bodySnippet":  "{\"Items\":[{\"Name\":\"Alpha Show Live 2026_10_15_04_04_00\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"61facc66399b…"
                     },
                     {
                         "op":  "GET /Users/{UserId}/Items",
@@ -4731,7 +4731,7 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items?Limit=4",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  7,
+                        "elapsedMs":  8,
                         "bodyBytes":  2423,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4773,7 +4773,7 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/GroupingOptions",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  6,
+                        "elapsedMs":  10,
                         "bodyBytes":  197,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4812,10 +4812,10 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/AdditionalParts",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/AdditionalParts",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  1,
+                        "elapsedMs":  3,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4833,10 +4833,10 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/index.bif?Width=test",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/index.bif?Width=test",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  1,
                         "bodyBytes":  52,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -4854,11 +4854,11 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/stream.mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/stream.mkv",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  2311,
-                        "bodyBytes":  1102878,
+                        "elapsedMs":  2273,
+                        "bodyBytes":  886735,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4866,7 +4866,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0010��\u0011M�t�������M��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS��\u0010�~�…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000 ��\u0011M�t����[�tM��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS�� �C�…"
                     },
                     {
                         "op":  "GET /Videos/{Id}/stream",
@@ -4875,11 +4875,11 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/stream?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/stream?Container=mkv",
                         "status":  200,
                         "contentType":  "video/x-matroska",
-                        "elapsedMs":  2204,
-                        "bodyBytes":  1102878,
+                        "elapsedMs":  2182,
+                        "bodyBytes":  886735,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4887,7 +4887,7 @@
                         "topKeys":  "",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000\u0010��\u0011M�t�������M��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS��\u0010�~�…"
+                        "bodySnippet":  "\u001aEߣ�B��\u0001B��\u0001B�\u0004B�\bB��matroskaB��\u0004B��\u0002\u0018S�g\u0001\u0000\u0000\u0000\u0000 ��\u0011M�t����[�tM��S��\u0015I�fS���M��S��\u0016T�kS���M��S��\u0012T�gS��\u0001�M��S��\u001cS�kS�� �C�…"
                     },
                     {
                         "op":  "GET /Videos/{Id}/master.m3u8",
@@ -4896,10 +4896,10 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/master.m3u8?Container=mkv\u0026MediaSourceId=c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/master.m3u8?Container=mkv\u0026MediaSourceId=c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  200,
                         "contentType":  "application/x-mpegURL",
-                        "elapsedMs":  3,
+                        "elapsedMs":  9,
                         "bodyBytes":  214,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -4917,11 +4917,11 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/main.m3u8?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/main.m3u8?Container=mkv",
                         "status":  200,
                         "contentType":  "application/x-mpegURL",
                         "elapsedMs":  3,
-                        "bodyBytes":  335,
+                        "bodyBytes":  281,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4938,7 +4938,7 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/subtitles.m3u8?SubtitleSegmentLength=test\u0026ManifestSubtitles=test",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/subtitles.m3u8?SubtitleSegmentLength=test\u0026ManifestSubtitles=test",
                         "status":  400,
                         "contentType":  "text/html",
                         "elapsedMs":  1,
@@ -4959,11 +4959,11 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/live.m3u8?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/live.m3u8?Container=mkv",
                         "status":  200,
                         "contentType":  "application/x-mpegURL",
-                        "elapsedMs":  3,
-                        "bodyBytes":  506,
+                        "elapsedMs":  245,
+                        "bodyBytes":  414,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
@@ -4983,7 +4983,7 @@
                         "url":  "http://localhost:8096/emby/Artists/Alpha%20Artist/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  5,
+                        "elapsedMs":  7,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5004,7 +5004,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/test/contentdirectory/contentdirectory.xml",
                         "status":  200,
                         "contentType":  "text/xml",
-                        "elapsedMs":  1,
+                        "elapsedMs":  4,
                         "bodyBytes":  7868,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5046,7 +5046,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/test/connectionmanager/connectionmanager.xml",
                         "status":  200,
                         "contentType":  "text/xml",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  4658,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5067,7 +5067,7 @@
                         "url":  "http://localhost:8096/emby/Dlna/test/connectionmanager/connectionmanager",
                         "status":  200,
                         "contentType":  "text/xml",
-                        "elapsedMs":  0,
+                        "elapsedMs":  1,
                         "bodyBytes":  4658,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5109,7 +5109,7 @@
                         "url":  "http://localhost:8096/emby/GameGenres/Movie1/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  7,
+                        "elapsedMs":  5,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5151,7 +5151,7 @@
                         "url":  "http://localhost:8096/emby/Images/General/Movie1/Primary",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  91,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5172,7 +5172,7 @@
                         "url":  "http://localhost:8096/emby/Images/Ratings/test/Movie1",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  2,
                         "bodyBytes":  33,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5193,7 +5193,7 @@
                         "url":  "http://localhost:8096/emby/Images/MediaInfo/test/Movie1",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  33,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5211,19 +5211,19 @@
                         "domain":  "Items",
                         "priority":  "P0",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Images/Primary",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  0,
-                        "bodyBytes":  633,
+                        "elapsedMs":  3,
+                        "bodyBytes":  66556,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
                         "topKeys":  "",
-                        "notes":  "image/jpeg, 633B",
+                        "notes":  "image/jpeg, 66556B",
                         "error":  "",
-                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0001\u0000`\u0000`\u0000\u0000��\u0000C\u0000\u0003\u0002\u0002\u0003\u0002\u0002\u0003\u0003\u0003\u0003\u0004\u0003\u0003\u0004\u0005\b\u0005\u0005\u0004\u0004\u0005 \u0007\u0007\u0006\b \u000e\u0012\u0010 \u000e\u0011\u000e \u0010\u0016\u0010\u0011\u0013\u0014\u0015\u0015\u0015 \u000f\u0017\u0018\u0016\u0014\u0018\u0012\u0014\u0015\u0014��\u0000C\u0001\u0003\u0004\u0004\u0005\u0004\u0005 \u0005\u0005 \u0014 \u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014…"
+                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0001\u0000H\u0000H\u0000\u0000��\u0000\u0011\b\u0002�\u0001�\u0003\u0001!\u0000\u0002\u0011\u0001\u0003\u0011\u0001��\u0001�\u0000\u0000\u0001\u0005\u0001\u0001\u0001\u0001\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b \u0010\u0000\u0002\u0001\u0003\u0003\u0002\u0004\u0003\u0005\u0005\u0004\u0004\u0000\u0000\u0001}\u0001\u0002\u0003\u0000\u0004\u0011\u0005\u0012!1A\u0006\u0013Qa\u0007\"q\u00142���\b#B��\u0015R��$…"
                     },
                     {
                         "op":  "GET /Items/{Id}/RemoteImages/Providers",
@@ -5232,10 +5232,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/RemoteImages/Providers",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/RemoteImages/Providers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  225,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5256,7 +5256,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/LiveRecordings/5060b16de5efdc0f8153acc67483e409/stream",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  1,
                         "bodyBytes":  34,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5277,7 +5277,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/LiveStreamFiles/9f066be7817567792272fbf8c9833c98/stream.mkv",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  67,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5298,7 +5298,7 @@
                         "url":  "http://localhost:8096/emby/LiveTv/ListingProviders/SchedulesDirect/Countries",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  271,
+                        "elapsedMs":  1321,
                         "bodyBytes":  5629,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5359,10 +5359,10 @@
                         "domain":  "Persons",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Persons/Manami%20Konishi/Images/Primary",
+                        "url":  "http://localhost:8096/emby/Persons/Movie1/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  5,
+                        "elapsedMs":  4,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5380,10 +5380,10 @@
                         "domain":  "Providers",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Providers/Subtitles/Subtitles/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/Providers/Subtitles/Subtitles/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  60,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5392,7 +5392,7 @@
                         "topKeys":  "",
                         "notes":  "合成参数 404 合理（无对应资源）",
                         "error":  "",
-                        "bodySnippet":  "Subtitle provider c3f6962891668fc8365e3dfaa24bb3ea not found"
+                        "bodySnippet":  "Subtitle provider c40cea18fc9c413b93aca7bad1a80d92 not found"
                     },
                     {
                         "op":  "GET /Studios/{Name}/Images/{Type}",
@@ -5404,7 +5404,7 @@
                         "url":  "http://localhost:8096/emby/Studios/Fuji%20Television%20Network/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  5,
+                        "elapsedMs":  4,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5422,7 +5422,7 @@
                         "domain":  "Sync",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Sync/JobItems/c3f6962891668fc8365e3dfaa24bb3ea/File",
+                        "url":  "http://localhost:8096/emby/Sync/JobItems/c40cea18fc9c413b93aca7bad1a80d92/File",
                         "status":  404,
                         "contentType":  "text/html",
                         "elapsedMs":  0,
@@ -5443,7 +5443,7 @@
                         "domain":  "Sync",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Sync/JobItems/c3f6962891668fc8365e3dfaa24bb3ea/AdditionalFiles?Name=Movie1",
+                        "url":  "http://localhost:8096/emby/Sync/JobItems/c40cea18fc9c413b93aca7bad1a80d92/AdditionalFiles?Name=Movie1",
                         "status":  404,
                         "contentType":  "text/html",
                         "elapsedMs":  0,
@@ -5488,7 +5488,7 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/Latest",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  65,
+                        "elapsedMs":  33,
                         "bodyBytes":  5190,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5506,19 +5506,19 @@
                         "domain":  "Users",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  8,
-                        "bodyBytes":  4629,
+                        "elapsedMs":  10,
+                        "bodyBytes":  4832,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
-                        "topKeys":  "Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,SupportsSync,Container,SortName,ForcedSortName,ExternalUrls,MediaSources,ProductionLocations,Path,EnableMediaSourceDisplay,OfficialRating,ChannelId,Overview,Taglines,Genres,CommunityRating,RunTimeTicks,…(55)",
+                        "topKeys":  "Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,SupportsSync,Container,SortName,ForcedSortName,PremiereDate,ExternalUrls,MediaSources,ProductionLocations,Path,EnableMediaSourceDisplay,ChannelId,Overview,Taglines,Genres,CommunityRating,RunTimeTicks,…(55)",
                         "notes":  "",
                         "error":  "",
-                        "bodySnippet":  "{\"Name\":\"Movie1\",\"OriginalTitle\":\"movie 1\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c3f6962891668fc8365e3dfaa…"
+                        "bodySnippet":  "{\"Name\":\"Movie2\",\"OriginalTitle\":\"にゃんこ THE MOVIE2\",\"ServerId\":\"980f922f49e84b8b8c7c9631964fa1c1\",\"Id\":\"c40cea18fc9c413b9…"
                     },
                     {
                         "op":  "GET /Users/{UserId}/Items/Root",
@@ -5530,7 +5530,7 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/Root",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  9,
+                        "elapsedMs":  10,
                         "bodyBytes":  1142,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5551,7 +5551,7 @@
                         "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Images/Primary",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5569,7 +5569,7 @@
                         "domain":  "user_usage_stats",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/user_usage_stats/user_manage/test/c3f6962891668fc8365e3dfaa24bb3ea",
+                        "url":  "http://localhost:8096/emby/user_usage_stats/user_manage/test/c40cea18fc9c413b93aca7bad1a80d92",
                         "status":  404,
                         "contentType":  "text/html",
                         "elapsedMs":  0,
@@ -5614,7 +5614,7 @@
                         "url":  "http://localhost:8096/emby/Artists/Alpha%20Artist/Images/Primary/0",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  6,
+                        "elapsedMs":  5,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5632,10 +5632,10 @@
                         "domain":  "Audio",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Audio/0543dce7d37e829eecb1ad8a696acebf/hls1/test/test.test?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Audio/54c64ff14b1f2b1677774b72b101fced/hls1/test/test.test?Container=mkv",
                         "status":  400,
                         "contentType":  "text/html",
-                        "elapsedMs":  9,
+                        "elapsedMs":  12,
                         "bodyBytes":  52,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5677,7 +5677,7 @@
                         "url":  "http://localhost:8096/emby/Genres/Comedy/Images/Primary/0",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  5,
+                        "elapsedMs":  4,
                         "bodyBytes":  693,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5695,10 +5695,10 @@
                         "domain":  "Items",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/RemoteSearch/Subtitles/en",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/RemoteSearch/Subtitles/en",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  6,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5716,19 +5716,19 @@
                         "domain":  "Items",
                         "priority":  "P0",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Items/c3f6962891668fc8365e3dfaa24bb3ea/Images/Primary/0",
+                        "url":  "http://localhost:8096/emby/Items/c40cea18fc9c413b93aca7bad1a80d92/Images/Primary/0",
                         "status":  200,
                         "contentType":  "image/jpeg",
-                        "elapsedMs":  1,
-                        "bodyBytes":  633,
+                        "elapsedMs":  3,
+                        "bodyBytes":  66556,
                         "verdict":  "PASS",
                         "pascalViolations":  [
 
                                              ],
                         "topKeys":  "",
-                        "notes":  "image/jpeg, 633B",
+                        "notes":  "image/jpeg, 66556B",
                         "error":  "",
-                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0001\u0000`\u0000`\u0000\u0000��\u0000C\u0000\u0003\u0002\u0002\u0003\u0002\u0002\u0003\u0003\u0003\u0003\u0004\u0003\u0003\u0004\u0005\b\u0005\u0005\u0004\u0004\u0005 \u0007\u0007\u0006\b \u000e\u0012\u0010 \u000e\u0011\u000e \u0010\u0016\u0010\u0011\u0013\u0014\u0015\u0015\u0015 \u000f\u0017\u0018\u0016\u0014\u0018\u0012\u0014\u0015\u0014��\u0000C\u0001\u0003\u0004\u0004\u0005\u0004\u0005 \u0005\u0005 \u0014 \u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014\u0014…"
+                        "bodySnippet":  "����\u0000\u0010JFIF\u0000\u0001\u0001\u0001\u0000H\u0000H\u0000\u0000��\u0000\u0011\b\u0002�\u0001�\u0003\u0001!\u0000\u0002\u0011\u0001\u0003\u0011\u0001��\u0001�\u0000\u0000\u0001\u0005\u0001\u0001\u0001\u0001\u0001\u0001\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\b \u0010\u0000\u0002\u0001\u0003\u0003\u0002\u0004\u0003\u0005\u0005\u0004\u0004\u0000\u0000\u0001}\u0001\u0002\u0003\u0000\u0004\u0011\u0005\u0012!1A\u0006\u0013Qa\u0007\"q\u00142���\b#B��\u0015R��$…"
                     },
                     {
                         "op":  "GET /MusicGenres/{Name}/Images/{Type}/{Index}",
@@ -5758,7 +5758,7 @@
                         "domain":  "Persons",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Persons/Manami%20Konishi/Images/Primary/0",
+                        "url":  "http://localhost:8096/emby/Persons/Movie1/Images/Primary/0",
                         "status":  200,
                         "contentType":  "image/jpeg",
                         "elapsedMs":  4,
@@ -5800,10 +5800,10 @@
                         "domain":  "Users",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c3f6962891668fc8365e3dfaa24bb3ea/SpecialFeatures",
+                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c40cea18fc9c413b93aca7bad1a80d92/SpecialFeatures",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5821,10 +5821,10 @@
                         "domain":  "Users",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c3f6962891668fc8365e3dfaa24bb3ea/LocalTrailers",
+                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c40cea18fc9c413b93aca7bad1a80d92/LocalTrailers",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  3,
                         "bodyBytes":  2,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5842,10 +5842,10 @@
                         "domain":  "Users",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c3f6962891668fc8365e3dfaa24bb3ea/Intros",
+                        "url":  "http://localhost:8096/emby/Users/ac49142474fd4c49b85427f29fc4ba9b/Items/c40cea18fc9c413b93aca7bad1a80d92/Intros",
                         "status":  200,
                         "contentType":  "application/json",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  33,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5884,7 +5884,7 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/hls1/test/test.test?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/hls1/test/test.test?Container=mkv",
                         "status":  400,
                         "contentType":  "text/html",
                         "elapsedMs":  3,
@@ -5905,10 +5905,10 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/hls/test/test.test?Container=mkv",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/hls/test/test.test?Container=mkv",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  1,
+                        "elapsedMs":  2,
                         "bodyBytes":  69,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5926,10 +5926,10 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/c3f6962891668fc8365e3dfaa24bb3ea/Subtitles/0/Stream.original",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/c40cea18fc9c413b93aca7bad1a80d92/Subtitles/0/Stream.original",
                         "status":  404,
                         "contentType":  "text/html",
-                        "elapsedMs":  2,
+                        "elapsedMs":  4,
                         "bodyBytes":  76,
                         "verdict":  "SKIP-EXPECTED",
                         "pascalViolations":  [
@@ -5938,7 +5938,7 @@
                         "topKeys":  "",
                         "notes":  "fixture 媒体无字幕流，404 正确（无流→404 已是修复后行为）",
                         "error":  "",
-                        "bodySnippet":  "Subtitle stream 0 not found in media source c3f6962891668fc8365e3dfaa24bb3ea"
+                        "bodySnippet":  "Subtitle stream 0 not found in media source c40cea18fc9c413b93aca7bad1a80d92"
                     },
                     {
                         "op":  "GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}",
@@ -5947,7 +5947,7 @@
                         "domain":  "Videos",
                         "priority":  "P1",
                         "source":  "spec",
-                        "url":  "http://localhost:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/c3f6962891668fc8365e3dfaa24bb3ea/Subtitles/0/test/Stream.original",
+                        "url":  "http://localhost:8096/emby/Videos/c40cea18fc9c413b93aca7bad1a80d92/c40cea18fc9c413b93aca7bad1a80d92/Subtitles/0/test/Stream.original",
                         "status":  400,
                         "contentType":  "text/html",
                         "elapsedMs":  1,
@@ -5971,7 +5971,7 @@
                         "url":  "http://localhost:8096/web/index.html",
                         "status":  200,
                         "contentType":  "text/html",
-                        "elapsedMs":  0,
+                        "elapsedMs":  3,
                         "bodyBytes":  2727,
                         "verdict":  "PASS",
                         "pascalViolations":  [
@@ -5992,7 +5992,7 @@
                         "url":  "http://localhost:8096/favicon.ico",
                         "status":  200,
                         "contentType":  "image/vnd.microsoft.icon",
-                        "elapsedMs":  2,
+                        "elapsedMs":  1,
                         "bodyBytes":  49334,
                         "verdict":  "PASS",
                         "pascalViolations":  [
