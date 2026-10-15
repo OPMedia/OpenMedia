@@ -1,5 +1,5 @@
 ﻿{
-    "runAt":  "2026-10-15 08:18:39",
+    "runAt":  "2026-10-15 16:24:50",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
     "summary":  {
@@ -61,21 +61,21 @@
                    {
                        "endpoint":  "/Items",
                        "rule":  "HTTP 200 + QueryResult{Items,TotalRecordCount}",
-                       "result":  "Items=20 TotalRecordCount=34",
+                       "result":  "Items=20 TotalRecordCount=33",
                        "status":  "PASS",
                        "detail":  ""
                    },
                    {
                        "endpoint":  "/Items",
                        "rule":  "Type 为枚举字符串（非数字）",
-                       "result":  "前 5 个 Type: Folder,Movie,Movie,Folder,Folder",
+                       "result":  "前 5 个 Type: Folder,Folder,Folder,Folder,Folder",
                        "status":  "PASS",
                        "detail":  ""
                    },
                    {
                        "endpoint":  "/Items",
                        "rule":  "无 null 值字段（序列化应省略 null）",
-                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,ChannelId,ParentId,SeriesId,SeasonId",
+                       "result":  "null 字段: ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeriesId,SeasonId,AlbumId,ChannelId,ParentId,SeasonId,AlbumId,ChannelId,ParentId,SeasonId,AlbumId,ChannelId,ParentId,SeasonId,AlbumId,ChannelId,ParentId,AlbumId,ChannelId,ParentId,AlbumId,ChannelId,ParentId,AlbumId,ChannelId,ParentId,AlbumId,ChannelId,ParentId,AlbumId,ChannelId,ParentId,AlbumId",
                        "status":  "FAIL",
                        "detail":  ""
                    },

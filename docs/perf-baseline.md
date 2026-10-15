@@ -108,3 +108,30 @@ python tests\perf\load-test.py        # 结果 tests\perf\results\load-latest.js
 ```
 
 pg_stat_statements 补测（待 Chief 排期管理员重启 PG）：conf 设 `shared_preload_libraries='pg_stat_statements'` → 重启服务 → `CREATE EXTENSION pg_stat_statements;` → 重跑 load-test.py → `SELECT query, calls, mean_exec_time, total_exec_time FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;`
+
+---
+
+## 7. 部署后复测（2026-10-15 16:40，PID 13636，P1–P6 + ByName 404 + T4.8 已部署，PG@15432，库 147 条目）
+
+### 7.1 P1 验收：L1b 达标 ✓
+
+| 场景 | 基线（05:14，64 条目） | 复测 | 结论 |
+|---|---|---|---|
+| L1b /Items?Ids= 批量 P95 | 657ms | **188ms** | P1 修复生效（Ids 路径 10ms 级） |
+| L3 静态流 P95 | 12.7ms | 11.4ms | 持平 |
+| L1 用户分页 P50 | 40.8ms | **363ms** | ⚠️ 回归，见 7.2 |
+
+### 7.2 ⚠️ 新回归：无类型列表查询 ~9×（水合路径，待 Developer 根因）
+
+- **现象**：`/Users/{uid}/Items?Recursive`（无类型过滤）P50 40.8→363ms；匿名同款 362ms（P1 承诺的 35ms 未保持——注意 P1 实测时库 34 条，现 147 条）
+- **定位**（变量分离实测）：
+  - 时间随返回条目数线性：Limit 5/20/50 → 75/155/211ms ⇒ **~4.2ms/行**（基线 ~0.4ms/行，**每行成本 ~10×**）
+  - 按类型：Audio **12ms/条**、MusicAlbum **13ms/条**（带 ByName 字段）；Movie/Episode 1–2ms/条
+  - PG 侧安静（水合期间单条 `SELECT A.id,…,A.data::text` 活动查询，无逐行 DB 风暴）⇒ 成本在服务器进程内（JSONB 反序列化 + DTO 映射 + ByName 解析）
+  - 库条目 64→147（+46 Person、+11 Genre 等，A2 TMDb identify 与 LiveTv fixture 的产物）——条目增长 2.3× 解释不了 9×，每行成本上升是主因
+- **嫌疑**（供 Developer）：水合路径 P7（PgItemRepository.cs:1030 逐行全量反序列化）在部署批后每行成本上升；与 ByName 404 批（f1a1ce90d7）的 DTO 解析路径交叉待查
+- **负载测试的 21s 停顿/超时为并发污染**（复测时段 D2 的 S5 1M fixture 正在灌 PG）；PG 安静后干净复跑 P95 335ms、零错误、无停顿
+
+### 7.3 负路径新用例（合法不存在 Guid/Name → 404）
+
+新增 10 条（ByName 404 新语义 ×5 + GhostGuid ×5），**9/10 PASS**；唯一 FAIL：`GET /Items/{GhostId}/PlaybackInfo` → 400 "Parameter 'item'"（资源不存在应 404，T1 家族语义缺口，保留作防线）。负路径总计 33/34。

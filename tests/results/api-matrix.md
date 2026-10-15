@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 09:16:49　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-15 16:25:44　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -13,7 +13,7 @@
 
 **通过率（PASS / (PASS+FAIL)）：100%**（199 / 199）
 
-## 负路径用例（T1.T 固化，24/24 PASS）
+## 负路径用例（T1.T 固化，33/34 PASS）
 
 | 族 | 操作 | 期望 | 实际 | 结果 |
 |----|------|------|------|------|
@@ -41,6 +41,16 @@
 | Parse400 | `GET /Users/{UserId}/Views` | 400 | 400 | **PASS** |
 | Similar | `GET /Albums/{Id}/Similar` | 404 | 404 | **PASS** |
 | Similar | `GET /Items/{Id}/Similar` | 200 | 200 | **PASS** |
+| ByName404 | `GET /Artists/{Name}` | 404 | 404 | **PASS** |
+| ByName404 | `GET /Genres/{Name}` | 404 | 404 | **PASS** |
+| ByName404 | `GET /Persons/{Name}` | 404 | 404 | **PASS** |
+| ByName404 | `GET /Studios/{Name}` | 404 | 404 | **PASS** |
+| ByName404 | `GET /MusicGenres/{Name}` | 404 | 404 | **PASS** |
+| GhostGuid | `GET /Items/{Id}` | 404 | 404 | **PASS** |
+| GhostGuid | `GET /Items/{Id}/Images/{Type}` | 404 | 404 | **PASS** |
+| GhostGuid | `GET /Users/{UserId}/Items/{Id}` | 404 | 404 | **PASS** |
+| GhostGuid | `GET /Shows/{Id}/Seasons` | 404 | 404 | **PASS** |
+| GhostGuid | `GET /Items/{Id}/PlaybackInfo` | 404 | 400 | **FAIL** |
 
 ## 明细矩阵（按域分组）
 
@@ -251,7 +261,7 @@
 | `GET /Library/MediaFolders` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Library/PhysicalPaths` | P1 | 200 | PascalCase ✓ | (非对象: String) | **PASS** |  |
 | `GET /Library/SelectableMediaFolders` | P1 | 200 | PascalCase ✓ | Name,Id,SubFolders | **PASS** |  |
-| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,RefreshS… | **PASS** |  |
+| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,PrimaryI… | **PASS** |  |
 
 ### 域：LiveTv（33）
 

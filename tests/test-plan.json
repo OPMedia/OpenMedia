@@ -24757,6 +24757,96 @@
       "expect": [
         200
       ]
+    },
+    {
+      "family": "ByName404",
+      "id": "GET /Artists/{Name}",
+      "method": "GET",
+      "path": "/Artists/ghost-name-xyz",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "ByName404",
+      "id": "GET /Genres/{Name}",
+      "method": "GET",
+      "path": "/Genres/ghost-name-xyz",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "ByName404",
+      "id": "GET /Persons/{Name}",
+      "method": "GET",
+      "path": "/Persons/ghost-name-xyz",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "ByName404",
+      "id": "GET /Studios/{Name}",
+      "method": "GET",
+      "path": "/Studios/ghost-name-xyz",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "ByName404",
+      "id": "GET /MusicGenres/{Name}",
+      "method": "GET",
+      "path": "/MusicGenres/ghost-name-xyz",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "GhostGuid",
+      "id": "GET /Items/{Id}",
+      "method": "GET",
+      "path": "/Items/{GhostId}",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "GhostGuid",
+      "id": "GET /Items/{Id}/Images/{Type}",
+      "method": "GET",
+      "path": "/Items/{GhostId}/Images/Primary",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "GhostGuid",
+      "id": "GET /Users/{UserId}/Items/{Id}",
+      "method": "GET",
+      "path": "/Users/{UserId}/Items/{GhostId}",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "GhostGuid",
+      "id": "GET /Shows/{Id}/Seasons",
+      "method": "GET",
+      "path": "/Shows/{GhostId}/Seasons?UserId={UserId}",
+      "expect": [
+        404
+      ]
+    },
+    {
+      "family": "GhostGuid",
+      "id": "GET /Items/{Id}/PlaybackInfo",
+      "method": "GET",
+      "path": "/Items/{GhostId}/PlaybackInfo?UserId={UserId}",
+      "expect": [
+        404
+      ]
     }
   ]
 }

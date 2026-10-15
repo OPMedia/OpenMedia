@@ -1,0 +1,104 @@
+{
+  "runAt": "2026-10-15 16:30:36",
+  "tool": "python-stdlib-loadgen (k6 未安装的替代，等价口径)",
+  "note": "每档时长 30s（设计值 60s，在线实例缩减，偏差已记录）",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "L1-Items分页-10rps",
+      "requests": 1118,
+      "durationS": 30.2,
+      "rps": 37.1,
+      "p50Ms": 260.6,
+      "p95Ms": 311.4,
+      "p99Ms": 336.6,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 1118
+      }
+    },
+    {
+      "label": "L1-Items分页-50rps",
+      "requests": 522,
+      "durationS": 33.1,
+      "rps": 15.8,
+      "p50Ms": 781.0,
+      "p95Ms": 21017.2,
+      "p99Ms": 21034.6,
+      "errorRate": 6.13,
+      "codes": {
+        "200": 490,
+        "-1": 32
+      }
+    },
+    {
+      "label": "L1-Items分页-100rps",
+      "requests": 1323,
+      "durationS": 30.4,
+      "rps": 43.5,
+      "p50Ms": 722.3,
+      "p95Ms": 990.4,
+      "p99Ms": 1114.6,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 1323
+      }
+    },
+    {
+      "label": "L1b-Ids批量-50rps",
+      "requests": 1507,
+      "durationS": 45.6,
+      "rps": 33.0,
+      "p50Ms": 74.9,
+      "p95Ms": 188.2,
+      "p99Ms": 21027.4,
+      "errorRate": 4.25,
+      "codes": {
+        "200": 1443,
+        "-1": 64
+      }
+    },
+    {
+      "label": "L2-扫描并发-50rps",
+      "requests": 1238,
+      "durationS": 30.7,
+      "rps": 40.4,
+      "p50Ms": 778.5,
+      "p95Ms": 1099.3,
+      "p99Ms": 1229.1,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 1238
+      }
+    },
+    {
+      "label": "L3-静态流-并发10",
+      "requests": 4110,
+      "durationS": 45.5,
+      "rps": 90.4,
+      "p50Ms": 7.9,
+      "p95Ms": 11.4,
+      "p99Ms": 20.0,
+      "errorRate": 100.0,
+      "codes": {
+        "206": 4090,
+        "-1": 20
+      }
+    },
+    {
+      "label": "L4-认证-并发20",
+      "requests": 1363,
+      "durationS": 42.9,
+      "rps": 31.8,
+      "p50Ms": 10.2,
+      "p95Ms": 67.6,
+      "p99Ms": 21035.9,
+      "errorRate": 2.93,
+      "codes": {
+        "200": 1323,
+        "-1": 39,
+        "500": 1
+      }
+    }
+  ]
+}
