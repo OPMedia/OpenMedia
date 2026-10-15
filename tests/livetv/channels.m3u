@@ -1,5 +1,0 @@
-#EXTM3U
-#EXTINF:-1 tvg-id="ch1.test.1" tvg-name="Test One" group-title="Test",Test One
-http://127.0.0.1:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/stream?static=true
-#EXTINF:-1 tvg-id="ch2.test.2" tvg-name="Test Two" group-title="Test",Test Two
-http://127.0.0.1:8096/emby/Videos/c3f6962891668fc8365e3dfaa24bb3ea/stream?static=true
