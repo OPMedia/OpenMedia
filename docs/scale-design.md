@@ -55,16 +55,19 @@ warmup（一轮混合负载）→ gcdump #1 → N 轮负载（扫描+刷新+浏�
 
 ---
 
-## 3. 100 万条 fixture 生成策略（S5）
+## 3. 100 万条 fixture 生成策略（S5，✅ 已落地 as-built 2026-10-16，commit `224464ebf8`）
 
 **BR-45 方法论教训直接适用：祖先分布必须贴近真实库形态，否则 EXPLAIN/负载结论全部失真。**
 
 - **分布模型**：~1000 库（CollectionFolder）× 每库 ~1000 系列/集合 × 深度 3-4 层（库→系列→季→集）
-- **类型配比**（可调参数）：Episode 50% / Movie 20% / Audio 15% / Season 5% / MusicAlbum 5% / Series 2% / 其他 3%
+- **类型配比**（实际落地）：Movie 20w / Episode 50w / Audio 15w / MusicAlbum 5w / Season 5w / Series 2w ≈ 102w 条 + 880k 占位文件（30 万目录，11.5 分钟生成）
 - **blob 形态**：真实 Movie/Episode/Audio 序列化模板（phase2 R5 教训）+ 字段随机化（名字/年份/路径）
-- **关联表按比例**：item_people ≈ 3×、media_streams ≈ 1.5×、ancestor_ids 按树深、user_datas 10k 用户 × 10% 播放记录
-- **生成方式**：SQL 分批 INSERT（每批 10w 提交）或 COPY；独立库 `openmedia_scale`，测完即弃，**严禁碰共享库**（安全红线）
-- **产物**：`tests\perf\fixture-1m.sql` + 分布参数文档化（可复现）；磁盘预估 data ~1.5GB + 索引 3-5GB
+- **生成方式（as-built 关键变更）**：`tests\perf\prepare-scale-full.ps1` 九步管线固化可复现；独立库，测完即弃，**严禁碰共享库**（安全红线）
+- **⚠️ 三条 as-built 铁律（catch-22 解法，D2 实证）**：
+  1. **fixture 建库严禁依赖库扫描**——扫描需要 PhysicalFolderIds、PhysicalFolderIds 又要扫描填充（catch-22）；且扫描对假路径条目按 missing 级联删除（验证期两次事故：57w+13w 行，均全量重建恢复）。**正解：CollectionFolder 的 data jsonb 直写 CollectionType + PhysicalFolderIds 持久化**（对齐 8096 实测形态，运行时从 data 加载），再挂 UserRootFolder（视图生成前提）
+  2. **top_parent_id 统一 N 格式**（无连字符）——查询参数是 `Guid.ToString()` 的 N 格式，DB 存带连字符格式永远不匹配（静默 0 结果陷阱）；Episode 的 top_parent 必须指向 folder 而非 lib（祖先链全量修正）
+  3. **占位文件必须先于任何扫描在位**——880k 假媒体文件是"扫描零删除"的前提；psql LIKE 反斜杠转义（`'\%'`=字面 %，UPDATE 匹配 0 行静默失败）和 PowerShell 字符串转义两个坑已记入 commit message
+- **终验口径**：用户作用域全类型查询 6/6 全通（Movie 200,000 / Episode 500,000 / Audio 150,000 / MusicAlbum 50,000 / Series 20,000 / Season 50,000），DB 零删除（1,102,010 行）
 
 ---
 
