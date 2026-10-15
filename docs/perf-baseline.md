@@ -167,3 +167,20 @@ string_agg(item_extradata) ×27、ancestor_ids ×18、guid 查找 ×18、series/
 `tests/perf/s7-user-load.py` 已入库：U1 多用户认证阶梯（100/500/2000）+ U2 用户隔离列表查询。
 前置：整份复制部署目录起 scale 实例 + `OPENMEDIA_PGCONN=...Database=openmedia_scale`（用户
 scale-user-00001..10000，空密码，user_datas 1M 就绪）。跑法：`python tests/perf/s7-user-load.py 8098`。
+
+### 7.7 终态（23:30，PID 25628，P7+count 完整批次，v2 keep-alive 发生器，安静窗口）
+
+| 场景 | 二期基线 | 回归峰值 | **终态** | 备注 |
+|---|---|---|---|---|
+| L1 分页 P50@10rps | 40.8ms | 488ms | **29.3ms** | 低于基线，水合链路 363→29ms（**12.5×**） |
+| L1 P95@10rps | 57ms | 3251ms | **40.6ms** | 零错误 |
+| L1 P95@50rps | 163ms | 21017ms | **142.4ms** | 零错误，21s 伪影消失（keep-alive） |
+| L1 P95@100rps | 188ms | 21042ms | **126.4ms** | 零错误 |
+| L1b P50/P95 | 340/657ms | — | **30.6/49.8ms**（994 RPS） | 历史最佳 |
+| L2 扫描并发 P95 | 167ms | — | 125.2ms | 零错误 |
+| L3 静态流 P95 | 12.7ms | — | 9.0ms（1610 RPS） | 脚本 206 计数显示 bug，实际零错误 |
+| L4 认证 P95 | 221ms | — | 154.5ms | 零错误 |
+| 单请求暖延迟 | ~40ms | 215ms | **21ms**（P50，10 次） | |
+| 单请求语句数 | 未测 | 464 行 | **~14 条**（6 视图文件夹水合+3 count+5 认证/token） | Developer 的 3=条目路径口径（其实例视图文件夹更少），分歧为范围非对错 |
+
+**规模化轨道性能侧全部收口**。U1 高并发复跑待 S8 拉起 scale 实例（8098 已被 D2 收工带走）。

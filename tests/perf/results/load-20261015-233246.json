@@ -1,0 +1,99 @@
+{
+  "runAt": "2026-10-15 23:32:46",
+  "tool": "python-stdlib-loadgen (k6 未安装的替代，等价口径)",
+  "note": "每档时长 30s（设计值 60s，在线实例缩减，偏差已记录）",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "L1-Items分页-10rps",
+      "requests": 2960,
+      "durationS": 30.1,
+      "rps": 98.4,
+      "p50Ms": 29.3,
+      "p95Ms": 40.6,
+      "p99Ms": 43.9,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 2960
+      }
+    },
+    {
+      "label": "L1-Items分页-50rps",
+      "requests": 10299,
+      "durationS": 30.1,
+      "rps": 341.8,
+      "p50Ms": 89.2,
+      "p95Ms": 142.4,
+      "p99Ms": 210.9,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 10299
+      }
+    },
+    {
+      "label": "L1-Items分页-100rps",
+      "requests": 10807,
+      "durationS": 30.1,
+      "rps": 359.2,
+      "p50Ms": 87.3,
+      "p95Ms": 126.4,
+      "p99Ms": 165.4,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 10807
+      }
+    },
+    {
+      "label": "L1b-Ids批量-50rps",
+      "requests": 29837,
+      "durationS": 30.0,
+      "rps": 993.9,
+      "p50Ms": 30.6,
+      "p95Ms": 49.8,
+      "p99Ms": 68.5,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 29837
+      }
+    },
+    {
+      "label": "L2-扫描并发-50rps",
+      "requests": 10418,
+      "durationS": 30.1,
+      "rps": 346.7,
+      "p50Ms": 91.9,
+      "p95Ms": 125.2,
+      "p99Ms": 155.9,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 10418
+      }
+    },
+    {
+      "label": "L3-静态流-并发10",
+      "requests": 48307,
+      "durationS": 30.0,
+      "rps": 1610.1,
+      "p50Ms": 5.7,
+      "p95Ms": 9.0,
+      "p99Ms": 15.6,
+      "errorRate": 100.0,
+      "codes": {
+        "206": 48307
+      }
+    },
+    {
+      "label": "L4-认证-并发20",
+      "requests": 7723,
+      "durationS": 30.1,
+      "rps": 256.9,
+      "p50Ms": 70.6,
+      "p95Ms": 154.5,
+      "p99Ms": 196.2,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 7723
+      }
+    }
+  ]
+}
