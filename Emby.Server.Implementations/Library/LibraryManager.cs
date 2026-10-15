@@ -1141,7 +1141,8 @@ namespace Emby.Server.Implementations.Library
                     progress.Report(innerPercent);
                 });
 
-                _logger.Debug("Running post-scan task {0}", task.GetType().Name);
+                // Info 级（原 Debug 被过滤）：postscan 静默运行曾让"没日志=没跑"误判排障方向（10-15 诊断②）
+                _logger.Info("Running post-scan task {0}", task.GetType().Name);
 
                 try
                 {
