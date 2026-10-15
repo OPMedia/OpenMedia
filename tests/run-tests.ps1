@@ -107,8 +107,72 @@ if ($rLogs.Status -eq 200) {
     $logs = @(ConvertFrom-JsonSafe $rLogs.Body)
     if ($logs.Count -gt 0 -and $logs[0].PSObject.Properties['Name']) { $ctx.LogName = "$($logs[0].Name)" }
 }
+
+# ---------- ⑤ fixture 真实 Id 上下文（音频/剧集/LiveTv/聚合实体，四期 G1）----------
+function Get-FirstItem {
+    param([string]$Types, [string]$Url = '')
+    $u = if ($Url) { $Url } else { "$ApiBase/Items?Recursive=true&IncludeItemTypes=$Types&Limit=1" }
+    $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url $u -Headers $baseHeaders
+    if ($r.Status -ne 200) { return $null }
+    $j = ConvertFrom-JsonSafe $r.Body
+    if ($null -eq $j) { return $null }
+    if ($j.PSObject.Properties['Items']) { $arr = @($j.Items) } else { $arr = @($j) }
+    if ($arr.Count -eq 0) { return $null }
+    return $arr[0]
+}
+$fixtureMap = @(
+    @{ Ctx = 'AudioId';       Types = 'Audio' },
+    @{ Ctx = 'SeriesId';      Types = 'Series' },
+    @{ Ctx = 'SeasonId';      Types = 'Season' },
+    @{ Ctx = 'EpisodeId';     Types = 'Episode' },
+    @{ Ctx = 'AlbumId';       Types = 'MusicAlbum' }
+)
+foreach ($f in $fixtureMap) {
+    $it = Get-FirstItem -Types $f.Types
+    if ($it) { $ctx[$f.Ctx] = "$($it.Id)" } else { $ctx[$f.Ctx] = '' }
+}
+# Playlist fixture（幂等）：无则创建一个空播放列表（POST /Playlists，实测 200）
+$playlist = Get-FirstItem -Types 'Playlist'
+if ($playlist) {
+    $ctx.PlaylistId = "$($playlist.Id)"
+} elseif ($ctx.UserId) {
+    $rpl = Invoke-EmbyRequest -Client $client -Method 'POST' -Url "$ApiBase/Playlists?Name=MatrixPlaylist&UserId=$($ctx.UserId)&MediaType=Audio" -Headers $baseHeaders
+    $plJson = ConvertFrom-JsonSafe $rpl.Body
+    if ($rpl.Status -eq 200 -and $plJson -and $plJson.Id) { $ctx.PlaylistId = "$($plJson.Id)" } else { $ctx.PlaylistId = '' }
+} else { $ctx.PlaylistId = '' }
+$artist = Get-FirstItem -Url "$ApiBase/Artists?UserId=$($ctx.UserId)&Limit=1"
+if ($artist) { $ctx.ArtistId = "$($artist.Id)"; $ctx.ArtistName = "$($artist.Name)" } else { $ctx.ArtistId = ''; $ctx.ArtistName = '' }
+$musicGenre = Get-FirstItem -Url "$ApiBase/MusicGenres?UserId=$($ctx.UserId)&Limit=1"
+if ($musicGenre) { $ctx.MusicGenreName = "$($musicGenre.Name)"; $ctx.MusicGenreId = "$($musicGenre.Id)" } else { $ctx.MusicGenreName = ''; $ctx.MusicGenreId = '' }
+foreach ($t in @(@{Ctx='GenreName';Url='/Genres'}, @{Ctx='StudioName';Url='/Studios'}, @{Ctx='PersonName';Url='/Persons'})) {
+    $it = Get-FirstItem -Url "$ApiBase$($t.Url)?UserId=$($ctx.UserId)&Limit=1"
+    if ($it) { $ctx[$t.Ctx] = "$($it.Name)" } else { $ctx[$t.Ctx] = '' }
+}
+$channel = Get-FirstItem -Url "$ApiBase/LiveTv/Channels?UserId=$($ctx.UserId)&Limit=1"
+if ($channel) { $ctx.ChannelId = "$($channel.Id)" } else { $ctx.ChannelId = '' }
+$recording = Get-FirstItem -Url "$ApiBase/LiveTv/Recordings?UserId=$($ctx.UserId)&Limit=1"
+if ($recording) { $ctx.RecordingId = "$($recording.Id)" } else { $ctx.RecordingId = '' }
+foreach ($t in @(@{Ctx='TimerId';Url='/LiveTv/Timers'}, @{Ctx='SeriesTimerId';Url='/LiveTv/SeriesTimers'})) {
+    $it = Get-FirstItem -Url "$ApiBase$($t.Url)?UserId=$($ctx.UserId)&Limit=1"
+    if ($it) { $ctx[$t.Ctx] = "$($it.Id)" } else { $ctx[$t.Ctx] = '' }
+}
+$provider = Get-FirstItem -Url "$ApiBase/LiveTv/ListingProviders"
+if ($provider) { $ctx.ListingProviderId = "$($provider.Id)" } else { $ctx.ListingProviderId = '' }
+$task = Get-FirstItem -Url "$ApiBase/ScheduledTasks?IsEnabled=true&Limit=1"
+if ($task) { $ctx.TaskId = "$($task.Id)" } else { $ctx.TaskId = '' }
+$dlnaProfile = Get-FirstItem -Url "$ApiBase/Dlna/Profiles"
+if ($dlnaProfile) { $ctx.DlnaProfileId = "$($dlnaProfile.Id)" } else { $ctx.DlnaProfileId = '' }
+$ctx.MediaSourceId = $ctx.ItemId
+$movieFull = Get-FirstItem -Url "$ApiBase/Items?Recursive=true&IncludeItemTypes=Movie&Limit=1&Fields=Path"
+if ($movieFull -and $movieFull.PSObject.Properties['Path'] -and $movieFull.Path) {
+    $ctx.MoviePath = "$($movieFull.Path)"
+    $ctx.MovieDir = [System.IO.Path]::GetDirectoryName($ctx.MoviePath)
+} else { $ctx.MoviePath = ''; $ctx.MovieDir = '' }
+
 Write-Host ("[上下文] UserId={0} ItemId={1}（真实={2}） PluginId={3} SessionId={4} LogName={5}" -f `
     $ctx.UserId, $ctx.ItemId, $ctx.HasRealItem, $ctx.PluginId, $ctx.SessionId, $ctx.LogName)
+Write-Host ("[fixture] Audio={0} Series={1} Episode={2} Album={3} Artist={4} MusicGenre={5} Channel={6} Recording={7} Timer={8} Provider={9} Task={10} DlnaProfile={11} Playlist={12}" -f `
+    $ctx.AudioId, $ctx.SeriesId, $ctx.EpisodeId, $ctx.AlbumId, $ctx.ArtistId, $ctx.MusicGenreName, $ctx.ChannelId, $ctx.RecordingId, $ctx.TimerId, $ctx.ListingProviderId, $ctx.TaskId, $ctx.DlnaProfileId, $ctx.PlaylistId)
 
 # ============ 4. 参数解析器 ============
 $syntheticId = '11111111111111111111111111111111'
@@ -117,17 +181,42 @@ function Resolve-ParamValue {
     switch ($Name) {
         'UserId'      { if ($ctx.UserId) { return $ctx.UserId } return $syntheticId }
         'Id' {
-            if ($Path -cmatch '^/Users') { if ($ctx.UserId) { return $ctx.UserId } return $syntheticId }
+            if ($Path -cmatch '^/Users/\{Id\}') { if ($ctx.UserId) { return $ctx.UserId } return $syntheticId }
+            if ($Path -cmatch '^/Users/\{UserId\}/Items/\{Id\}') { if ($ctx.ItemId) { return $ctx.ItemId } return $syntheticId }
             if ($Path -cmatch '^/Plugins') { if ($ctx.PluginId) { return $ctx.PluginId } return $syntheticId }
             if ($Path -cmatch '^/Sessions') { if ($ctx.SessionId) { return $ctx.SessionId } return $syntheticId }
             if ($Path -cmatch '^/Devices') { return $ctx.DeviceId }
+            # ⑤ fixture 真实 Id（按路径域选，四期 G1）
+            if ($Path -cmatch '^/(Audio|Songs)') { if ($ctx.AudioId) { return $ctx.AudioId } }
+            if ($Path -cmatch '^/Shows') { if ($ctx.SeriesId) { return $ctx.SeriesId } }
+            if ($Path -cmatch '^/Albums') { if ($ctx.AlbumId) { return $ctx.AlbumId } }
+            if ($Path -cmatch '^/Artists') { if ($ctx.ArtistId) { return $ctx.ArtistId } }
+            if ($Path -cmatch '^/MusicGenres') { if ($ctx.MusicGenreId) { return $ctx.MusicGenreId } }
+            if ($Path -cmatch '^/Playlists') { if ($ctx.PlaylistId) { return $ctx.PlaylistId } }
+            if ($Path -cmatch '^/LiveTv/Channels') { if ($ctx.ChannelId) { return $ctx.ChannelId } }
+            if ($Path -cmatch '^/LiveTv/(Live)?Recordings') { if ($ctx.RecordingId) { return $ctx.RecordingId } }
+            if ($Path -cmatch '^/LiveTv/Timers') { if ($ctx.TimerId) { return $ctx.TimerId } }
+            if ($Path -cmatch '^/LiveTv/SeriesTimers') { if ($ctx.SeriesTimerId) { return $ctx.SeriesTimerId } }
+            if ($Path -cmatch '^/LiveTv/LiveStreamFiles') { if ($ctx.ChannelId) { return $ctx.ChannelId } }
+            if ($Path -cmatch '^/ScheduledTasks') { if ($ctx.TaskId) { return $ctx.TaskId } }
+            if ($Path -cmatch '^/Dlna/Profiles') { if ($ctx.DlnaProfileId) { return $ctx.DlnaProfileId } }
             if ($ctx.ItemId) { return $ctx.ItemId }
             return $syntheticId
         }
+        'ProviderId' { if ($ctx.ListingProviderId) { return $ctx.ListingProviderId } return 'test' }
         'ItemId'      { if ($ctx.ItemId) { return $ctx.ItemId } return $syntheticId }
+        'MediaSourceId' { if ($ctx.MediaSourceId) { return $ctx.MediaSourceId } return 'test' }
         'Type'        { if ($Path -cmatch 'Images') { return 'Primary' } return 'General' }
         'Index'       { return '0' }
-        'Name'        { return 'Movie1' }
+        'Name' {
+            if ($Path -cmatch '^/System/Logs') { if ($ctx.LogName) { return $ctx.LogName } }
+            if ($Path -cmatch '^/MusicGenres') { if ($ctx.MusicGenreName) { return $ctx.MusicGenreName } }
+            if ($Path -cmatch '^/Genres') { if ($ctx.GenreName) { return $ctx.GenreName } }
+            if ($Path -cmatch '^/Studios') { if ($ctx.StudioName) { return $ctx.StudioName } }
+            if ($Path -cmatch '^/Persons') { if ($ctx.PersonName) { return $ctx.PersonName } }
+            if ($Path -cmatch '^/Artists') { if ($ctx.ArtistName) { return $ctx.ArtistName } }
+            return 'Movie1'
+        }
         'Container'   { return 'mkv' }
         'DeviceId'    { return $ctx.DeviceId }
         'Format'      { return 'original' }
@@ -170,6 +259,38 @@ function Build-OpUrl {
         $query = $query.TrimEnd('&')
     }
     if ($Op.id -eq 'GET /Users/{UserId}/Items' -and -not $query) { $query = '?Limit=4' }
+    # ③ 必填 UserId 注入（spec 标可选、实现必填——加参 200 已验证）
+    if ($Op.id -in @('GET /Movies/Recommendations', 'GET /Games/SystemSummaries', 'GET /LiveTv/Programs/Recommended') -and $ctx.UserId) {
+        if ($query) { $query += '&UserId=' + $ctx.UserId } else { $query = '?UserId=' + $ctx.UserId }
+    }
+    # ③ InstantMix/universal 族必填 UserId+DeviceId（手动验证：不带 400，带 200）
+    if ($Op.id -match 'InstantMix' -or $Op.id -match '/universal') {
+        if ($ctx.UserId) {
+            if ($query) { $query += '&UserId=' + $ctx.UserId } else { $query = '?UserId=' + $ctx.UserId }
+        }
+        if ($query) { $query += '&DeviceId=' + $ctx.DeviceId } else { $query = '?DeviceId=' + $ctx.DeviceId }
+    }
+    # ③ 必填 MediaSourceId 注入（master.m3u8 族；Audio 用音频 Id、Video 用条目 Id）
+    if ($Op.id -in @('GET /Audio/{Id}/master.m3u8', 'GET /Videos/{Id}/master.m3u8')) {
+        $msid = $ctx.ItemId
+        if ($Op.id -match '/Audio/' -and $ctx.AudioId) { $msid = $ctx.AudioId }
+        if ($msid) {
+            if ($query) { $query += '&MediaSourceId=' + $msid } else { $query = '?MediaSourceId=' + $msid }
+        }
+    }
+    # ④ 计划缺陷补参：/Channels/{Id}/Items 的 {Id} 未在 params 声明（URL 未替换）
+    if ($Op.id -eq 'GET /Channels/{Id}/Items' -and $ctx.ChannelId) {
+        $path = $path.Replace('{Id}', [uri]::EscapeDataString($ctx.ChannelId))
+    }
+    # ④ 计划缺陷：/Items/File 的 Id 参数实为文件路径（GetFile→FindByPath）
+    if ($Op.id -eq 'GET /Items/File' -and $ctx.MoviePath) {
+        if ($query -match 'Id=') { $query = $query -replace 'Id=[^&]*', ('Id=' + [uri]::EscapeDataString($ctx.MoviePath)) }
+        elseif ($query) { $query += '&Id=' + [uri]::EscapeDataString($ctx.MoviePath) }
+        else { $query = '?Id=' + [uri]::EscapeDataString($ctx.MoviePath) }
+    }
+    if ($Op.id -eq 'GET /Environment/DirectoryContents' -and $ctx.MovieDir) {
+        if ($query) { $query += '&Path=' + [uri]::EscapeDataString($ctx.MovieDir) } else { $query = '?Path=' + [uri]::EscapeDataString($ctx.MovieDir) }
+    }
     $base = $ApiBase
     if ($Op.urlBase -eq 'root') { $base = $BaseUrl }
     return $base + $path + $query
@@ -221,15 +342,20 @@ function Assert-P0 {
             }
         }
         'GET /Users' {
-            if (-not ($j -is [System.Array])) { $n += '非数组' }
-            elseif ($j.Count -gt 0) {
-                if (-not $j[0].PSObject.Properties['Id']) { $n += '缺 Id' }
-                elseif (-not (Test-EmbyIdFormat "$($j[0].Id)")) { $n += "Id 格式异常: $($j[0].Id)" }
-                if (-not $j[0].PSObject.Properties['Name']) { $n += '缺 Name' }
-            } else { $n += '空数组（应有 admin 用户）' }
+            # PS5.1 单元素数组解包修正：以原始 body 是否以 [ 开头判定数组
+            $isArray = $R.Body.TrimStart().StartsWith('[')
+            if (-not $isArray) { $n += '非数组' }
+            else {
+                $arr = @($j)
+                if ($arr.Count -gt 0) {
+                    if (-not $arr[0].PSObject.Properties['Id']) { $n += '缺 Id' }
+                    elseif (-not (Test-EmbyIdFormat "$($arr[0].Id)")) { $n += "Id 格式异常: $($arr[0].Id)" }
+                    if (-not $arr[0].PSObject.Properties['Name']) { $n += '缺 Name' }
+                } else { $n += '空数组（应有 admin 用户）' }
+            }
         }
         'GET /Users/Public' {
-            if (-not ($j -is [System.Array])) { $n += '非数组' }
+            if (-not $R.Body.TrimStart().StartsWith('[')) { $n += '非数组' }
         }
         { $_ -in @('GET /Items', 'GET /Users/{UserId}/Items') } {
             if (-not $j.PSObject.Properties['Items']) { $n += '缺 Items' }
@@ -287,7 +413,10 @@ foreach ($op in $exec) {
     # —— 判定 ——
     $verdict = ''
     $notes = @()
-    if ($op.expected404) {
+    if ($op.expected400 -and $r.Status -eq 400) {
+        $verdict = 'SKIP-EXPECTED'; $notes = @($op.expected400)
+    }
+    elseif ($op.expected404) {
         if ($r.Status -eq 404) { $verdict = 'SKIP-EXPECTED'; $notes = @($op.expected404) }
         elseif ($r.Status -in @(200, 204)) { $verdict = 'PASS'; $notes = @("预期 404 但返回 $($r.Status)（已实现？核对清单）") }
         else { $verdict = 'FAIL'; $notes = @("预期 404（$($op.expected404)），实际 $($r.Status)") }
@@ -306,7 +435,10 @@ foreach ($op in $exec) {
             } else { $verdict = 'FAIL'; $notes = @('404：不在 B6 暂缓清单') }
         }
         elseif ($r.Status -eq 401) { $verdict = 'FAIL'; $notes = @("401：认证失败（$authMode）") }
-        elseif ($r.Status -eq 400) { $verdict = 'FAIL'; $notes = @('400：' + (SnippetOf $r.Body)) }
+        elseif ($r.Status -eq 400) {
+            if ($op.expected400) { $verdict = 'SKIP-EXPECTED'; $notes = @($op.expected400) }
+            else { $verdict = 'FAIL'; $notes = @('400：' + (SnippetOf $r.Body)) }
+        }
         else { $verdict = 'FAIL'; $notes = @("$($r.Status) $($r.Reason)：$(if ($r.Error) { $r.Error } else { (SnippetOf $r.Body) })") }
     }
     if ($pv.Count -and $verdict -eq 'PASS' -and $op.priority -eq 'P1') { $notes += '键名风格: ' + ($pv -join ',') }

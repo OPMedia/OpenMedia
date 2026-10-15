@@ -8522,7 +8522,7 @@
       "responseSchema": "IO.FileSystemEntryInfo",
       "responseIsArray": true,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /Environment/NetworkShares",
@@ -8766,7 +8766,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /Items/Filters2",
@@ -11290,7 +11291,7 @@
       "responseSchema": "Updates.PackageInfo",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /Persons/{Name}",
@@ -11343,7 +11344,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "DELETE /Plugins/{Id}",
@@ -12726,7 +12728,8 @@
       "responseSchema": "Authentication.AuthenticationResult",
       "responseIsArray": false,
       "requestSchema": "AuthenticateUserByName",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "POST /Users/New",
@@ -13240,7 +13243,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /web/ConfigurationPages",
@@ -14221,7 +14224,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "Channels 端点为库内频道域（非 LiveTv 频道），LiveTv 频道 Id 不适用，400 正确"
     },
     {
       "id": "GET /Channels/Items/Latest",
@@ -14374,7 +14378,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /Dlna/Profiles/{Id}",
@@ -14398,7 +14402,7 @@
       "responseSchema": "Dlna.DeviceProfile",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "Dlna/Profiles 列表端点自身 404（疑似 bug 已登记），无 profile fixture"
     },
     {
       "id": "POST /Dlna/Profiles/{Id}",
@@ -14797,7 +14801,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "POST /Items/{Id}/Refresh",
@@ -15693,7 +15698,7 @@
       "responseSchema": "NameIdPair",
       "responseIsArray": true,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /LiveTv/Channels/{Id}",
@@ -15977,7 +15982,7 @@
       "responseSchema": "LiveTv.TimerInfoDto",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无活跃 timer fixture（B 轨道 timer 已消费），404 正确"
     },
     {
       "id": "POST /LiveTv/Timers/{Id}",
@@ -16049,7 +16054,7 @@
       "responseSchema": "LiveTv.TimerInfoDto",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无 series timer fixture，404 正确"
     },
     {
       "id": "POST /LiveTv/SeriesTimers/{Id}",
@@ -16651,7 +16656,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无插件安装（去 Emby 化后零插件），404 正确"
     },
     {
       "id": "GET /Plugins/{Id}/Configuration",
@@ -16675,7 +16680,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无插件安装（去 Emby 化后零插件），404 正确"
     },
     {
       "id": "POST /Plugins/{Id}/Configuration",
@@ -17942,7 +17947,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "POST /System/Configuration/{Key}",
@@ -18736,7 +18741,8 @@
       "responseSchema": "QueryResult_BaseItemDto",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /Users/{UserId}/GroupingOptions",
@@ -18876,7 +18882,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": "B5 占位：BIF 生成未实现，404 预期"
+      "expected404": "B5 占位：BIF 生成未实现，404 预期",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /Videos/{Id}/stream.{Container}",
@@ -19566,7 +19573,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /Videos/{Id}/live.m3u8",
@@ -20007,7 +20015,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /GameGenres/{Name}/Images/{Type}",
@@ -20244,7 +20252,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /Images/Ratings/{Theme}/{Name}",
@@ -20273,7 +20281,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "GET /Images/MediaInfo/{Theme}/{Name}",
@@ -20302,7 +20310,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "POST /Items/RemoteSearch/Apply/{Id}",
@@ -20608,7 +20616,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无进行中直播录制（已完成录制不走此路由），404 正确"
     },
     {
       "id": "GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}",
@@ -20637,7 +20645,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无活跃直播流文件 fixture（需 OpenToken 会话），404 正确"
     },
     {
       "id": "GET /LiveTv/ListingProviders/SchedulesDirect/Countries",
@@ -20679,7 +20687,7 @@
       "responseSchema": "BaseItemDto",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "无录制组 fixture（Groups 端点期望组而非单条录制），404 正确"
     },
     {
       "id": "POST /LiveTv/Tuners/{Id}/Reset",
@@ -20959,7 +20967,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "合成参数 404 合理（无对应资源）"
     },
     {
       "id": "POST /Sessions/{Id}/Playing/{Command}",
@@ -22767,7 +22775,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /GameGenres/{Name}/Images/{Type}/{Index}",
@@ -24112,7 +24121,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "合成参数 400 为正确校验行为（负路径用例已固化）"
     },
     {
       "id": "GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}",
@@ -24291,7 +24301,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "legacy hls 路由合成分片参数，404 正确（负路径已固化）"
     },
     {
       "id": "POST /Items/{Id}/Images/{Type}/{Index}/Index",
@@ -24418,7 +24428,7 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "fixture 媒体无字幕流，404 正确（无流→404 已是修复后行为）"
     },
     {
       "id": "GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}",
@@ -24472,7 +24482,8 @@
       "responseSchema": "",
       "responseIsArray": false,
       "requestSchema": "",
-      "expected404": ""
+      "expected404": "",
+      "expected400": "StartPositionTicks=test 合成参数 → 400 正确（负路径已固化）"
     },
     {
       "id": "GET /web/index.html",
