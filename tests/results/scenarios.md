@@ -1,6 +1,6 @@
 ﻿# OpenMedia 功能场景测试报告
 
-> 运行时间：2026-10-15 04:54:45　基址：http://localhost:8096/emby　ServerId：980f922f49e84b8b8c7c9631964fa1c1　版本：3.5.3.0
+> 运行时间：2026-10-15 08:17:54　基址：http://localhost:8096/emby　ServerId：980f922f49e84b8b8c7c9631964fa1c1　版本：3.5.3.0
 
 **结果：PASS 21 / FAIL 0 / SKIP 1（共 22）**
 
@@ -27,10 +27,10 @@
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
 | 测试媒体就绪（Movie1/Movie2 mkv+nfo+poster） | 文件存在 | 就绪 | **PASS** |  |
-| GET /Library/VirtualFolders | 200 | status=200 文件夹数=7（OpenMediaTests 存在=True） | **PASS** |  |
+| GET /Library/VirtualFolders | 200 | status=200 文件夹数=4（OpenMediaTests 存在=True） | **PASS** |  |
 | POST /Library/VirtualFolders（添加 OpenMediaTests） | — | 已存在，跳过（幂等） | **SKIP** |  |
 | POST /Library/Refresh（触发扫描） | 200/204 | status=204 | **PASS** |  |
-| 扫描出 2 部电影（轮询 /Items?Recursive=true） | ≥2 个 Movie 条目（≤120s） | count=2，耗时 0.1s | **PASS** |  |
+| 扫描出 2 部电影（轮询 /Items?Recursive=true） | ≥2 个 Movie 条目（≤120s） | count=2，耗时 0.2s | **PASS** |  |
 | Movie1 元数据（nfo title/year） | Name=Movie1, ProductionYear=2020 | Name=Movie1, Year=2020, Id=c3f6962891668fc8365e3dfaa24bb3ea | **PASS** | nfo 解析（title/year） |
 | Movie2 元数据（nfo title/year） | Name=Movie2, ProductionYear=2021 | Name=Movie2, Year=2021 | **PASS** |  |
 | GET /Items/{Movie1}/Images/Primary（poster.jpg） | 200 + image/* | status=200 type=image/jpeg 633B | **PASS** |  |
@@ -38,13 +38,13 @@
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| ws://…/embywebsocket 连接 + SessionsStart 回环 | 连接成功，收到服务器推送消息（MessageType=Sessions） | 收到推送 MessageType=UserUpdated（1708B，EndOfMessage=True） | **PASS** | 发送 SessionsStart → 服务器解析并回推，双向回环验证通过 |
+| ws://…/embywebsocket 连接 + SessionsStart 回环 | 连接成功，收到服务器推送消息（MessageType=Sessions） | 收到推送 MessageType=RefreshProgress（148B，EndOfMessage=True） | **PASS** | 发送 SessionsStart → 服务器解析并回推，双向回环验证通过 |
 ## S5-静态资源
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| GET /web/index.html | 200 + text/html | status=200 type=text/html 2811B | **PASS** |  |
-| GET /web/index.html + Range: bytes=0-99 | 206 + Content-Range: bytes 0-99/N | status=206 content-range=bytes 0-99/2811 body=100B | **PASS** |  |
+| GET /web/index.html | 200 + text/html | status=200 type=text/html 2727B | **PASS** |  |
+| GET /web/index.html + Range: bytes=0-99 | 206 + Content-Range: bytes 0-99/N | status=206 content-range=bytes 0-99/2727 body=100B | **PASS** |  |
 | GET /emby/web/index.html（前缀克隆） | 200 + text/html | status=200 type=text/html | **PASS** |  |
 | GET /favicon.ico | 200 | status=200 type=image/vnd.microsoft.icon | **PASS** |  |
 | GET /robots.txt | 200 | status=200 type=text/plain | **PASS** |  |

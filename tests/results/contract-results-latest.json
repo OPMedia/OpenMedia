@@ -1,5 +1,5 @@
 ﻿{
-    "runAt":  "2026-10-15 04:55:23",
+    "runAt":  "2026-10-15 08:18:39",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
     "summary":  {
@@ -61,7 +61,7 @@
                    {
                        "endpoint":  "/Items",
                        "rule":  "HTTP 200 + QueryResult{Items,TotalRecordCount}",
-                       "result":  "Items=20 TotalRecordCount=29",
+                       "result":  "Items=20 TotalRecordCount=34",
                        "status":  "PASS",
                        "detail":  ""
                    },

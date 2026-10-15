@@ -1,5 +1,5 @@
 ﻿{
-    "runAt":  "2026-10-15 04:54:45",
+    "runAt":  "2026-10-15 08:17:54",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
     "serverId":  "980f922f49e84b8b8c7c9631964fa1c1",
@@ -72,7 +72,7 @@
                         "section":  "S3-媒体库",
                         "name":  "GET /Library/VirtualFolders",
                         "expected":  "200",
-                        "actual":  "status=200 文件夹数=7（OpenMediaTests 存在=True）",
+                        "actual":  "status=200 文件夹数=4（OpenMediaTests 存在=True）",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -96,7 +96,7 @@
                         "section":  "S3-媒体库",
                         "name":  "扫描出 2 部电影（轮询 /Items?Recursive=true）",
                         "expected":  "≥2 个 Movie 条目（≤120s）",
-                        "actual":  "count=2，耗时 0.1s",
+                        "actual":  "count=2，耗时 0.2s",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -128,7 +128,7 @@
                         "section":  "S4-WebSocket",
                         "name":  "ws://…/embywebsocket 连接 + SessionsStart 回环",
                         "expected":  "连接成功，收到服务器推送消息（MessageType=Sessions）",
-                        "actual":  "收到推送 MessageType=UserUpdated（1708B，EndOfMessage=True）",
+                        "actual":  "收到推送 MessageType=RefreshProgress（148B，EndOfMessage=True）",
                         "status":  "PASS",
                         "notes":  "发送 SessionsStart → 服务器解析并回推，双向回环验证通过"
                     },
@@ -136,7 +136,7 @@
                         "section":  "S5-静态资源",
                         "name":  "GET /web/index.html",
                         "expected":  "200 + text/html",
-                        "actual":  "status=200 type=text/html 2811B",
+                        "actual":  "status=200 type=text/html 2727B",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -144,7 +144,7 @@
                         "section":  "S5-静态资源",
                         "name":  "GET /web/index.html + Range: bytes=0-99",
                         "expected":  "206 + Content-Range: bytes 0-99/N",
-                        "actual":  "status=206 content-range=bytes 0-99/2811 body=100B",
+                        "actual":  "status=206 content-range=bytes 0-99/2727 body=100B",
                         "status":  "PASS",
                         "notes":  ""
                     },

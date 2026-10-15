@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 05:00:10　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-15 08:18:26　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -8,12 +8,12 @@
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
 | P0 | 14 | 11 | 3 | — | 0 |
-| P1 | 252 | 144 | 72 | 36 | 0 |
+| P1 | 252 | 145 | 71 | 36 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：67.4%**（155 / 230）
+**通过率（PASS / (PASS+FAIL)）：67.8%**（156 / 230）
 
-## 负路径用例（T1.T 固化，23/24 PASS）
+## 负路径用例（T1.T 固化，24/24 PASS）
 
 | 族 | 操作 | 期望 | 实际 | 结果 |
 |----|------|------|------|------|
@@ -39,7 +39,7 @@
 | Parse400 | `GET /Images/Remote` | 400 | 400 | **PASS** |
 | Parse400 | `GET /Videos/{Id}/index.bif` | 400 | 400 | **PASS** |
 | Parse400 | `GET /Users/{UserId}/Views` | 400 | 400 | **PASS** |
-| Similar | `GET /Albums/{Id}/Similar` | 404 | 500 | **FAIL** |
+| Similar | `GET /Albums/{Id}/Similar` | 404 | 404 | **PASS** |
 | Similar | `GET /Items/{Id}/Similar` | 200 | 200 | **PASS** |
 
 ### 失败清单
@@ -63,7 +63,7 @@
 | P1 | `POST /Users/AuthenticateByName` | 400 | 400：Value cannot be null. (Parameter 'username') |
 | P1 | `GET /web/ConfigurationPage` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Albums/{Id}/InstantMix` | 400 | 400：Value cannot be null. (Parameter 'id') |
-| P1 | `GET /Albums/{Id}/Similar` | 500 | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Entities.… |
+| P1 | `GET /Albums/{Id}/Similar` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Audio/{Id}/universal.{Container}` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/universal` | 400 | 400：Value cannot be null. (Parameter 'id') |
 | P1 | `GET /Audio/{Id}/master.m3u8` | 400 | 400：MediaSourceId is required |
@@ -90,7 +90,6 @@
 | P1 | `GET /Videos/{Id}/index.bif` | 400 | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 400 |
 | P1 | `GET /Videos/{Id}/master.m3u8` | 400 | 400：MediaSourceId is required |
 | P1 | `GET /Videos/{Id}/subtitles.m3u8` | 400 | 400：The input string 'test' was not in a correct format. |
-| P1 | `GET /Videos/{Id}/live.m3u8` | 500 | 500 Internal Server Error：Error starting ffmpeg |
 | P1 | `GET /Artists/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Dlna/{UuId}/icons/{Filename}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /GameGenres/{Name}/Images/{Type}` | 404 | 404：不在 B6 暂缓清单 |
@@ -119,7 +118,7 @@
 | P1 | `GET /Users/{Id}/Images/{Type}/{Index}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 400 | 400：The input string 'test' was not in a correct format. |
 | P1 | `GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}` | 404 | 404：不在 B6 暂缓清单 |
-| P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | 500 | 500 Internal Server Error：Sequence contains no matching element |
+| P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | 404 | 404：不在 B6 暂缓清单 |
 | P1 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | 400 | 400：The input string 'test' was not in a correct format. |
 
 ## 明细矩阵（按域分组）
@@ -129,7 +128,7 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Albums/{Id}/InstantMix` | P1 | 400 | — |  | **FAIL** | 400：Value cannot be null. (Parameter 'id') |
-| `GET /Albums/{Id}/Similar` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Unable to cast object of type 'MediaBrowser.Controller.Entities.Movies.Movie' to type 'MediaBrowser.Controller.Entities.… |
+| `GET /Albums/{Id}/Similar` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 
 ### 域：Artists（8）
 
@@ -331,7 +330,7 @@
 | `GET /Library/MediaFolders` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Library/PhysicalPaths` | P1 | 200 | PascalCase ✓ | (非对象: String) | **PASS** |  |
 | `GET /Library/SelectableMediaFolders` | P1 | 200 | PascalCase ✓ | Name,Id,SubFolders | **PASS** |  |
-| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,RefreshS… | **PASS** |  |
+| `GET /Library/VirtualFolders` | P1 | 200 | PascalCase ✓ | Name,Locations,CollectionType,LibraryOptions,ItemId,PrimaryI… | **PASS** |  |
 
 ### 域：LiveTv（33）
 
@@ -623,7 +622,7 @@
 | `GET /Users/{UserId}/Items/{Id}/Intros` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/{Id}/LocalTrailers` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
 | `GET /Users/{UserId}/Items/{Id}/SpecialFeatures` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Object reference not set to an instance of an object. |
-| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,ChannelId,ProductionYear,IsFolder,ParentId,… | **PASS** |  |
+| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,ChannelId,IsFolder,ParentId,Type,UserData,C… | **PASS** |  |
 | `GET /Users/{UserId}/Items/Resume` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/Root` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Supp… | **PASS** |  |
 | `GET /Users/{UserId}/Suggestions` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
@@ -642,12 +641,12 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/{StartPositionTicks}/Stream.{Format}` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
-| `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Sequence contains no matching element |
+| `GET /Videos/{Id}/{MediaSourceId}/Subtitles/{Index}/Stream.{Format}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Videos/{Id}/AdditionalParts` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Videos/{Id}/hls/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /Videos/{Id}/hls1/{PlaylistId}/{SegmentId}.{SegmentContainer}` | P1 | 400 | — |  | **FAIL** | 400：The input string 'test' was not in a correct format. |
 | `GET /Videos/{Id}/index.bif` | P1 | 400 | — |  | **FAIL** | 预期 404（B5 占位：BIF 生成未实现，404 预期），实际 400 |
-| `GET /Videos/{Id}/live.m3u8` | P1 | 500 | — |  | **FAIL** | 500 Internal Server Error：Error starting ffmpeg |
+| `GET /Videos/{Id}/live.m3u8` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Videos/{Id}/main.m3u8` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Videos/{Id}/master.m3u8` | P1 | 400 | — |  | **FAIL** | 400：MediaSourceId is required |
 | `GET /Videos/{Id}/stream` | P1 | 200 | — |  | **PASS** |  |
@@ -662,7 +661,7 @@
 | `GET /robots.txt` | P1 | 200 | — |  | **PASS** |  |
 | `GET /web/ConfigurationPage` | P1 | 404 | — |  | **FAIL** | 404：不在 B6 暂缓清单 |
 | `GET /web/ConfigurationPages` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
-| `GET /web/index.html` | P0 | 200 | — |  | **PASS** | text/html, 2811B |
+| `GET /web/index.html` | P0 | 200 | — |  | **PASS** | text/html, 2727B |
 
 ### 域：Years（1）
 

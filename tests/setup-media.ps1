@@ -1,34 +1,36 @@
-﻿# OpenMedia 测试媒体生成（幂等）：tests\media\ 下两部假电影
-# Movie1/Movie2：.mkv（EBML 魔数 + 256KB 确定性伪数据，非空以支持 Range 测试）+ .nfo（title/year）+ poster.jpg（Movie1，供 Primary 图片端点）
+﻿# OpenMedia 测试媒体生成（幂等）：tests\media\ 下两部电影
+# Movie1/Movie2：.mkv（ffmpeg 真实 H.264+AAC，-force_key_frames 每 2s —— 关键帧稀疏会让
+#   HLS seek 分片退化为整文件拷贝，2026-10-15 复验实证）+ .nfo（title/year）+ poster.jpg（Movie1）
+# 兼容旧假文件（256KB 伪 EBML）：存在且 <300KB 或无视频流时自动重生成真视频。
 # PowerShell 5.1 兼容。
 param(
-    [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media"
+    [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media",
+    [string]$Ffmpeg = "D:\OpenMedia\ffmpeg.exe"
 )
 $ErrorActionPreference = 'Stop'
 
 $movies = @(
-    @{ Folder = 'Movie1'; Title = 'Movie1'; Year = 2020; Poster = $true },
-    @{ Folder = 'Movie2'; Title = 'Movie2'; Year = 2021; Poster = $false }
+    @{ Folder = 'Movie1'; Title = 'Movie1'; Year = 2020; Poster = $true;  Seconds = 10 },
+    @{ Folder = 'Movie2'; Title = 'Movie2'; Year = 2021; Poster = $false; Seconds = 8 }
 )
 
-function Write-FakeMkv {
-    param([string]$Path, [int]$SizeKB = 256, [int]$Seed = 12345)
-    if ((Test-Path -LiteralPath $Path) -and ((Get-Item -LiteralPath $Path).Length -ge 1KB)) { return $false }
-    $fs = [System.IO.File]::Create($Path)
-    try {
-        $header = [byte[]](0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20)
-        $fs.Write($header, 0, $header.Length)
-        $rnd = New-Object System.Random($Seed)
-        $chunk = New-Object byte[] 4096
-        $rnd.NextBytes($chunk)
-        $remaining = $SizeKB * 1024 - $header.Length
-        while ($remaining -gt 0) {
-            $n = [Math]::Min($chunk.Length, $remaining)
-            $fs.Write($chunk, 0, $n)
-            $remaining -= $n
-        }
-    }
-    finally { $fs.Dispose() }
+function Test-RealVideo {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    if ((Get-Item -LiteralPath $Path).Length -lt 300KB) { return $false }
+    # ffprobe 探测有视频流才算真视频（假文件探测必失败）
+    $probe = & $Ffmpeg.Replace('ffmpeg.exe', 'ffprobe.exe') -v error -select_streams v -show_entries stream=codec_name -of csv=p=0 $Path 2>$null
+    return ($LASTEXITCODE -eq 0 -and $probe)
+}
+
+function Write-RealMkv {
+    param([string]$Path, [int]$Seconds)
+    & $Ffmpeg -y -hide_banner -loglevel error `
+        -f lavfi -i "testsrc2=size=640x360:rate=30:duration=$Seconds" `
+        -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=$Seconds" `
+        -c:v libx264 -preset veryfast -pix_fmt yuv420p -force_key_frames "expr:gte(t,n_forced*2)" `
+        -c:a aac -b:a 128k -shortest $Path 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "ffmpeg 生成失败: $Path" }
     return $true
 }
 
@@ -66,7 +68,10 @@ foreach ($m in $movies) {
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
 
     $mkv = Join-Path $dir "$($m.Folder).mkv"
-    if (Write-FakeMkv -Path $mkv -Seed (12345 + $m.Year)) { $created += $mkv }
+    if (-not (Test-RealVideo $mkv)) {
+        if (Test-Path -LiteralPath $mkv) { Remove-Item -LiteralPath $mkv -Force }
+        if (Write-RealMkv -Path $mkv -Seconds $m.Seconds) { $created += $mkv }
+    }
 
     $nfo = Join-Path $dir "$($m.Folder).nfo"
     if (-not (Test-Path -LiteralPath $nfo)) {
