@@ -83,17 +83,18 @@
 
 ## 5. 优化候选清单（四期实施，按优先级）
 
-> **四期实施终态（2026-10-15，Developer）**：P1/P2/P3/P6 完成（commit `b1fe3d5e40`/`d6967b7a18`/`3e9ba4f0cb`/`081f78d522`），P4 跳过（结论更正），P5 留下轮（语义等价性需 Reviewer 参与），P7 不做（10k 非瓶颈）。P1 有一处 Reviewer 阻塞项（Folder.cs:553 守卫）修复中。
+> **实施终态更新（2026-10-15 晚，Architect 维护）**：P1/P2/P3/P6 完成（commit `b1fe3d5e40`/`d6967b7a18`/`3e9ba4f0cb`/`081f78d522`），P4 跳过（结论更正），P5 已落地（`0fe4fbed12` 收尾：NULL-pukey 组不折叠是有意改善），**P7 五期提前落地**（partial hydration 三 commit），P8 新增候选（Reviewer 审计发现）。P1 守卫已修（`9c79863ad9`）。
 
-| # | 候选 | 依据 | 预估收益 | 风险 | **四期终态** |
+| # | 候选 | 依据 | 预估收益 | 风险 | **终态** |
 |---|---|---|---|---|---|
-| P1 | /Items?Ids= 批量查询路径排查（L1b P95 657ms） | §3 | 4× | 低（纯查询层） | ✅ 匿名 Recursive 250→35ms（**6-7×**，BoxSet 折叠劫持根因+库树限定）；守卫修复中 |
+| P1 | /Items?Ids= 批量查询路径排查（L1b P95 657ms） | §3 | 4× | 低（纯查询层） | ✅ 匿名 Recursive 250→35ms（**6-7×**，BoxSet 折叠劫持根因+库树限定）；守卫已修（`9c79863ad9`） |
 | P2 | similarity_score 相关子查询改 JOIN/预计算 | BR-40 71.5ms@10k | Similar 端点 10× | 中（Developer 正在改该区域，需协调） | ✅ LEFT JOIN 聚合 87.5→10.4ms（**8.4×**），新旧 top-10 score 逐行一致 |
 | P3 | `A.data::text LIKE` 族改 jsonb 运算符或提取列 | BR-36/37 65/35ms@10k | VideoType/SeriesStatus 过滤 10× | 中（需数据迁移） | ✅ jsonb 运算符 40.9→10.1ms（**4×**），真实库 VideoType 8=8 一致（未做数据迁移，纯查询改写） |
 | P4 | BR-45 AncestorWithPresentationUniqueKey 改 JOIN 写法消除基数误估 | BR-45 118.5ms@10k | 8× | 低 | ❌ **跳过+结论更正：合成数据失真**——perf 库全部条目共享一个 CollectionFolder 祖先 → IN 列表 10k 行放大逐行回探；真实场景 PUK 匹配单 Series、IN 列表几十行 <1ms 非瓶颈；JOIN 改写实测无改善（128ms）。**基线方法论教训：合成 fixture 的祖先分布必须贴近真实库形态，否则 EXPLAIN 结论失真** |
-| P5 | DISTINCT ON 包装跳过条件（键唯一时退化为普通查询） | BR-03 125× | 列表页 10×+ | 中（语义等价性需 Reviewer 确认） | ⏸ 留下轮：真实库规模下收益未显现 + 等价性确认流程未走 |
+| P5 | DISTINCT ON 包装跳过条件（键唯一时退化为普通查询） | BR-03 125× | 列表页 10×+ | 中（语义等价性需 Reviewer 确认） | ✅ 已落地：非 NULL 键去重语义不变 + NULL-pukey 组不再折叠是有意改善（旧行为折叠 NULL 键行才是 bug，LiveTvProgram fixture 两行实测从折叠变各自出现） |
 | P6 | HasNoAudioTrackWithLanguage 相关子查询改 EXISTS JOIN | BR-34 19.3ms | 2× | 低 | ✅ 五分支 EXISTS 28.8→16.5ms（**1.7×**），502=502 一致 |
-| P7 | 水合路径测量（PgItemRepository.cs:1030 逐行全量反序列化） | BR-02 0.12ms@10k（blob 1.5KB） | 10k 规模下非瓶颈；**100k+ 或大 blob 时复测** | — | ⏸ 100k+ 复测留五期 |
+| P7 | 水合路径测量（PgItemRepository.cs:1030 逐行全量反序列化） | BR-02 0.12ms@10k（blob 1.5KB） | 10k 规模下非瓶颈；100k+ 复测 | — | ✅ **提前落地**：partial hydration（`36b7858fcc`，列表路径跳过 data JSONB 全量反序列化，L1 82→51ms）+ count-per-folder TTL（`6bf8d59c35`，语句 27→3、L1 32ms）+ review 收尾（`0fe4fbed12`）。**Reviewer 阻塞一项**：RequiresFullHydration switch 漏 `ItemFields.RemoteTrailers`（data JSONB 独有字段，漏了=列表 `Fields=RemoteTrailers` 静默返 null，公开 API 契约回归）——一行修，修完关账。审计结论：Chapters（惰性走表）/MediaSources（运行时算）/ExternalUrls（DTO 现算）均不依赖 data JSONB，partial 下安全 |
+| P8 | **新增候选**：skipDataHydration 时把 data 列从 SELECT 摘除 | Reviewer 审计发现：跳过水合但 data 列仍传输 ~1.5KB/行（网络+PG 成本白付） | 列表页再省一笔 | 低 | ⏸ 下个迭代 |
 
 ## 6. 复现步骤
 
