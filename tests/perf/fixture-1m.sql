@@ -482,3 +482,11 @@ SELECT '== blob 重量（期望 avg ≥ 1000B）==' AS section;
 SELECT type, round(avg(octet_length(data::text))) AS avg_blob_bytes, count(*) FROM media_items WHERE type IN (2, 5) GROUP BY type;
 
 ANALYZE;
+
+-- ============================================================
+-- 16. top_parent_id 回填（用户作用域查询的 TopParentIds 过滤依赖；
+--     生成器直插不经过服务器保存路径，需显式回填：每条目的库祖先 GUID）
+-- ============================================================
+UPDATE media_items m SET top_parent_id = l.guid::text
+FROM ancestor_ids a, media_items l
+WHERE a.item_id = m.id AND l.id = a.ancestor_id AND l.type = 0;
