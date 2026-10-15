@@ -90,7 +90,24 @@ UserId 必填 ×3、MediaSourceId 必填 ×2、path 必填 ×1——加参后 20
 **新增设计项（本节升级为"多实例隔离"族，与 §3.1 根 GUID 守卫同族）**：
 
 - **T4.9 LibraryItemsCache 失效策略**：现状无逐出无失效，共享 DB 多实例拓扑下掩蔽外部写（清库/他实例写）。选项：(a) TTL 兜底（简单，秒级陈旧窗口可接受）；(b) PG NOTIFY/LISTEN 跨实例失效（彻底，加依赖）；(c) 扫描/写后主动逐出（覆盖主路径）。**建议 a+c 组合**：写路径（SaveItems/DeleteItem）后逐出本实例 + TTL 兜底他实例写；b 留五期。验收：8097 清库后 8096 不重启也能看到库空（当前必须重启）
-- **T4.10 ByName 键大小写与配置解耦**：最小改法=ServerConfiguration 默认值改 true（一行，与 8096 现行一致）+ 重复行清理；彻底改法=删配置开关固定小写（forceCaseInsensitive 恒真）。**建议先最小改法**（前向兼容：小写键=现行 8096 行为，仅原大小写异常行重哈希），彻底解耦随五期配置清理。验收：跨实例同名同路径 GUID 唯一；重复对清零
+- **T4.10 ByName 键大小写与配置解耦（✅ 定案见 §3.4）**：最小改法=ServerConfiguration 默认值改 true（一行，与 8096 现行一致）+ 重复行清理；彻底改法=删配置开关固定小写（forceCaseInsensitive 恒真）。**建议先最小改法**（前向兼容：小写键=现行 8096 行为，仅原大小写异常行重哈希），彻底解耦随五期配置清理。验收：跨实例同名同路径 GUID 唯一；重复对清零
+
+### 3.4 T4.10 定案：ByName 键解耦 + 存量清理（四期收尾，2026-10-15）
+
+**复发根因（Comedy 案例定案）**：TMDb 图片链刷新时对 Genre/Person 走建行路径，GUID 计算读当前配置——`EnableNormalizedItemByNameIds` **默认 false**（ServerConfiguration.cs:24 无初始化），仅 ServerConfigurationManager save 时强制 true（:220-223）。配置为 false 的窗口期（新实例首启/配置未保存）算出**原大小写键 GUID**，与 8096 既有小写键行 divergent → 同名双行 → 图片落在新建行、查询命中旧行 → "Comedy 坏路径/图片 404" 症状族复发。两处计算点同源：LibraryManager.cs:1002（GetNewItemIdInternal）与 PgItemRepository.cs:1705（GetItemByNameId，注释自述"复刻 LibraryManager 公式"）。
+
+**定案两层**：
+
+1. **四期落地（一行）**：`ServerConfiguration.EnableNormalizedItemByNameIds` 默认值改 `true`。效果：任何新实例/新 ProgramData 从第一秒即小写键口径，与 8096 已保存配置一致；save 强制迁移保留（幂等兜底）。前向兼容：小写键=现行行为，既有行 GUID 不变；仅 divergent 行下次建行时重哈希——正是清理对象。
+2. **五期彻底解耦（登记不混入四期）**：删配置开关、两处计算点 forceCaseInsensitive 恒真——动 LibraryManager/PgData 双项目语义，随五期配置清理批。
+
+**存量清理方案（DB 手术，D3 流程：查引用→迁移→删→复核）**：
+
+- 检测：`SELECT type, name, COUNT(*) FROM media_items GROUP BY type, name HAVING COUNT(*) > 1`（限 ByName 类型：Genre/Person/Studio/MusicArtist/MusicGenre/GameGenre）→ 同名对清单
+- 保留规则：**保留小写键 GUID 行**（8096 口径、承重图片 fixture 所在行）；divergent 行资产迁移——图片文件（metadata 目录合并到保留行）、user_data、item_extradata 引用
+- 删除：零引用验证后删 divergent 行；验证=同名对清零、Comedy 图片点 200、TotalRecordCount 与基线一致；**脚本幂等可重跑，兼作回归工具**
+
+**复发防线**：默认 true 后新实例不再产 divergent 行（配置文档标注"勿关"）；ByName 404 化已挡读路径建行；残留建行路径（postscan validator、DtoService 自愈链）走同一公式，配置统一后不再 divergent。
 
 ### 3.3 MusicBrainz 503 重试
 
@@ -115,7 +132,7 @@ UserId 必填 ×3、MediaSourceId 必填 ×2、path 必填 ×1——加参后 20
 | T4.7 | 根 GUID 扫描侧守卫 | — | 1.5d | §3.1 验收（D3 复现场景零损失） |
 | T4.8 | MBZ 503 重试 | — | 0.5d | §3.3 验收 |
 | T4.9 | LibraryItemsCache 失效（写后逐出+TTL） | — | 1d | §3.2 新增项验收（8097 清库 8096 免重启可见） |
-| T4.10 | ByName 键解耦（默认 true + 重复行清理） | — | 0.5d | §3.2 新增项验收（跨实例 GUID 唯一） |
+| T4.10 | ByName 键解耦（默认 true + 重复行清理）——**✅ 定案 §3.4**（Comedy 复发根因入档） | — | 0.5d | §3.4 验收（跨实例 GUID 唯一；同名对清零；Comedy 图片 200） |
 
 **分工**：Developer T4.5（+已带 ProcessLock try/finally、MBZ UA 统一）；Developer-2 T4.1→T4.2；Developer-3 T4.6（诊断完接修复）；Tester T4.3/T4.4 + fixture `-force_key_frames`；T4.7/T4.8 给先空出的开发。
 
