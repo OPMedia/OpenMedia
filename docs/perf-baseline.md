@@ -51,7 +51,7 @@
 
 - 分区表（item_people/media_streams/ancestor_ids）的分区索引**齐全**（父表 `ON ONLY` 只是目录形态）
 - item_extradata 有 (item_id, extradata_type_id) 与 (extradata_type_id, clean_value) 双索引，GenreIds 走索引
-- **未命中/低效**：`A.data::text LIKE`（无索引可用，blob 转换逐行）；`similarity_score` 相关子查询（planner 无法用索引消除逐行探查）；BR-45 的基数误估（统计信息对相关子查询无能为力，需改写 SQL）
+- **未命中/低效**：`A.data::text LIKE`（无索引可用，blob 转换逐行）；`similarity_score` 相关子查询（planner 无法用索引消除逐行探查）；~~BR-45 的基数误估~~（**四期更正：合成数据失真**——perf 库全部条目共享一个 CollectionFolder 祖先 → IN 列表 10k 行放大逐行回探；真实场景 PUK 匹配单 Series、IN 列表几十行 <1ms 非瓶颈，JOIN 改写实测无改善，见 §5 P4）
 
 ## 3. 负载基线（T2.3，k6 未安装 → Python stdlib 等价实现）
 
@@ -81,17 +81,19 @@
 - 服务器存活、无 StackOverflow（BUG-14 修复在转码路径验证通过）、无 ffmpeg 进程残留
 - **临时文件泄漏**：3 会话 6 文件 2.6MB，测试结束 70s 后仍在（kill timer 对已退出的 ffmpeg 不生效，BUG-25）
 
-## 5. 优化候选清单（三期实施，按优先级）
+## 5. 优化候选清单（四期实施，按优先级）
 
-| # | 候选 | 依据 | 预估收益 | 风险 |
-|---|---|---|---|---|
-| P1 | /Items?Ids= 批量查询路径排查（L1b P95 657ms） | §3 | 4× | 低（纯查询层） |
-| P2 | similarity_score 相关子查询改 JOIN/预计算 | BR-40 71.5ms@10k | Similar 端点 10× | 中（Developer 正在改该区域，需协调） |
-| P3 | `A.data::text LIKE` 族改 jsonb 运算符或提取列 | BR-36/37 65/35ms@10k | VideoType/SeriesStatus 过滤 10× | 中（需数据迁移） |
-| P4 | BR-45 AncestorWithPresentationUniqueKey 改 JOIN 写法消除基数误估 | BR-45 118.5ms@10k | 8× | 低 |
-| P5 | DISTINCT ON 包装跳过条件（键唯一时退化为普通查询） | BR-03 125× | 列表页 10×+ | 中（语义等价性需 Reviewer 确认） |
-| P6 | HasNoAudioTrackWithLanguage 相关子查询改 EXISTS JOIN | BR-34 19.3ms | 2× | 低 |
-| P7 | 水合路径测量（PgItemRepository.cs:1030 逐行全量反序列化） | BR-02 0.12ms@10k（blob 1.5KB） | 10k 规模下非瓶颈；**100k+ 或大 blob 时复测** | — |
+> **四期实施终态（2026-10-15，Developer）**：P1/P2/P3/P6 完成（commit `b1fe3d5e40`/`d6967b7a18`/`3e9ba4f0cb`/`081f78d522`），P4 跳过（结论更正），P5 留下轮（语义等价性需 Reviewer 参与），P7 不做（10k 非瓶颈）。P1 有一处 Reviewer 阻塞项（Folder.cs:553 守卫）修复中。
+
+| # | 候选 | 依据 | 预估收益 | 风险 | **四期终态** |
+|---|---|---|---|---|---|
+| P1 | /Items?Ids= 批量查询路径排查（L1b P95 657ms） | §3 | 4× | 低（纯查询层） | ✅ 匿名 Recursive 250→35ms（**6-7×**，BoxSet 折叠劫持根因+库树限定）；守卫修复中 |
+| P2 | similarity_score 相关子查询改 JOIN/预计算 | BR-40 71.5ms@10k | Similar 端点 10× | 中（Developer 正在改该区域，需协调） | ✅ LEFT JOIN 聚合 87.5→10.4ms（**8.4×**），新旧 top-10 score 逐行一致 |
+| P3 | `A.data::text LIKE` 族改 jsonb 运算符或提取列 | BR-36/37 65/35ms@10k | VideoType/SeriesStatus 过滤 10× | 中（需数据迁移） | ✅ jsonb 运算符 40.9→10.1ms（**4×**），真实库 VideoType 8=8 一致（未做数据迁移，纯查询改写） |
+| P4 | BR-45 AncestorWithPresentationUniqueKey 改 JOIN 写法消除基数误估 | BR-45 118.5ms@10k | 8× | 低 | ❌ **跳过+结论更正：合成数据失真**——perf 库全部条目共享一个 CollectionFolder 祖先 → IN 列表 10k 行放大逐行回探；真实场景 PUK 匹配单 Series、IN 列表几十行 <1ms 非瓶颈；JOIN 改写实测无改善（128ms）。**基线方法论教训：合成 fixture 的祖先分布必须贴近真实库形态，否则 EXPLAIN 结论失真** |
+| P5 | DISTINCT ON 包装跳过条件（键唯一时退化为普通查询） | BR-03 125× | 列表页 10×+ | 中（语义等价性需 Reviewer 确认） | ⏸ 留下轮：真实库规模下收益未显现 + 等价性确认流程未走 |
+| P6 | HasNoAudioTrackWithLanguage 相关子查询改 EXISTS JOIN | BR-34 19.3ms | 2× | 低 | ✅ 五分支 EXISTS 28.8→16.5ms（**1.7×**），502=502 一致 |
+| P7 | 水合路径测量（PgItemRepository.cs:1030 逐行全量反序列化） | BR-02 0.12ms@10k（blob 1.5KB） | 10k 规模下非瓶颈；**100k+ 或大 blob 时复测** | — | ⏸ 100k+ 复测留五期 |
 
 ## 6. 复现步骤
 
