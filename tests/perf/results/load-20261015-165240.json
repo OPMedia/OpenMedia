@@ -1,0 +1,105 @@
+{
+  "runAt": "2026-10-15 16:52:40",
+  "tool": "python-stdlib-loadgen (k6 未安装的替代，等价口径)",
+  "note": "每档时长 30s（设计值 60s，在线实例缩减，偏差已记录）",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "L1-Items分页-10rps",
+      "requests": 378,
+      "durationS": 30.3,
+      "rps": 12.5,
+      "p50Ms": 488.0,
+      "p95Ms": 3251.0,
+      "p99Ms": 4337.4,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 378
+      }
+    },
+    {
+      "label": "L1-Items分页-50rps",
+      "requests": 508,
+      "durationS": 41.8,
+      "rps": 12.2,
+      "p50Ms": 1244.3,
+      "p95Ms": 21016.5,
+      "p99Ms": 21033.6,
+      "errorRate": 6.3,
+      "codes": {
+        "200": 476,
+        "-1": 32
+      }
+    },
+    {
+      "label": "L1-Items分页-100rps",
+      "requests": 1223,
+      "durationS": 30.4,
+      "rps": 40.2,
+      "p50Ms": 782.9,
+      "p95Ms": 1075.4,
+      "p99Ms": 1205.7,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 1223
+      }
+    },
+    {
+      "label": "L1b-Ids批量-50rps",
+      "requests": 3040,
+      "durationS": 49.0,
+      "rps": 62.1,
+      "p50Ms": 70.4,
+      "p95Ms": 158.6,
+      "p99Ms": 21026.3,
+      "errorRate": 2.07,
+      "codes": {
+        "200": 2977,
+        "-1": 63
+      }
+    },
+    {
+      "label": "L2-扫描并发-50rps",
+      "requests": 1234,
+      "durationS": 33.3,
+      "rps": 37.1,
+      "p50Ms": 480.4,
+      "p95Ms": 1145.7,
+      "p99Ms": 21032.5,
+      "errorRate": 1.05,
+      "codes": {
+        "200": 1221,
+        "-1": 13
+      }
+    },
+    {
+      "label": "L3-静态流-并发10",
+      "requests": 2514,
+      "durationS": 44.4,
+      "rps": 56.7,
+      "p50Ms": 8.7,
+      "p95Ms": 13.0,
+      "p99Ms": 23.5,
+      "errorRate": 100.0,
+      "codes": {
+        "206": 2494,
+        "-1": 20
+      }
+    },
+    {
+      "label": "L4-认证-并发20",
+      "requests": 3087,
+      "durationS": 48.3,
+      "rps": 63.9,
+      "p50Ms": 37.5,
+      "p95Ms": 94.2,
+      "p99Ms": 21018.0,
+      "errorRate": 1.3,
+      "codes": {
+        "200": 3047,
+        "-1": 39,
+        "500": 1
+      }
+    }
+  ]
+}

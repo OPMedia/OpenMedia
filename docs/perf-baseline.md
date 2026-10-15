@@ -135,3 +135,10 @@ pg_stat_statements 补测（待 Chief 排期管理员重启 PG）：conf 设 `sh
 ### 7.3 负路径新用例（合法不存在 Guid/Name → 404）
 
 新增 10 条（ByName 404 新语义 ×5 + GhostGuid ×5），**9/10 PASS**；唯一 FAIL：`GET /Items/{GhostId}/PlaybackInfo` → 400 "Parameter 'item'"（资源不存在应 404，T1 家族语义缺口，保留作防线）。负路径总计 33/34。
+
+### 7.4 干净轮复测补充（16:52，PG 零活动、D2 灌库未开始）
+
+- **回归确认（非污染）**：L1 P50 488ms@10rps（手动单发最佳口径 316ms vs 基线 40.8ms）——水合每行成本 ~10× 是真回归
+- **21s 停顿定性**：连接层连锁——慢响应 × 持续负载 → urllib 每请求新建连接 → TIME_WAIT/临时端口耗尽 → TCP 连接超时（~21s 是 Windows SYN 重传窗口）；主因仍是每请求延迟
+- **L2 级联污染**：load-test.py 的 L2 触发 /Library/Refresh 后，扫描+元数据刷新（TMDb/MBZ 网络 + T4.8 最多 ~9s 重试）**在测试结束后仍后台运行数分钟**，污染后续 L3/L4 与背靠背轮次（L4 的 500/5.2s 认证即此因）。**建议 load-test.py 把 L2 挪到最后或独立跑**
+- Chief 归因修正：openmedia_scale 库尚不存在（D2 灌库未开始）；16:25 窗口的污染源是 D3 内存审计（8099 共享 PG，672 转码+10 扫描）；持续存在的停顿是服务器侧连锁
