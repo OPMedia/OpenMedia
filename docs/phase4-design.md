@@ -10,7 +10,7 @@
 |------|------|------|
 | G1 矩阵收尾 | ⑤ fixture 32 点 + ④ 测试基建 12 点 + ③ 必填参数 6 点清零 | 矩阵 ≥ 90%（230 口径）；残差全部归类记账（B6 22 用户跳过 + 已知接受项）；test-report v3 |
 | G2 性能落地 | P1–P7 优化实施（perf-baseline.md §5） | 每项前后对比数字 + k6 复跑 + 三套件回归不劣化 |
-| G3 架构隐患 | 根 GUID 同构处置、postscan 修复、MBZ 503 重试 | D3 复现场景共享库零损失；清库后普通重扫自动重建艺人；MBZ 间歇 503 不再断刷新链 |
+| G3 架构隐患 | 根 GUID 同构守卫、ByName 写副作用/缓存掩蔽/键分歧三根因修复、MBZ 503 重试 | D3 复现场景共享库零损失；ByName 读不建行；清库他实例免重启可见；跨实例同名 GUID 唯一；MBZ 间歇 503 不断链 |
 | G4 口径 | 矩阵记账口径统一（用户决策跳过 vs 预期 404 vs 已知接受） | test-report v3 附残差分类表 |
 
 ---
@@ -76,15 +76,21 @@ UserId 必填 ×3、MediaSourceId 必填 ×2、path 必填 ×1——加参后 20
 
 **验收**：8097 复现场景（全新 ProgramData + 添加库 + RefreshLibrary=true）→ 共享库 TotalRecordCount 不变；正常 API 删库流不受影响；幽灵库修复回归通过。
 
-### 3.2 postscan ArtistsValidator 疑点
+### 3.2 postscan ArtistsValidator 疑点（✅ 已结案：postscan 没坏，D3 只读诊断 2026-10-15）
 
-**机制链**（实读）：ApplicationHost `GetExports<ILibraryPostScanTask>`（:1410）→ LibraryManager `RunPostScanTasks`（:1107，全量扫描尾部）→ ArtistsPostScanTask → ArtistsValidator.Run：`GetAllArtistNames()` → 逐名 `GetArtist(name)`（**缺失即创建**）→ 刷元数据 → 清死艺人。
+**诊断结论**（证据链闭环，四选项之争作废）：
 
-已知：`e4215dcb4c` 修过 postscan 聚合 SQL（PG 42883）——postscan 至少跑过且有 SQL 翻译 bug 史。疑点（D3 只读诊断进行中）：05:29 创建过艺人、05:32 起四次扫描零动作且无报错。
+1. **ArtistsPostScanTask 每次全量扫描都跑**（PerformLibraryValidation → RunPostScanTasks 无条件执行）。"没日志"≠"没跑"：任务日志 Debug 级被过滤，艺人已存在且不脏时 RefreshMetadata 空转零输出
+2. **清库后不重建的真根因是 LibraryItemsCache 掩蔽**：内存缓存无逐出、无跨实例失效，8097 清库后仍持陈旧艺人条目 → GetItemById 缓存命中 → 跳过 DB 重建；铁证=06:03 回写行 date_created 仍是 05:29（陈旧条目带原时间戳回写）
+3. **新发现：ByName 读端点有写副作用**——GET /Artists/{Name}（Genres/Persons/Studios/MusicGenres 同族）对不存在的名字直接创建条目（DtoService 序列化带 Artists 的条目也会顺手建行）。矩阵每轮播种幽灵行（08:18 实证 35ms 内创建 "Movie1" 艺人）
+4. **重复 GUID 机制实锤**：`EnableNormalizedItemByNameIds` 默认 false（ServerConfiguration.cs:24 无初始化），ServerConfigurationManager save 时才强制 true（:220）——8096（Norm=true 小写键）与 bin\Debug 实例（Norm=false 原大小写键）对同路径哈希出双 GUID
 
-**修复方向**（按 D3 诊断证据选一）：①DI 导出未注册 → 注册修复；②GetAllArtistNames 查询返空（PG 翻译 bug）→ 查询修复；③异常被吞 → 日志可见性；④任务跑了但 GetArtist 创建路径静默失败。
+**修复批（Chief 已派 D3）**：① ByName 读端点去写副作用（不存在→404）；② postscan 日志升 Info；③ 幽灵数据清理（Movie1 幽灵行 ×4 + Person/Genre 重复对，删前零引用验证）。
 
-**验收**：清库后**普通重扫**（非 ReplaceAllMetadata）自动重建 ByName 艺人；扫描日志可见 postscan 任务执行痕迹。
+**新增设计项（本节升级为"多实例隔离"族，与 §3.1 根 GUID 守卫同族）**：
+
+- **T4.9 LibraryItemsCache 失效策略**：现状无逐出无失效，共享 DB 多实例拓扑下掩蔽外部写（清库/他实例写）。选项：(a) TTL 兜底（简单，秒级陈旧窗口可接受）；(b) PG NOTIFY/LISTEN 跨实例失效（彻底，加依赖）；(c) 扫描/写后主动逐出（覆盖主路径）。**建议 a+c 组合**：写路径（SaveItems/DeleteItem）后逐出本实例 + TTL 兜底他实例写；b 留五期。验收：8097 清库后 8096 不重启也能看到库空（当前必须重启）
+- **T4.10 ByName 键大小写与配置解耦**：最小改法=ServerConfiguration 默认值改 true（一行，与 8096 现行一致）+ 重复行清理；彻底改法=删配置开关固定小写（forceCaseInsensitive 恒真）。**建议先最小改法**（前向兼容：小写键=现行 8096 行为，仅原大小写异常行重哈希），彻底解耦随五期配置清理。验收：跨实例同名同路径 GUID 唯一；重复对清零
 
 ### 3.3 MusicBrainz 503 重试
 
@@ -105,9 +111,11 @@ UserId 必填 ×3、MediaSourceId 必填 ×2、path 必填 ×1——加参后 20
 | T4.3 | ④ 测试基建修复 + ③ 必填参数入 plan | — | 1d | 解包误报清零；③ 6 点转 PASS |
 | T4.4 | 矩阵全量复跑 + test-report v3（含残差分类表） | T4.1–T4.3 | 0.5d | 矩阵 ≥ 90% |
 | T4.5 | P1–P7 性能优化 | — | 3d | Developer 进行中；每项对比+回归 |
-| T4.6 | postscan ArtistsValidator 修复 | D3 诊断证据 | 1d | §3.2 验收 |
+| T4.6 | postscan 修复批（D3）：ByName 读端点 404 化 + 日志升 Info + 幽灵行清理 | D3 诊断（已完成） | 1d | §3.2 修复批三项；删行零引用验证 |
 | T4.7 | 根 GUID 扫描侧守卫 | — | 1.5d | §3.1 验收（D3 复现场景零损失） |
 | T4.8 | MBZ 503 重试 | — | 0.5d | §3.3 验收 |
+| T4.9 | LibraryItemsCache 失效（写后逐出+TTL） | — | 1d | §3.2 新增项验收（8097 清库 8096 免重启可见） |
+| T4.10 | ByName 键解耦（默认 true + 重复行清理） | — | 0.5d | §3.2 新增项验收（跨实例 GUID 唯一） |
 
 **分工**：Developer T4.5（+已带 ProcessLock try/finally、MBZ UA 统一）；Developer-2 T4.1→T4.2；Developer-3 T4.6（诊断完接修复）；Tester T4.3/T4.4 + fixture `-force_key_frames`；T4.7/T4.8 给先空出的开发。
 
@@ -123,8 +131,11 @@ UserId 必填 ×3、MediaSourceId 必填 ×2、path 必填 ×1——加参后 20
 | R2 P5 DISTINCT ON 语义等价性 | Reviewer 确认等价性证明后才合；不合则降级跳过 |
 | R3 扫描守卫改变删除语义 | 验收必须覆盖：正常 API 删库、幽灵库修复、手动删文件夹三流 |
 | R4 矩阵复跑暴露新 bug | 登记 fail-classified 新分类，不阻断四期 |
-| R5 postscan 诊断证据不足 | 先诊断后修（D3 只读任务）；证据不足则加 Debug 日志再复现 |
-| R6 ⑤ 复测撞出音频/剧集新 bug | 同 R4 口径 |
+| R5 postscan 诊断证据不足 | 已结案：D3 诊断证据链闭环（§3.2） |
+| R6 ⑤ 复测撞出音频/剧集新 bug | 同 R4 口径（D2 已撞出 3 个用户作用域 500，归 D2 修） |
+| R7 ByName 404 化改变读语义 | 老客户端依赖"读即建"的路径需排查（web UI 按名导航）；负路径用例先行 |
+| R8 幽灵行/重复对删行误伤 | 删前零引用验证（D3 流程）；备份先行 |
+| R9 缓存写后逐出影响吞吐 | 逐出只做 key 级不做全量；k6 L1 复跑对比 |
 
 ---
 
