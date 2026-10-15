@@ -4,6 +4,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Providers;
 using System;
 using System.Collections.Generic;
@@ -811,26 +812,51 @@ namespace MediaBrowser.Providers.Music
             var urlInfo = await GetMbzUrl(forceMusicBrainzProper).ConfigureAwait(false);
             var throttleMs = urlInfo.throttleMs;
 
-            if (throttleMs > 0)
-            {
-                // MusicBrainz is extremely adamant about limiting to one request per second
-                _logger.Debug("Throttling MusicBrainz by {0}ms", throttleMs.ToString(CultureInfo.InvariantCulture));
-                await Task.Delay(throttleMs, cancellationToken).ConfigureAwait(false);
-            }
-
             url = urlInfo.url.TrimEnd('/') + url;
 
-            var options = new HttpRequestOptions
-            {
-                Url = url,
-                CancellationToken = cancellationToken,
-                // MusicBrainz 对含空格的 User-Agent（如 "Emby Server/…"）直接 503 busy（实测 2026-10）；
-                // UA 必须无空格，去 Emby 化后以 OpenMedia 名义标识
-                UserAgent = "OpenMedia/" + _appHost.ApplicationVersion,
-                BufferContent = throttleMs > 0
-            };
+            // T4.8（phase4-design §3.3）：MusicBrainz 有 IP 级滑动窗口限流，间歇 503/429
+            // 直接断艺人/专辑刷新链（D3 恢复期实证）。指数退避重试 ×3（1s/2s/4s，
+            // 尊重 Retry-After 头）；三次失败抛出——上层 ProviderManager catch 跳过
+            // 该 provider 本轮（不阻断扫描，下轮再试）。
+            var backoffDelays = new[] { 1000, 2000, 4000 };
 
-            return await _httpClient.SendAsync(options, "GET").ConfigureAwait(false);
+            for (var attempt = 0; ; attempt++)
+            {
+                if (throttleMs > 0)
+                {
+                    // MusicBrainz is extremely adamant about limiting to one request per second
+                    _logger.Debug("Throttling MusicBrainz by {0}ms", throttleMs.ToString(CultureInfo.InvariantCulture));
+                    await Task.Delay(throttleMs, cancellationToken).ConfigureAwait(false);
+                }
+
+                var options = new HttpRequestOptions
+                {
+                    Url = url,
+                    CancellationToken = cancellationToken,
+                    // MusicBrainz 对含空格的 User-Agent（如 "Emby Server/…"）直接 503 busy（实测 2026-10）；
+                    // UA 必须无空格，去 Emby 化后以 OpenMedia 名义标识
+                    UserAgent = "OpenMedia/" + _appHost.ApplicationVersion,
+                    BufferContent = throttleMs > 0
+                };
+
+                try
+                {
+                    return await _httpClient.SendAsync(options, "GET").ConfigureAwait(false);
+                }
+                catch (HttpException ex) when (attempt < backoffDelays.Length
+                    && (ex.StatusCode == HttpStatusCode.ServiceUnavailable || ex.StatusCode == (HttpStatusCode)429))
+                {
+                    // Retry-After 优先（上限 30s 防御异常值），否则指数退避
+                    var delay = ex.RetryAfterMs.HasValue
+                        ? Math.Min(ex.RetryAfterMs.Value, 30000)
+                        : backoffDelays[attempt];
+
+                    _logger.Warn("MusicBrainz busy ({0}), retry {1}/3 after {2}ms: {3}",
+                        (int?)ex.StatusCode, attempt + 1, delay, url);
+
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
 
         public int Order

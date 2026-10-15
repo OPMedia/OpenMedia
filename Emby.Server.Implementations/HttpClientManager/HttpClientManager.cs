@@ -765,9 +765,39 @@ namespace Emby.Server.Implementations.HttpClientManager
                 }
                 throw new HttpException(response.ReasonPhrase)
                 {
-                    StatusCode = response.StatusCode
+                    StatusCode = response.StatusCode,
+                    // T4.8：透传 Retry-After 头（秒或 HTTP-date；HTTP-date 罕见，解析失败忽略）
+                    RetryAfterMs = GetRetryAfterMs(response)
                 };
             }
+        }
+
+        private static int? GetRetryAfterMs(HttpResponseMessage response)
+        {
+            try
+            {
+                var values = response.Headers?.RetryAfter;
+                if (values == null)
+                {
+                    return null;
+                }
+
+                if (values.Delta.HasValue)
+                {
+                    return (int)values.Delta.Value.TotalMilliseconds;
+                }
+
+                if (values.Date.HasValue)
+                {
+                    var delta = values.Date.Value - DateTimeOffset.UtcNow;
+                    return delta.TotalMilliseconds > 0 ? (int)delta.TotalMilliseconds : 0;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
         }
     }
 }
