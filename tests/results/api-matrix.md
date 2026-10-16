@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-15 22:00:27　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-16 14:32:11　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c40cea18fc9c413b93aca7bad1a80d92（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
@@ -13,7 +13,7 @@
 
 **通过率（PASS / (PASS+FAIL)）：100%**（199 / 199）
 
-## 负路径用例（T1.T 固化，33/34 PASS）
+## 负路径用例（T1.T 固化，34/34 PASS）
 
 | 族 | 操作 | 期望 | 实际 | 结果 |
 |----|------|------|------|------|
@@ -50,7 +50,7 @@
 | GhostGuid | `GET /Items/{Id}/Images/{Type}` | 404 | 404 | **PASS** |
 | GhostGuid | `GET /Users/{UserId}/Items/{Id}` | 404 | 404 | **PASS** |
 | GhostGuid | `GET /Shows/{Id}/Seasons` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Items/{Id}/PlaybackInfo` | 404 | 400 | **FAIL** |
+| GhostGuid | `GET /Items/{Id}/PlaybackInfo` | 404 | 404 | **PASS** |
 
 ## 明细矩阵（按域分组）
 
@@ -132,7 +132,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Devices` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
+| `GET /Devices` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /Devices/CameraUploads` | P1 | 200 | PascalCase ✓ | DeviceId,FilesUploaded | **PASS** |  |
 | `GET /Devices/Info` | P1 | 200 | PascalCase ✓ | Name,Id,LastUserName,AppName,AppVersion,LastUserId,DateLastA… | **PASS** |  |
 | `GET /Devices/Options` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
