@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Devices;
@@ -72,6 +73,14 @@ public class MediaInfoService : BaseApiService
 	{
 		User userById = _userManager.GetUserById(request.UserId);
 		BaseItem itemById = _libraryManager.GetItemById(request.Id);
+
+		// T1 家族语义缺口（负路径防线最后一条）：合法但不存在的 Guid → 404
+		// （原 null 直接传 GetPlaybackInfo → ArgumentNullException 400）
+		if (itemById == null)
+		{
+			throw new ResourceNotFoundException(string.Format("Item {0} not found", request.Id));
+		}
+
 		return await GetPlaybackInfo(itemById, userById, allowMediaProbe: true).ConfigureAwait(continueOnCapturedContext: false);
 	}
 
@@ -123,6 +132,13 @@ public class MediaInfoService : BaseApiService
 		}
 		User userById = _userManager.GetUserById(((PlaybackInfoRequest)request).UserId);
 		BaseItem item = _libraryManager.GetItemById(((PlaybackInfoRequest)request).Id);
+
+		// T1 家族语义缺口（同 GET 版）：合法但不存在的 Guid → 404
+		if (item == null)
+		{
+			throw new ResourceNotFoundException(string.Format("Item {0} not found", ((PlaybackInfoRequest)request).Id));
+		}
+
 		PlaybackInfoResponse info = await GetPlaybackInfo(item, userById, ((PlaybackInfoRequest)request).IsPlayback, ((PlaybackInfoRequest)request).MediaSourceId, ((PlaybackInfoRequest)request).LiveStreamId).ConfigureAwait(continueOnCapturedContext: false);
 		if (profile != null)
 		{
