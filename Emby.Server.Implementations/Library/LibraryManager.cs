@@ -1005,6 +1005,8 @@ namespace Emby.Server.Implementations.Library
             new Dictionary<string, Tuple<MusicArtist, DateTime>>(StringComparer.OrdinalIgnoreCase);
         private static readonly object _artistNameCacheLock = new object();
         private static readonly TimeSpan ArtistNameCacheTtl = TimeSpan.FromSeconds(30);
+        // Reviewer 全仓扫描的顺手封顶项（无界字典禁令不留例外）
+        private const int ArtistNameCacheCapacity = 10000;
 
         public MusicArtist GetArtist(string name, DtoOptions options)
         {
@@ -1024,6 +1026,24 @@ namespace Emby.Server.Implementations.Library
             {
                 lock (_artistNameCacheLock)
                 {
+                    // 容量兜底：超限清过期项（TTL 30s），仍超限整体重置
+                    if (_artistNameCache.Count >= ArtistNameCacheCapacity)
+                    {
+                        var expired = _artistNameCache
+                            .Where(i => (DateTime.UtcNow - i.Value.Item2) >= ArtistNameCacheTtl)
+                            .Select(i => i.Key)
+                            .ToList();
+                        foreach (var k in expired)
+                        {
+                            _artistNameCache.Remove(k);
+                        }
+
+                        if (_artistNameCache.Count >= ArtistNameCacheCapacity)
+                        {
+                            _artistNameCache.Clear();
+                        }
+                    }
+
                     _artistNameCache[name] = new Tuple<MusicArtist, DateTime>(artist, DateTime.UtcNow);
                 }
             }
