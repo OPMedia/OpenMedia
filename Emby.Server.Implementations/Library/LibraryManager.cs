@@ -1126,8 +1126,13 @@ namespace Emby.Server.Implementations.Library
         /// <returns>Task.</returns>
         public Task ValidateMediaLibrary(IProgress<double> progress, CancellationToken cancellationToken)
         {
-            // Just run the scheduled task so that the user can see it
-            _taskManager.CancelIfRunningAndQueue<RefreshMediaLibraryTask>();
+            // S11（队列打断 bug，D2 日志铁证 08:26:36 "Attempting to cancel"）：
+            // 原 CancelIfRunningAndQueue 在扫描在跑时取消重启——1M 库 6.3h 的活
+            // 每 30min 被定时器打断一次，7 段接力 0 Completed（扫描永远走不完）。
+            // 改为 QueueIfNotRunning：在跑就跳过（本轮跑完自然覆盖新触发点的变更），
+            // 空闲才启动。CancelIfRunningAndQueue 保留给真正需要取消的场景
+            // （如配置变更的 wizardChanged 路径）。
+            _taskManager.QueueIfNotRunning<RefreshMediaLibraryTask>();
 
             return Task.CompletedTask;
         }

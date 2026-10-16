@@ -330,11 +330,43 @@ namespace Emby.Server.PgData
 
         private static void Execute(NpgsqlConnection connection, string sql)
         {
-            using (var cmd = new NpgsqlCommand(sql, connection))
+            // S11（DDL 崩溃 bug，Tester 登记）：启动路径的 DDL 遇 Npgsql 超时
+            // （PG 挪动/自重启窗口）→ CurrentDomain.UnhandledException → 进程死。
+            // 重试 ×3（1s/3s/5s 退避）——启动 DDL 是幂等的（to_regclass 门卫 +
+            // IF NOT EXISTS），重试安全；三次失败抛出让上层报清晰错误。
+            for (var attempt = 0; ; attempt++)
             {
-                cmd.ExecuteNonQuery();
+                try
+                {
+                    using (var cmd = new NpgsqlCommand(sql, connection))
+                    {
+                        cmd.CommandTimeout = 30;
+                        cmd.ExecuteNonQuery();
+                    }
+                    return;
+                }
+                catch (NpgsqlException ex) when (attempt < 3)
+                {
+                    var delay = attempt == 0 ? 1000 : attempt == 1 ? 3000 : 5000;
+                    System.Threading.Thread.Sleep(delay);
+                    // 连接可能已坏——重开
+                    try
+                    {
+                        if (connection.State != System.Data.ConnectionState.Open)
+                        {
+                            connection.Open();
+                        }
+                    }
+                    catch
+                    {
+                        // 连接重开失败继续重试（下一次可能成功）
+                    }
+                    _loggerRef?.Invoke(string.Format("PgSchemaInitializer DDL retry {0}/3 after {1}ms: {2}", attempt + 1, delay, ex.Message));
+                }
             }
         }
+
+        private static readonly System.Action<string> _loggerRef = null; // 静态类无 logger——重试日志走异常消息
 
         private static void Execute(NpgsqlConnection connection, NpgsqlTransaction transaction, string sql)
         {
