@@ -4,7 +4,8 @@
 # 顺序严格；总耗时 ~25 分钟（fixture 13.5 + GUID 应用 6 + 其余 ~5）
 # ============================================================
 param(
-    [string]$PgPort = 15432
+    [string]$PgPort = 15432,
+    [switch]$SkipFixture
 )
 $ErrorActionPreference = 'Stop'
 $psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
@@ -19,13 +20,19 @@ function Step($n, $name, $script) {
 }
 
 # [1] 重建 fixture（drop + schema + 1M 灌入，13.5 分钟）
-Write-Host "[1/7] 重建 fixture（13.5 分钟）..."
-& "D:\Dev\OpenMedia\tests\perf\setup-scale-db.ps1" 2>&1 | Select-Object -Last 1
+if (-not $SkipFixture) {
+    Write-Host "[1/7] 重建 fixture（13.5 分钟）..."
+    & "D:\Dev\OpenMedia\tests\perf\setup-scale-db.ps1" 2>&1 | Select-Object -Last 1
+} else {
+    Write-Host "[1/7] 跳过 fixture（-SkipFixture，复用现有库）"
+}
 
 # [2] 库行迁移 + 用户 Policy
 Write-Host "[2/7] 库行迁移..."
 & $psql @base -f "$perf\s7-migrate-libs.sql" 2>&1 | Select-Object -Last 1
-& $psql @base -c "UPDATE local_users SET data = jsonb_set(data, '{Policy}', '{`"IsAdministrator`":false,`"EnableAllFolders`":true,`"Enabled`":true}'::jsonb);" 2>&1 | Select-Object -Last 1
+# 注意：JSON 字面量必须走 jsonb_build_object（纯单引号）——PS 5.1 传原生参数时
+# 内嵌双引号会被改写成 \"，PG 收到非法 JSON（10-16 管线断点实证，勿改回字面量）
+& $psql @base -c "UPDATE local_users SET data = jsonb_set(data, '{Policy}', jsonb_build_object('IsAdministrator', false, 'EnableAllFolders', true, 'Enabled', true));" 2>&1 | Select-Object -Last 1
 
 # [3] 路径修正（season/episode/audio）
 Step "3/7" "season 路径" @"
@@ -50,6 +57,14 @@ Step "5/7" "other 路径" @"
 UPDATE media_items m SET path = 'D:\scale\' || f.name || '\' || (string_to_array(m.path, '\'))[array_length(string_to_array(m.path, '\'), 1)]
 FROM media_items f WHERE m.parent_id = f.id AND f.type = 1 AND m.type IN (20, 8, 9) AND position('scale' || chr(92) || 'other' || chr(92) in m.path) > 0 AND position('other' in f.name) = 1;
 "@
+
+# [5.5] 电影子目录 Folder 行预建（扫描安全：父链深度=磁盘深度）
+# 根因：电影文件在 movieNNN\Movie-XXXXXX\ 子目录，parent 却挂顶层 Folder →
+#       扫描 Except 流判 missing 删 18 万（10-16 soak 事故）。预建公式 GUID 的
+#       子目录 Folder 行 + parent 下沉 → 扫描按 GUID 命中复用，零删除。
+Write-Host "[5.5/9] 电影子目录 Folder 行（扫描安全）..."
+& "D:\Dev\OpenMedia\tests\perf\gen-movie-subfolders.ps1" 2>&1 | Select-Object -Last 2
+& $psql @base -f "$perf\s8-movie-subfolders.sql" 2>&1 | Select-Object -Last 5
 
 # [6] 媒体 GUID 修正（路径派生；GUID 文件可复用——路径确定性强）
 Write-Host "[6/7] 媒体 GUID 修正（6 分钟）..."
