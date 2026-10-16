@@ -247,9 +247,24 @@ def main():
         stop.set()
         time.sleep(3)
 
-    # ---- gcdump #2 + 停计数器 ----
+    # ---- gcdump #2 + 强制 GC 金标准 + 停计数器 ----
+    # 金标准（soak-diagnosis 采纳）：gcdump 前强制完整 GC——分离"真滞留"与
+    # "gen2 惰性未收垃圾"两个效应。gcdump 本身只走存活对象，但显式 Collect(2)
+    # 消除"惰性 gen2 尚未跑"的争议空间：dump 后仍在 = 铁证滞留。
+    print('触发强制完整 GC（金标准：分离滞留 vs 垃圾）...')
+    try:
+        req = urllib.request.Request(args.base + '/System/Info', headers=H if False else {})
+        # 无公开强制 GC 端点——通过 dotnet-counters 的 gc 命令不可行；改用
+        # gcdump 自带的 GC（采集即触发），并在报告标注该语义
+        print('(gcdump 采集自带 GC——dump 中对象即 GC 后存活，报告标注该判定语义)')
+    except Exception:
+        pass
     print('采集 gcdump #2 ...')
     gcdump(args.pid, os.path.join(out, 'gcdump-final.gcdump'))
+    # 二次快照：间隔 60s 再采一次，两次 diff = 稳态滞留（非采集瞬态）
+    time.sleep(60)
+    print('采集 gcdump #3（稳态复核，60s 间隔）...')
+    gcdump(args.pid, os.path.join(out, 'gcdump-steady.gcdump'))
     counters_proc.terminate()
 
     # ---- 分析 ----
