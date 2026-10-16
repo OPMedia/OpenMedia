@@ -94,7 +94,8 @@ warmup（一轮混合负载）→ gcdump #1 → N 轮负载（扫描+刷新+浏�
 | S5 | 1M fixture 生成器（真实祖先分布） | — | 1.5d | 100w 条入库独立库；分布参数可复现 |
 | S6 | 1M 全链路测量（EXPLAIN 复跑+水合占比+缓存命中）→ P7 实施决策 | S5 | 1.5d | 测量报告；P7 改造范围定案 |
 | S7 | 10k 用户 k6 三场景 | S5（用户 fixture） | 1d | L5/L6/L7 数字入档；池零耗尽 |
-| S8 | soak 4h 收口 + 堆快照 diff 终验 | S2–S4, S6 | 1d | §0 总验收全过 |
+| S8 | soak 4h 收口 + 堆快照 diff 终验 | S2–S4, S6 | 1d | §0 总验收全过。**首轮结果（2026-10-16 11:26）：FAIL——斜率 6.79 MB/h > 5 阈值，但拆解后真嫌疑唯一**：DirectoryService 三个无界 per-path 字典（`_cache`/`_fileCache`/`_filePathCache`，Controller/Providers/DirectoryService.cs:13-15）× 880k 文件树周期扫描 → +653,810 FileSystemMetadata 滞留；BaseItem 侧（Folder 99.5k/Movie 11.2k/CacheEntry 恰 100k）全部顶在 S2 LRU 上限 = 合法预热非泄漏。附注：负载错误率 86%（占位文件为假媒体，转码/流式 fail-fast），转码路径覆盖打折，内存行为仍有效 |
+| S10 | **新增（S8 FAIL 修复）**：DirectoryService 容量上限/扫描后释放 | S8 首轮报告 | 0.5d | 复跑 soak 斜率 < 5 MB/h（或证伪：final dump 时刻扫描仍在跑、实例本可 GC，则改判定口径重跑）；FileSystemMetadata retention root 用 gcdump 直查确认持有链 |
 | S9 | **P8 实施**（池防护）：查询信号量 + 池等待 3s + 池参数显式化 + 认证事务瘦身 | Reviewer 审 + Chief 拍板（✅ 已倾向③） | 1d | U2 复跑零雪崩、错误率 <5%（503 可接受）、恢复 <5s；U1 2000 档 P95 <5s；正常负载（L1 暖 21ms）零回归。**Architect 护栏四条**：① 信号量单一全局门（7 仓储一个池→一个门，可配置默认 50，不按仓储 ×7）；② 只守 DB 执行点不包整个请求管道；③ 实施前验证持门槽位内无嵌套二次取连接（防死锁）；④ 503 语义进中间件映射 + U2 复跑进负路径用例 |
 
 **分工建议**：S1/S3 先行（小）；S2 独立大项；S5 生成器给一人专做（S6/S7 都等它）；S8 收尾全员回归。四期部署窗口与 L1b 复测不受影响，先行。
