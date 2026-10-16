@@ -8,12 +8,12 @@ namespace MediaBrowser.Controller.Providers;
 
 /// <summary>
 /// S10（soak-diagnosis / Reviewer 形状约束）：三个 per-path 缓存字典的治理。
-/// 形状选择——不是小 LRU（880k 路径工作集下 10k 容量 = 每轮扫描全 miss + 逐出风暴），
-/// 而是"扫描感知清理 + 大容量上限兜底"：
-/// - ClearCache()：扫描收尾时调用（_filePathCache 的 clearCache 参数是旧先例，
-///   扩展到三个字典）——每轮扫描后干净起步，跨轮不累积
-/// - 容量上限 500k（兜底防异常场景）：超限整体 Clear（per-path 缓存重建成本低——
-///   下次访问时 FS 枚举一次）
+/// 形状——大容量上限兜底（500k，超限整体 Clear；per-path 缓存重建成本低——
+/// 下次访问时 FS 枚举一次）。1.18M 路径单轮扫描中途清 2-3 次，良性。
+/// 注：ClearCache 已按 Chief 处置①撤除——D2 构造点终判证实 DirectoryService
+/// 无长命持有者（DI 注册零、字段持有零、6 个构造点全部方法级 new），
+/// 唯一长命引用链是在途扫描的 async 状态机（扫描结束即随根死亡），
+/// 653k 是扫描在飞时 gcdump 的合法可达工作集，非泄漏。
 /// </summary>
 public class DirectoryService : IDirectoryService
 {
@@ -39,19 +39,6 @@ public class DirectoryService : IDirectoryService
 	public DirectoryService(IFileSystem fileSystem)
 		: this((ILogger)new NullLogger(), fileSystem)
 	{
-	}
-
-	/// <summary>
-	/// S10 扫描感知清理：扫描收尾调用——三个字典全清。
-	/// DirectoryService 每次 new 本身就是短生命周期（方法级创建），
-	/// 但 soak 实证 8 次扫描的 metadata 死对象在 gen2/LOH 惰性堆积（653k/4h）。
-	/// 此方法给扫描编排方一个显式清理点（配合容量兜底双保险）。
-	/// </summary>
-	public void ClearCache()
-	{
-		_cache.Clear();
-		_fileCache.Clear();
-		_filePathCache.Clear();
 	}
 
 	private void EnforceCapacity(IDictionary<string, FileSystemMetadata[]> cache)
