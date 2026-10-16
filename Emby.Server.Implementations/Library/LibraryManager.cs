@@ -1152,12 +1152,22 @@ namespace Emby.Server.Implementations.Library
             IsScanRunning = true;
             _libraryMonitorFactory().Stop();
 
+            // S10 修正（D2 僵尸滞留终判后的接线点）：扫描的 MetadataRefreshOptions 沿
+            // 递归 async 状态机下传 DirectoryService（三字典持有 653k FileSystemMetadata）。
+            // 30min 定时器 × 队列触发会把在跑的扫描打断重启（0 Completed 实证）——
+            // 被取消段的 async 状态机经 TaskManager 任务记录间接持有，不随扫描死亡。
+            // finally 三态（完成/取消/异常）都清空三字典——清空后 metadata 可回收，
+            // 僵尸状态机留着也无害。
+            var directoryService = new DirectoryService(_logger, _fileSystem);
+            var refreshOptions = new MetadataRefreshOptions(directoryService);
+
             try
             {
-                await PerformLibraryValidation(progress, cancellationToken).ConfigureAwait(false);
+                await PerformLibraryValidation(progress, cancellationToken, refreshOptions).ConfigureAwait(false);
             }
             finally
             {
+                directoryService.ClearCache();
                 _libraryMonitorFactory().Start();
                 IsScanRunning = false;
             }
@@ -1184,7 +1194,7 @@ namespace Emby.Server.Implementations.Library
             }
         }
 
-        private async Task PerformLibraryValidation(IProgress<double> progress, CancellationToken cancellationToken)
+        private async Task PerformLibraryValidation(IProgress<double> progress, CancellationToken cancellationToken, MetadataRefreshOptions refreshOptions)
         {
             _logger.Info("Validating media library");
 
@@ -1195,7 +1205,7 @@ namespace Emby.Server.Implementations.Library
             innerProgress.RegisterAction(pct => progress.Report(pct * .96));
 
             // Now validate the entire media library
-            await RootFolder.ValidateChildren(innerProgress, cancellationToken, new MetadataRefreshOptions(_fileSystem), recursive: true).ConfigureAwait(false);
+            await RootFolder.ValidateChildren(innerProgress, cancellationToken, refreshOptions, recursive: true).ConfigureAwait(false);
 
             progress.Report(96);
 

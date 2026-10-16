@@ -14,4 +14,7 @@ public interface IDirectoryService
 	List<string> GetFilePaths(string path);
 
 	List<string> GetFilePaths(string path, bool clearCache);
+
+	/// <summary>S10：扫描收尾（finally，完成/取消/异常三态）调用——三个 per-path 缓存字典全清。</summary>
+	void ClearCache();
 }
