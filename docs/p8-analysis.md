@@ -87,3 +87,23 @@ U2 的本质：**长查询（576ms+）× 高并发（500）= 池耗尽**。防�
 | 5 | PG max_connections 100→250 | postgresql.conf | 部署窗口（PG 重启） |
 
 **验收**：U2 复跑（500 并发全库）——零雪崩、错误率 <5%（503 可接受）、恢复时间 <5s；U1 2000 档 P95 <5s。
+
+---
+
+## 实施后备注（Reviewer 审查意见入档）
+
+**门的覆盖面清单**（Reviewer 记录在案①——后人加新查询入口时按此清单接线）：
+
+| 入口 | 进门？ | 理由 |
+|---|---|---|
+| GetItems | ✅ 公共面包门 → GetItemsCore | 主列表入口 |
+| GetItemList | ✅ 公共面包门 → GetItemListCore | 主列表入口（GetItems 内部委托走 Core 不双占） |
+| GetItemValues（Aggregates） | ✅ 包门 → Core | 1M 规模重查询入口（Reviewer 备注②：不留第二个 U2 形态） |
+| GetCount | ❌ 不进 | 轻查询（count），池占用短 |
+| GetItemIds | ❌ 不进 | 主要服务扫描侧，非用户请求路径 |
+| RetrieveItem（单条） | ❌ 不进 | 单条水合，池占用极短 |
+| 认证/写入（Create/Update/Save） | ❌ 不进 | 写路径短事务，信号量 50 < 池 100 留余量 |
+
+**接线模式**：新入口一律 `WithQueryGate(() => XxxCore(...))`——公共面包门、Core 裸奔、内部委托走 Core。**禁止**在 Core 内再调另一个进门入口（自死锁）。
+
+**最坏路径有界**（Reviewer 记录在案②）：门等 3s + 池等 3s = 6s 上限，可接受。
