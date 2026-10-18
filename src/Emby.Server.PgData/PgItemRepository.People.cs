@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Persistence;
 using Npgsql;
@@ -48,7 +50,7 @@ namespace Emby.Server.PgData
         /// 获取去重的人物名列表（旧 GetPeopleNames：Distinct Name + ListOrder 排序；
         /// PG 用 GROUP BY name ORDER BY MIN(list_order) 等价"按首次出现顺序"）。
         /// </summary>
-        public List<string> GetPeopleNames(InternalPeopleQuery query)
+        public async Task<List<string>> GetPeopleNamesAsync(InternalPeopleQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
@@ -71,32 +73,29 @@ namespace Emby.Server.PgData
 
             commandText += " GROUP BY p.name ORDER BY MIN(ip.list_order)";
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<string>();
+
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
             {
-                var list = new List<string>();
+                // 再跑一遍以注册参数（旧实现模式）
+                GetPeopleWhereClauses(query, cmd);
 
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    // 再跑一遍以注册参数（旧实现模式）
-                    GetPeopleWhereClauses(query, cmd);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(reader.GetString(0));
-                        }
-                    }
+                    list.Add(reader.GetString(0));
                 }
-
-                return list;
             }
+
+            return list;
         }
 
         /// <summary>
         /// 获取人物列表（旧 GetPeople：ItemId/Name/Role/PersonType/SortOrder + ListOrder 排序）。
         /// </summary>
-        public List<PersonInfo> GetPeople(InternalPeopleQuery query)
+        public async Task<List<PersonInfo>> GetPeopleAsync(InternalPeopleQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
@@ -120,26 +119,23 @@ namespace Emby.Server.PgData
 
             commandText += " ORDER BY ip.list_order";
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<PersonInfo>();
+
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
             {
-                var list = new List<PersonInfo>();
+                // 再跑一遍以注册参数（旧实现模式）
+                GetPeopleWhereClauses(query, cmd);
 
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    // 再跑一遍以注册参数（旧实现模式）
-                    GetPeopleWhereClauses(query, cmd);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(GetPerson(reader));
-                        }
-                    }
+                    list.Add(GetPerson(reader));
                 }
-
-                return list;
             }
+
+            return list;
         }
 
         private PersonInfo GetPerson(NpgsqlDataReader reader)
@@ -267,24 +263,30 @@ namespace Emby.Server.PgData
         /// 更新媒体项的人物（旧 UpdatePeople：先删后插，ListOrder 按列表顺序编号）。
         /// Person 项不存在时 upsert 到 media_items（GUID 复刻 LibraryManager 算法）。
         /// </summary>
-        public void UpdatePeople(Guid itemId, List<PersonInfo> people)
+        public Task UpdatePeopleAsync(Guid itemId, List<PersonInfo> people, CancellationToken cancellationToken = default)
         {
             if (itemId.Equals(Guid.Empty))
             {
-                throw new ArgumentNullException("itemId");
+                throw new ArgumentNullException(nameof(itemId));
             }
 
             if (people == null)
             {
-                throw new ArgumentNullException("people");
+                throw new ArgumentNullException(nameof(people));
             }
 
             CheckDisposed();
 
-            RunInTransaction((connection, transaction) =>
-            {
-                var internalId = GetInternalId(connection, transaction, itemId);
+            // 事务外完成 Person 项 GUID 计算与排序（确定性加锁顺序）
+            var validPeople = people
+                .Where(p => p != null && !string.IsNullOrWhiteSpace(p.Name))
+                .Select((p, idx) => new { Person = p, ListIndex = idx })
+                .OrderBy(x => GetItemByNameId(typeof(Person), GetPersonPath(x.Person.Name)))
+                .ToList();
 
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
+            {
+                var internalId = await GetInternalIdAsync(connection, transaction, itemId, ct).ConfigureAwait(false);
                 if (internalId == null)
                 {
                     return;
@@ -292,89 +294,76 @@ namespace Emby.Server.PgData
 
                 var itemInternalId = internalId.Value;
 
-                using (var deleteCmd = new NpgsqlCommand(
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     "DELETE FROM item_people WHERE item_id = @item_id",
-                    connection, transaction))
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId }).ConfigureAwait(false);
+
+                if (validPeople.Count == 0)
                 {
-                    deleteCmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId });
-                    deleteCmd.ExecuteNonQuery();
+                    return;
                 }
 
-                var listIndex = 0;
+                // 1. 批量 upsert Person 项（单条 UNNEST，RETURNING guid→id）
+                var personGuids = validPeople
+                    .Select(x => GetItemByNameId(typeof(Person), GetPersonPath(x.Person.Name)))
+                    .ToArray();
+                var personNames = validPeople.Select(x => x.Person.Name).ToArray();
+                var personCleanNames = personNames.Select(GetCleanValue).ToArray();
+                var personPaths = personNames.Select(n => GetPathToSave(GetPersonPath(n))).ToArray();
+                var personTypeName = typeof(Person).FullName;
+                var personTypeCode = GetTypeCode(typeof(Person));
 
-                foreach (var person in people)
-                {
-                    if (string.IsNullOrWhiteSpace(person.Name))
-                    {
-                        continue;
-                    }
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"INSERT INTO media_items
+                        (guid, type, type_name, name, clean_name, sort_name, path, is_folder, date_created, date_modified)
+                      SELECT u.guid, @type, @type_name, u.name, u.clean_name, u.name, u.path, FALSE, now(), now()
+                      FROM UNNEST(@guids, @names, @clean_names, @paths) AS u(guid, name, clean_name, path)
+                      ON CONFLICT (guid, type) DO UPDATE SET
+                        type_name = EXCLUDED.type_name,
+                        name = EXCLUDED.name,
+                        clean_name = EXCLUDED.clean_name,
+                        sort_name = EXCLUDED.sort_name,
+                        path = EXCLUDED.path,
+                        date_modified = now()",
+                    ct,
+                    new NpgsqlParameter("type", NpgsqlDbType.Integer) { Value = personTypeCode },
+                    new NpgsqlParameter("type_name", NpgsqlDbType.Text) { Value = personTypeName },
+                    new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = personGuids },
+                    new NpgsqlParameter("names", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = personNames },
+                    new NpgsqlParameter("clean_names", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = personCleanNames },
+                    new NpgsqlParameter("paths", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = personPaths }).ConfigureAwait(false);
 
-                    var personId = GetOrInsertPersonItem(connection, transaction, person.Name);
+                // 2. 单条 UNNEST 插入 item_people（JOIN media_items 解析 person_id）
+                var roles = validPeople.Select(x => x.Person.Role).ToArray();
+                var personTypes = validPeople.Select(x => MapPersonType(x.Person.Type)).ToArray();
+                var personTypeNames = validPeople.Select(x => x.Person.Type).ToArray();
+                var listOrders = validPeople.Select(x => x.ListIndex).ToArray();
+                var sortOrders = validPeople.Select(x => x.Person.SortOrder.HasValue ? (object)x.Person.SortOrder.Value : DBNull.Value).ToArray();
 
-                    using (var cmd = new NpgsqlCommand(
-                        @"INSERT INTO item_people
-                            (item_id, person_id, role, person_type, person_type_name, list_order, sort_order)
-                          VALUES
-                            (@item_id, @person_id, @role, @person_type, @person_type_name, @list_order, @sort_order)
-                          ON CONFLICT DO NOTHING",
-                        connection, transaction))
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId });
-                        cmd.Parameters.Add(new NpgsqlParameter("person_id", NpgsqlDbType.Bigint) { Value = personId });
-                        cmd.Parameters.Add(new NpgsqlParameter("role", NpgsqlDbType.Text) { Value = (object)person.Role ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("person_type", NpgsqlDbType.Smallint) { Value = MapPersonType(person.Type) });
-                        cmd.Parameters.Add(new NpgsqlParameter("person_type_name", NpgsqlDbType.Text) { Value = (object)person.Type ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("list_order", NpgsqlDbType.Integer) { Value = listIndex });
-                        cmd.Parameters.Add(new NpgsqlParameter("sort_order", NpgsqlDbType.Integer)
-                        {
-                            Value = person.SortOrder.HasValue ? (object)person.SortOrder.Value : DBNull.Value
-                        });
-
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    listIndex++;
-                }
-            });
-        }
-
-        /// <summary>
-        /// Person 项 upsert 到 media_items，返回其 id。
-        /// GUID = GetItemByNameId(Person, Person.GetPath(name))（与 LibraryManager.CreateItemByName 一致），
-        /// 已存在的真实 Person 项（含 data JSONB）不会被覆盖 data。
-        /// </summary>
-        internal long GetOrInsertPersonItem(NpgsqlConnection connection, NpgsqlTransaction transaction, string name)
-        {
-            var guid = GetItemByNameId(typeof(Person), GetPersonPath(name));
-            var personTypeCode = GetTypeCode(typeof(Person));
-
-            using (var cmd = new NpgsqlCommand(
-                @"INSERT INTO media_items
-                    (guid, type, type_name, name, clean_name, sort_name, path, is_folder, date_created, date_modified)
-                  VALUES
-                    (@guid, @type, @type_name, @name, @clean_name, @sort_name, @path, FALSE, now(), now())
-                  ON CONFLICT (guid, type) DO UPDATE SET
-                    type_name = EXCLUDED.type_name,
-                    name = EXCLUDED.name,
-                    clean_name = EXCLUDED.clean_name,
-                    sort_name = EXCLUDED.sort_name,
-                    path = EXCLUDED.path,
-                    date_modified = now()
-                  RETURNING id",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
-                cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Integer) { Value = personTypeCode });
-                cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Text) { Value = typeof(Person).FullName });
-                cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = name });
-                cmd.Parameters.Add(new NpgsqlParameter("clean_name", NpgsqlDbType.Text) { Value = GetCleanValue(name) });
-                cmd.Parameters.Add(new NpgsqlParameter("sort_name", NpgsqlDbType.Text) { Value = (object)name ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Text) { Value = (object)GetPathToSave(GetPersonPath(name)) ?? DBNull.Value });
-
-                var id = Convert.ToInt64(cmd.ExecuteScalar());
-                _guidToIdMap[guid] = id;
-                return id;
-            }
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"INSERT INTO item_people
+                        (item_id, person_id, role, person_type, person_type_name, list_order, sort_order)
+                      SELECT @item_id, p.id, u.role, u.person_type, u.person_type_name, u.list_order, u.sort_order
+                      FROM UNNEST(@guids, @roles, @person_types, @person_type_names, @list_orders, @sort_orders)
+                           AS u(guid, role, person_type, person_type_name, list_order, sort_order)
+                      JOIN media_items p ON p.guid = u.guid
+                      ON CONFLICT DO NOTHING",
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId },
+                    new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = personGuids },
+                    new NpgsqlParameter("roles", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = roles },
+                    new NpgsqlParameter("person_types", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = personTypes },
+                    new NpgsqlParameter("person_type_names", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = personTypeNames },
+                    new NpgsqlParameter("list_orders", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = listOrders },
+                    new NpgsqlParameter("sort_orders", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = sortOrders }).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         private static bool IsValidPersonType(string value)

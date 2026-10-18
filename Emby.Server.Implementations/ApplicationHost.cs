@@ -1076,10 +1076,10 @@ namespace Emby.Server.Implementations
 
             RegisterSingleInstance(CreateResourceFileManager());
 
-            displayPreferencesRepo.Initialize();
+            displayPreferencesRepo.InitializeAsync().GetAwaiter().GetResult();
 
             var userDataRepo = new Emby.Server.PgData.PgUserDataRepository(LogManager.GetLogger("PgUserDataRepository"), GetPostgresConnectionString());
-            userDataRepo.Initialize();
+            userDataRepo.InitializeAsync().GetAwaiter().GetResult();
 
             SetStaticProperties();
 
@@ -1090,7 +1090,7 @@ namespace Emby.Server.Implementations
             ((UserManager)UserManager).Initialize();
 
             ((UserDataManager)UserDataManager).Repository = userDataRepo;
-            itemRepo.Initialize();
+            itemRepo.InitializeAsync().GetAwaiter().GetResult();
         }
 
         protected virtual IBrotliCompressor CreateBrotliCompressor()
@@ -1317,7 +1317,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgUserRepository(LogManager.GetLogger("PgUserRepository"), JsonSerializer, GetPostgresConnectionString());
 
-            repo.Initialize();
+            repo.InitializeAsync().GetAwaiter().GetResult();
 
             return repo;
         }
@@ -1326,7 +1326,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgAuthenticationRepository(LogManager.GetLogger("PgAuthenticationRepository"), GetPostgresConnectionString());
 
-            repo.Initialize();
+            repo.InitializeAsync().GetAwaiter().GetResult();
 
             return repo;
         }
@@ -1335,7 +1335,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgActivityRepository(LogManager.GetLogger("PgActivityRepository"), GetPostgresConnectionString());
 
-            repo.Initialize();
+            repo.InitializeAsync().GetAwaiter().GetResult();
 
             return repo;
         }

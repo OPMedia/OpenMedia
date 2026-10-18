@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
@@ -23,71 +25,71 @@ namespace Emby.Server.PgData
     /// </summary>
     public partial class PgItemRepository
     {
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetAllArtists(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetAllArtistsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 0, 1 }, typeof(MusicArtist).FullName);
+            return GetItemValuesAsync(query, new[] { 0, 1 }, typeof(MusicArtist).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetArtists(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetArtistsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 0 }, typeof(MusicArtist).FullName);
+            return GetItemValuesAsync(query, new[] { 0 }, typeof(MusicArtist).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetAlbumArtists(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetAlbumArtistsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 1 }, typeof(MusicArtist).FullName);
+            return GetItemValuesAsync(query, new[] { 1 }, typeof(MusicArtist).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetStudios(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetStudiosAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 3 }, typeof(Studio).FullName);
+            return GetItemValuesAsync(query, new[] { 3 }, typeof(Studio).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetGenres(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetGenresAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 2 }, typeof(Genre).FullName);
+            return GetItemValuesAsync(query, new[] { 2 }, typeof(Genre).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetGameGenres(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetGameGenresAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 2 }, typeof(GameGenre).FullName);
+            return GetItemValuesAsync(query, new[] { 2 }, typeof(GameGenre).FullName, cancellationToken);
         }
 
-        public QueryResult<Tuple<BaseItem, ItemCounts>> GetMusicGenres(InternalItemsQuery query)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetMusicGenresAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
-            return GetItemValues(query, new[] { 2 }, typeof(MusicGenre).FullName);
+            return GetItemValuesAsync(query, new[] { 2 }, typeof(MusicGenre).FullName, cancellationToken);
         }
 
-        public List<string> GetStudioNames()
+        public Task<List<string>> GetStudioNamesAsync(CancellationToken cancellationToken = default)
         {
-            return GetItemValueNames(new[] { 3 }, new List<string>(), new List<string>());
+            return GetItemValueNamesAsync(new[] { 3 }, new List<string>(), new List<string>(), cancellationToken);
         }
 
-        public List<string> GetAllArtistNames()
+        public Task<List<string>> GetAllArtistNamesAsync(CancellationToken cancellationToken = default)
         {
-            return GetItemValueNames(new[] { 0, 1 }, new List<string>(), new List<string>());
+            return GetItemValueNamesAsync(new[] { 0, 1 }, new List<string>(), new List<string>(), cancellationToken);
         }
 
-        public List<string> GetMusicGenreNames()
+        public Task<List<string>> GetMusicGenreNamesAsync(CancellationToken cancellationToken = default)
         {
-            return GetItemValueNames(new[] { 2 }, new List<string> { "Audio", "MusicVideo", "MusicAlbum", "MusicArtist" }, new List<string>());
+            return GetItemValueNamesAsync(new[] { 2 }, new List<string> { "Audio", "MusicVideo", "MusicAlbum", "MusicArtist" }, new List<string>(), cancellationToken);
         }
 
-        public List<string> GetGameGenreNames()
+        public Task<List<string>> GetGameGenreNamesAsync(CancellationToken cancellationToken = default)
         {
-            return GetItemValueNames(new[] { 2 }, new List<string> { "Game" }, new List<string>());
+            return GetItemValueNamesAsync(new[] { 2 }, new List<string> { "Game" }, new List<string>(), cancellationToken);
         }
 
-        public List<string> GetGenreNames()
+        public Task<List<string>> GetGenreNamesAsync(CancellationToken cancellationToken = default)
         {
-            return GetItemValueNames(new[] { 2 }, new List<string>(), new List<string> { "Audio", "MusicVideo", "MusicAlbum", "MusicArtist", "Game", "GameSystem" });
+            return GetItemValueNamesAsync(new[] { 2 }, new List<string>(), new List<string> { "Audio", "MusicVideo", "MusicAlbum", "MusicArtist", "Game", "GameSystem" }, cancellationToken);
         }
 
         /// <summary>
         /// 值名称列表（旧 GetItemValueNames：按 CleanValue 分组取 Value，
         /// 可按 with/exclude item 类型过滤）。
         /// </summary>
-        private List<string> GetItemValueNames(int[] itemValueTypes, List<string> withItemTypes, List<string> excludeItemTypes)
+        private async Task<List<string>> GetItemValueNamesAsync(int[] itemValueTypes, List<string> withItemTypes, List<string> excludeItemTypes, CancellationToken cancellationToken)
         {
             CheckDisposed();
 
@@ -113,28 +115,25 @@ namespace Emby.Server.PgData
 
             commandText += " GROUP BY clean_value";
 
-            using (var connection = CreateConnection())
-            {
-                var list = new List<string>();
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+            var list = new List<string>();
+
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
+            {
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    using (var reader = cmd.ExecuteReader())
+                    if (!reader.IsDBNull(0))
                     {
-                        while (reader.Read())
-                        {
-                            if (!reader.IsDBNull(0))
-                            {
-                                list.Add(reader.GetString(0));
-                            }
-                        }
+                        list.Add(reader.GetString(0));
                     }
                 }
-
-                LogQueryTime("GetItemValueNames", commandText, now);
-
-                return list;
             }
+
+            LogQueryTime("GetItemValueNames", commandText, now);
+
+            return list;
         }
 
         /// <summary>
@@ -195,17 +194,17 @@ namespace Emby.Server.PgData
         /// 旧 "group by PresentationUniqueKey" → DISTINCT ON + 外层重排序。
         /// P8：纳入查询门（Reviewer 备注②——1M 规模的重查询入口，不留第二个 U2 形态）。
         /// </summary>
-        private QueryResult<Tuple<BaseItem, ItemCounts>> GetItemValues(InternalItemsQuery query, int[] itemValueTypes, string returnType)
+        private Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetItemValuesAsync(InternalItemsQuery query, int[] itemValueTypes, string returnType, CancellationToken cancellationToken)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
-            return WithQueryGate(() => GetItemValuesCore(query, itemValueTypes, returnType));
+            return GetItemValuesCoreAsync(query, itemValueTypes, returnType, cancellationToken);
         }
 
-        private QueryResult<Tuple<BaseItem, ItemCounts>> GetItemValuesCore(InternalItemsQuery query, int[] itemValueTypes, string returnType)
+        private async Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetItemValuesCoreAsync(InternalItemsQuery query, int[] itemValueTypes, string returnType, CancellationToken cancellationToken)
         {
             if (!query.Limit.HasValue)
             {
@@ -367,58 +366,52 @@ namespace Emby.Server.PgData
 
             var countText = "SELECT count(DISTINCT A.presentation_unique_key) FROM media_items A" + joinText + whereText;
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<Tuple<BaseItem, ItemCounts>>();
+            var result = new QueryResult<Tuple<BaseItem, ItemCounts>>();
+
+            if (!isReturningZeroItems)
             {
-                var list = new List<Tuple<BaseItem, ItemCounts>>();
-                var result = new QueryResult<Tuple<BaseItem, ItemCounts>>();
-
-                if (!isReturningZeroItems)
+                await using (var cmd = new NpgsqlCommand(commandText, connection))
                 {
-                    using (var cmd = new NpgsqlCommand(commandText, connection))
+                    BindItemValuesParameters(cmd, query, typeSubQuery, innerQuery, outerQuery, returnType, returnTypeCode);
+
+                    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+                    // P7/P8：与 GetItemList 同款 partial 水合 + data 列摘除判定
+                    var skipDataHydration = !RequiresFullHydration(query);
+
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        BindItemValuesParameters(cmd, query, typeSubQuery, innerQuery, outerQuery, returnType, returnTypeCode);
-
-                        using (var reader = cmd.ExecuteReader())
+                        var item = GetItem(reader, connection, skipDataHydration);
+                        if (item != null)
                         {
-                            // P7/P8：与 GetItemList 同款 partial 水合 + data 列摘除判定
-                            var skipDataHydration = !RequiresFullHydration(query);
-
-                            while (reader.Read())
-                            {
-                                var item = GetItem(reader, connection, skipDataHydration);
-                                if (item != null)
-                                {
-                                    // item_types 列仅在 typesToCount 非空时进入 SELECT；
-                                    // 无该列时传 -1（GetItemCounts 对 typesToCount 空直接返回空计数，不触 ordinal）
-                                    var itemTypesOrdinal = typesToCount.Length > 0 ? reader.GetOrdinal("item_types") : -1;
-                                    list.Add(new Tuple<BaseItem, ItemCounts>(item, GetItemCounts(reader, itemTypesOrdinal, typesToCount)));
-                                }
-                            }
+                            var itemTypesOrdinal = typesToCount.Length > 0 ? reader.GetOrdinal("item_types") : -1;
+                            list.Add(new Tuple<BaseItem, ItemCounts>(item, GetItemCounts(reader, itemTypesOrdinal, typesToCount)));
                         }
                     }
-
-                    LogQueryTime("GetItemValues", commandText, now);
                 }
 
-                if (query.EnableTotalRecordCount)
-                {
-                    using (var countCmd = new NpgsqlCommand(countText, connection))
-                    {
-                        BindItemValuesParameters(countCmd, query, typeSubQuery, innerQuery, outerQuery, returnType, returnTypeCode);
-
-                        result.TotalRecordCount = Convert.ToInt32(countCmd.ExecuteScalar());
-                    }
-                }
-
-                if (result.TotalRecordCount == 0)
-                {
-                    result.TotalRecordCount = list.Count;
-                }
-
-                result.Items = list.ToArray();
-
-                return result;
+                LogQueryTime("GetItemValues", commandText, now);
             }
+
+            if (query.EnableTotalRecordCount)
+            {
+                await using var countCmd = new NpgsqlCommand(countText, connection);
+                BindItemValuesParameters(countCmd, query, typeSubQuery, innerQuery, outerQuery, returnType, returnTypeCode);
+
+                result.TotalRecordCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+            }
+
+            if (result.TotalRecordCount == 0)
+            {
+                result.TotalRecordCount = list.Count;
+            }
+
+            result.Items = list.ToArray();
+
+            return result;
         }
 
         /// <summary>
@@ -541,64 +534,5 @@ namespace Emby.Server.PgData
             return list;
         }
 
-        /// <summary>
-        /// 更新 extradata（旧 UpdateItemValues：先删后插）。
-        /// </summary>
-        internal void UpdateItemValues(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid itemId, List<Tuple<int, string>> values)
-        {
-            if (itemId.Equals(Guid.Empty))
-            {
-                throw new ArgumentNullException("itemId");
-            }
-
-            if (values == null)
-            {
-                throw new ArgumentNullException("values");
-            }
-
-            CheckDisposed();
-
-            var internalId = GetInternalId(connection, transaction, itemId);
-
-            if (internalId == null)
-            {
-                return;
-            }
-
-            var itemInternalId = internalId.Value;
-
-            using (var deleteCmd = new NpgsqlCommand(
-                "DELETE FROM item_extradata WHERE item_id = @item_id",
-                connection, transaction))
-            {
-                deleteCmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId });
-                deleteCmd.ExecuteNonQuery();
-            }
-
-            foreach (var value in values)
-            {
-                var itemValue = value.Item2;
-
-                // 旧逻辑：无效值跳过
-                if (string.IsNullOrWhiteSpace(itemValue))
-                {
-                    continue;
-                }
-
-                using (var cmd = new NpgsqlCommand(
-                    @"INSERT INTO item_extradata (item_id, extradata_type_id, value, clean_value)
-                      VALUES (@item_id, @extradata_type_id, @value, @clean_value)
-                      ON CONFLICT (item_id, extradata_type_id, value) DO NOTHING",
-                    connection, transaction))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId });
-                    cmd.Parameters.Add(new NpgsqlParameter("extradata_type_id", NpgsqlDbType.Integer) { Value = value.Item1 });
-                    cmd.Parameters.Add(new NpgsqlParameter("value", NpgsqlDbType.Text) { Value = itemValue });
-                    cmd.Parameters.Add(new NpgsqlParameter("clean_value", NpgsqlDbType.Text) { Value = GetCleanValue(itemValue) });
-
-                    cmd.ExecuteNonQuery();
-                }
-            }
-        }
     }
 }

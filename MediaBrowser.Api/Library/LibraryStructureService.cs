@@ -285,7 +285,7 @@ namespace MediaBrowser.Api.Library
             {
                 CollectionFolder.OnCollectionFolderChange();
 
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
@@ -295,9 +295,7 @@ namespace MediaBrowser.Api.Library
                     else
                     {
                         // Need to add a delay here or directory watchers may still pick up the changes
-                        var task = Task.Delay(1000);
-                        // Have to block here to allow exceptions to bubble
-                        Task.WaitAll(task);
+                        await Task.Delay(1000).ConfigureAwait(false);
 
                         _libraryMonitor.Start();
                     }
@@ -342,7 +340,7 @@ namespace MediaBrowser.Api.Library
             }
             finally
             {
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
@@ -352,9 +350,7 @@ namespace MediaBrowser.Api.Library
                     else
                     {
                         // Need to add a delay here or directory watchers may still pick up the changes
-                        var task = Task.Delay(1000);
-                        // Have to block here to allow exceptions to bubble
-                        Task.WaitAll(task);
+                        await Task.Delay(1000).ConfigureAwait(false);
 
                         _libraryMonitor.Start();
                     }
@@ -395,7 +391,7 @@ namespace MediaBrowser.Api.Library
             }
             finally
             {
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
@@ -405,9 +401,7 @@ namespace MediaBrowser.Api.Library
                     else
                     {
                         // Need to add a delay here or directory watchers may still pick up the changes
-                        var task = Task.Delay(1000);
-                        // Have to block here to allow exceptions to bubble
-                        Task.WaitAll(task);
+                        await Task.Delay(1000).ConfigureAwait(false);
 
                         _libraryMonitor.Start();
                     }

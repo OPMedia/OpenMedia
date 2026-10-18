@@ -229,6 +229,10 @@ namespace Emby.Server.PgData
 
             // PgAuthenticationRepository 的设备 upsert
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_reported_device_id_unique ON devices (reported_device_id)");
+
+            // ========== 外键缺失索引补齐（消除级联更新或父表更新导致的全表 ShareLock） ==========
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_user_data_key_id ON media_items (user_data_key_id) WHERE user_data_key_id IS NOT NULL");
+            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_user_settings_key_id ON user_settings (user_settings_key_id)");
         }
 
         /// <summary>

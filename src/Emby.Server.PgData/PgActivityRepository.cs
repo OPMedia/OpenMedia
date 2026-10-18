@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Activity;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Querying;
@@ -30,62 +32,59 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 初始化：schema 由 PgSchemaInitializer 统一建好，这里只做存在性校验。
         /// </summary>
-        public void Initialize()
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var hasLog = await TableExistsAsync(connection, "activity_log", cancellationToken).ConfigureAwait(false);
+            var hasTypes = await TableExistsAsync(connection, "activity_log_types", cancellationToken).ConfigureAwait(false);
+
+            if (!hasLog || !hasTypes)
             {
-                if (!TableExists(connection, "activity_log") || !TableExists(connection, "activity_log_types"))
-                {
-                    throw new InvalidOperationException("activity_log tables do not exist. Schema initialization failed.");
-                }
+                throw new InvalidOperationException("activity_log tables do not exist. Schema initialization failed.");
             }
         }
 
         /// <summary>
         /// 写入活动日志（旧 Create：插入 ActivityLog 行）。
         /// </summary>
-        public void Create(ActivityLogEntry entry)
+        public Task CreateAsync(ActivityLogEntry entry, CancellationToken cancellationToken = default)
         {
             if (entry == null)
             {
-                throw new ArgumentNullException("entry");
+                throw new ArgumentNullException(nameof(entry));
             }
 
-            using (var connection = CreateConnection())
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                RunInTransaction(connection, (conn, transaction) =>
-                {
-                    var typeId = GetOrInsertActivityLogType(conn, transaction, entry.Type);
-                    var itemId = ResolveMediaItemId(conn, transaction, entry.ItemId);
-                    var userId = ResolveInternalUserId(conn, transaction, entry.UserId);
+                var typeId = await GetOrInsertActivityLogTypeAsync(connection, transaction, entry.Type, ct).ConfigureAwait(false);
+                var itemId = await ResolveMediaItemIdAsync(connection, transaction, entry.ItemId, ct).ConfigureAwait(false);
+                var userId = await ResolveInternalUserIdAsync(connection, transaction, entry.UserId, ct).ConfigureAwait(false);
 
-                    using (var cmd = new NpgsqlCommand(
-                        @"INSERT INTO activity_log
-                            (name, overview, short_overview, type_id, item_id, user_id, date_created, log_severity)
-                          VALUES
-                            (@name, @overview, @short_overview, @type_id, @item_id, @user_id, @date_created, @log_severity)",
-                        conn, transaction))
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = entry.Name });
-                        cmd.Parameters.Add(new NpgsqlParameter("overview", NpgsqlDbType.Text) { Value = (object)entry.Overview ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("short_overview", NpgsqlDbType.Text) { Value = (object)entry.ShortOverview ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("type_id", NpgsqlDbType.Integer) { Value = typeId });
-                        cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = (object)itemId ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = (object)userId ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(entry.Date) });
-                        cmd.Parameters.Add(new NpgsqlParameter("log_severity", NpgsqlDbType.Text) { Value = ToSchemaSeverity(entry.Severity) });
-
-                        cmd.ExecuteNonQuery();
-                    }
-                });
-            }
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"INSERT INTO activity_log
+                        (name, overview, short_overview, type_id, item_id, user_id, date_created, log_severity)
+                      VALUES
+                        (@name, @overview, @short_overview, @type_id, @item_id, @user_id, @date_created, @log_severity)",
+                    ct,
+                    new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = entry.Name },
+                    new NpgsqlParameter("overview", NpgsqlDbType.Text) { Value = ToDbValue(entry.Overview) },
+                    new NpgsqlParameter("short_overview", NpgsqlDbType.Text) { Value = ToDbValue(entry.ShortOverview) },
+                    new NpgsqlParameter("type_id", NpgsqlDbType.Integer) { Value = typeId },
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = ToDbValue(itemId) },
+                    new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = ToDbValue(userId) },
+                    new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(entry.Date) },
+                    new NpgsqlParameter("log_severity", NpgsqlDbType.Text) { Value = ToSchemaSeverity(entry.Severity) }).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         /// <summary>
         /// 查询活动日志（旧 GetActivityLogEntries：minDate/hasUserId 过滤 + DateCreated 倒序 + 分页 + 总数）。
         /// 旧分页用 "Id NOT IN (子查询 LIMIT startIndex)"，PG 用等价的 OFFSET。
         /// </summary>
-        public QueryResult<ActivityLogEntry> GetActivityLogEntries(DateTime? minDate, bool? hasUserId, int? startIndex, int? limit)
+        public async Task<QueryResult<ActivityLogEntry>> GetActivityLogEntriesAsync(DateTime? minDate, bool? hasUserId, int? startIndex, int? limit, CancellationToken cancellationToken = default)
         {
             var whereClauses = new List<string>();
 
@@ -120,28 +119,26 @@ namespace Emby.Server.PgData
             var list = new List<ActivityLogEntry>();
             var result = new QueryResult<ActivityLogEntry>();
 
-            using (var connection = CreateConnection())
+            await using (var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false))
             {
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using (var cmd = new NpgsqlCommand(commandText, connection))
                 {
                     BindActivityQueryParams(cmd, minDate);
 
-                    using (var reader = cmd.ExecuteReader())
+                    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        while (reader.Read())
-                        {
-                            list.Add(GetEntry(reader));
-                        }
+                        list.Add(GetEntry(reader));
                     }
                 }
 
-                using (var countCmd = new NpgsqlCommand(
+                await using (var countCmd = new NpgsqlCommand(
                     "SELECT count(*) FROM activity_log a" + whereTextWithoutPaging,
                     connection))
                 {
                     BindActivityQueryParams(countCmd, minDate);
 
-                    result.TotalRecordCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                    result.TotalRecordCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
                 }
             }
 
@@ -268,62 +265,59 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 类型字典 upsert（activity_log_types.name 唯一索引支持 ON CONFLICT）。
         /// </summary>
-        private static int GetOrInsertActivityLogType(NpgsqlConnection connection, NpgsqlTransaction transaction, string name)
+        private static async Task<int> GetOrInsertActivityLogTypeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string name, CancellationToken cancellationToken)
         {
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 @"INSERT INTO activity_log_types (name)
                   VALUES (@name)
                   ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
                   RETURNING type_id",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = name ?? string.Empty });
-                return Convert.ToInt32(cmd.ExecuteScalar());
-            }
+                cancellationToken,
+                new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = name ?? string.Empty }).ConfigureAwait(false);
+
+            return Convert.ToInt32(result);
         }
 
         /// <summary>
         /// item GUID 字符串 → media_items.id（解析失败或项不存在返回 null）。
         /// </summary>
-        private static long? ResolveMediaItemId(NpgsqlConnection connection, NpgsqlTransaction transaction, string itemId)
+        private static async Task<long?> ResolveMediaItemIdAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string itemId, CancellationToken cancellationToken)
         {
-            Guid guid;
-
-            if (string.IsNullOrEmpty(itemId) || !Guid.TryParse(itemId, out guid))
+            if (string.IsNullOrEmpty(itemId) || !Guid.TryParse(itemId, out var guid))
             {
                 return null;
             }
 
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 "SELECT id FROM media_items WHERE guid = @guid LIMIT 1",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid }).ConfigureAwait(false);
 
-                var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
-            }
+            return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
         }
 
         /// <summary>
         /// 用户 GUID → local_users.id（空 GUID 或用户不存在返回 null）。
         /// </summary>
-        private static int? ResolveInternalUserId(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId)
+        private static async Task<int?> ResolveInternalUserIdAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId, CancellationToken cancellationToken)
         {
             if (userId.Equals(Guid.Empty))
             {
                 return null;
             }
 
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 "SELECT id FROM local_users WHERE guid = @guid",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId });
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId }).ConfigureAwait(false);
 
-                var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
-            }
+            return result == null || result == DBNull.Value ? (int?)null : Convert.ToInt32(result);
         }
     }
 }

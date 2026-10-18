@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
@@ -358,7 +360,7 @@ namespace Emby.Server.PgData
             return EnableGroupByPresentationUniqueKey(query) || query.GroupBySeriesPresentationUniqueKey;
         }
 
-        private string GetDistinctOnExpression(InternalItemsQuery query)
+        private async Task<string> GetDistinctOnExpressionAsync(InternalItemsQuery query)
         {
             if (EnableGroupByPresentationUniqueKey(query))
             {
@@ -372,7 +374,7 @@ namespace Emby.Server.PgData
                 // 各自出现）。探测 SQL 只看非 NULL 键（IS NOT NULL），NULL 组的
                 // 折叠差异即上述有意行为。探测结果缓存 5min：新扫入多版本库最多
                 // 5min 窗口内未折叠（瞬态自愈）；探测失败退回保守包装。
-                if (!HasPresentationUniqueKeyDuplicates())
+                if (!await HasPresentationUniqueKeyDuplicatesAsync().ConfigureAwait(false))
                 {
                     return null;
                 }
@@ -397,7 +399,7 @@ namespace Emby.Server.PgData
         private static readonly object PukProbeLock = new object();
         private static readonly TimeSpan PukProbeCacheTtl = TimeSpan.FromMinutes(5);
 
-        private bool HasPresentationUniqueKeyDuplicates()
+        private async Task<bool> HasPresentationUniqueKeyDuplicatesAsync()
         {
             lock (PukProbeLock)
             {
@@ -412,13 +414,12 @@ namespace Emby.Server.PgData
 
             try
             {
-                using (var connection = CreateConnection())
-                using (var cmd = new NpgsqlCommand(
+                // 探测查询走独立短连接（缓存 5 分钟，命中率极高，不进入热路径）
+                await using var connection = await CreateConnectionAsync(CancellationToken.None).ConfigureAwait(false);
+                await using var cmd = new NpgsqlCommand(
                     "SELECT EXISTS (SELECT 1 FROM media_items WHERE presentation_unique_key IS NOT NULL GROUP BY presentation_unique_key HAVING count(*) > 1 LIMIT 1)",
-                    connection))
-                {
-                    hasDuplicates = Convert.ToBoolean(cmd.ExecuteScalar());
-                }
+                    connection);
+                hasDuplicates = Convert.ToBoolean(await cmd.ExecuteScalarAsync(CancellationToken.None).ConfigureAwait(false));
             }
             catch
             {
@@ -2036,11 +2037,11 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 计数（旧 GetCount：count(distinct PresentationUniqueKey)）。
         /// </summary>
-        public int GetCount(InternalItemsQuery query)
+        public async Task<int> GetCountAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
             CheckDisposed();
@@ -2066,16 +2067,15 @@ namespace Emby.Server.PgData
 
             commandText += whereText;
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(commandText, connection))
-                {
-                    BindQueryParameters(cmd, query);
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    var count = Convert.ToInt32(cmd.ExecuteScalar());
-                    LogQueryTime("GetCount", commandText, now);
-                    return count;
-                }
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
+            {
+                BindQueryParameters(cmd, query);
+
+                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
+                LogQueryTime("GetCount", commandText, now);
+                return count;
             }
         }
 
@@ -2101,17 +2101,17 @@ namespace Emby.Server.PgData
         /// P8：公共入口包查询门（全局单门 50 并发）；GetItems 的内部委托走
         /// GetItemListCore（unwrapped——Reviewer 自死锁约束：双占槽位 = 全部持 1 等 2）。
         /// </summary>
-        public List<BaseItem> GetItemList(InternalItemsQuery query)
+        public Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
-            return WithQueryGate(() => GetItemListCore(query));
+            return GetItemListCoreAsync(query, cancellationToken);
         }
 
-        private List<BaseItem> GetItemListCore(InternalItemsQuery query)
+        private async Task<List<BaseItem>> GetItemListCoreAsync(InternalItemsQuery query, CancellationToken cancellationToken)
         {
             CheckDisposed();
 
@@ -2123,28 +2123,26 @@ namespace Emby.Server.PgData
                 query.Limit = query.Limit.Value + 4;
             }
 
-            var commandText = BuildItemQueryText(query, out var isDistinctOnWrapped);
+            var (commandText, isDistinctOnWrapped) = await BuildItemQueryTextAsync(query).ConfigureAwait(false);
 
-            using (var connection = CreateConnection())
+            await using (var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false))
             {
                 var list = new List<BaseItem>();
 
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using (var cmd = new NpgsqlCommand(commandText, connection))
                 {
                     BindQueryParameters(cmd, query);
 
                     // P7：列表路径 partial 水合（DtoOptions 无 data 独有字段时跳过全量反序列化）
                     var skipDataHydration = !RequiresFullHydration(query);
 
-                    using (var reader = cmd.ExecuteReader())
+                    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        while (reader.Read())
+                        var item = GetItem(reader, connection, skipDataHydration);
+                        if (item != null)
                         {
-                            var item = GetItem(reader, connection, skipDataHydration);
-                            if (item != null)
-                            {
-                                list.Add(item);
-                            }
+                            list.Add(item);
                         }
                     }
                 }
@@ -2177,9 +2175,9 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 构建媒体项查询 SQL（DISTINCT ON 分组时包一层子查询，外层重排序）。
         /// </summary>
-        private string BuildItemQueryText(InternalItemsQuery query, out bool isDistinctOnWrapped)
+        private async Task<(string Sql, bool IsWrapped)> BuildItemQueryTextAsync(InternalItemsQuery query)
         {
-            isDistinctOnWrapped = false;
+            var isDistinctOnWrapped = false;
 
             PrepareSimilarToQuery(query);
 
@@ -2203,23 +2201,23 @@ namespace Emby.Server.PgData
 
             var pagingText = BuildPagingText(query);
 
-            var distinctOnExpr = GetDistinctOnExpression(query);
+            var distinctOnExpr = await GetDistinctOnExpressionAsync(query).ConfigureAwait(false);
 
             if (distinctOnExpr == null)
             {
-                return selectText + fromText + joinText + whereText + orderByText + pagingText;
+                return (selectText + fromText + joinText + whereText + orderByText + pagingText, false);
             }
 
             // DISTINCT ON：内层按 (分组键, 排序) 取每组代表行，外层按 __sortN 别名重排序
             isDistinctOnWrapped = true;
 
-            return BuildDistinctOnWrapper(
+            return (BuildDistinctOnWrapper(
                 selectText.Substring("SELECT ".Length),
                 fromText + joinText + whereText,
                 distinctOnExpr,
                 orderByExpressions,
                 pagingText,
-                query);
+                query), isDistinctOnWrapped);
         }
 
         /// <summary>
@@ -2345,23 +2343,23 @@ namespace Emby.Server.PgData
         /// 分页查询（旧 GetItems：列表 + 总数）。
         /// P8：公共入口包查询门；内部委托 GetItemList 走 Core（不双占槽位）。
         /// </summary>
-        public QueryResult<BaseItem> GetItems(InternalItemsQuery query)
+        public Task<QueryResult<BaseItem>> GetItemsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
-            return WithQueryGate(() => GetItemsCore(query));
+            return GetItemsCoreAsync(query, cancellationToken);
         }
 
-        private QueryResult<BaseItem> GetItemsCore(InternalItemsQuery query)
+        private async Task<QueryResult<BaseItem>> GetItemsCoreAsync(InternalItemsQuery query, CancellationToken cancellationToken)
         {
             CheckDisposed();
 
             if (!query.EnableTotalRecordCount || (!query.Limit.HasValue && (query.StartIndex ?? 0) == 0))
             {
-                var returnList = GetItemListCore(query);
+                var returnList = await GetItemListCoreAsync(query, cancellationToken).ConfigureAwait(false);
                 return new QueryResult<BaseItem>
                 {
                     Items = returnList.ToArray(),
@@ -2376,8 +2374,7 @@ namespace Emby.Server.PgData
                 query.Limit = query.Limit.Value + 4;
             }
 
-            bool isWrapped;
-            var commandText = BuildItemQueryText(query, out isWrapped);
+            var (commandText, isWrapped) = await BuildItemQueryTextAsync(query).ConfigureAwait(false);
 
             var list = new List<BaseItem>();
             var result = new QueryResult<BaseItem>();
@@ -2386,35 +2383,33 @@ namespace Emby.Server.PgData
 
             var countText = BuildCountText(query);
 
-            using (var connection = CreateConnection())
+            await using (var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (!isReturningZeroItems)
                 {
-                    using (var cmd = new NpgsqlCommand(commandText, connection))
+                    await using (var cmd = new NpgsqlCommand(commandText, connection))
                     {
                         BindQueryParameters(cmd, query);
 
                         // P7：列表路径 partial 水合（同 GetItemList）
                         var skipDataHydration = !RequiresFullHydration(query);
 
-                        using (var reader = cmd.ExecuteReader())
+                        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                         {
-                            while (reader.Read())
+                            var item = GetItem(reader, connection, skipDataHydration);
+                            if (item != null)
                             {
-                                var item = GetItem(reader, connection, skipDataHydration);
-                                if (item != null)
-                                {
-                                    list.Add(item);
-                                }
+                                list.Add(item);
                             }
                         }
                     }
                 }
 
-                using (var countCmd = new NpgsqlCommand(countText, connection))
+                await using (var countCmd = new NpgsqlCommand(countText, connection))
                 {
                     BindQueryParameters(countCmd, query);
-                    result.TotalRecordCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                    result.TotalRecordCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
                 }
             }
 
@@ -2475,81 +2470,75 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 获取 GUID 列表（旧 GetItemIdsList）。
         /// </summary>
-        public List<Guid> GetItemIdsList(InternalItemsQuery query)
+        public async Task<List<Guid>> GetItemIdsListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
             CheckDisposed();
 
             var now = DateTime.UtcNow;
 
-            var commandText = BuildIdQueryText("A.guid", query);
+            var commandText = await BuildIdQueryTextAsync("A.guid", query).ConfigureAwait(false);
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<Guid>();
+
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
             {
-                var list = new List<Guid>();
+                BindQueryParameters(cmd, query);
 
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    BindQueryParameters(cmd, query);
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(reader.GetGuid(0));
-                        }
-                    }
+                    list.Add(reader.GetGuid(0));
                 }
-
-                LogQueryTime("GetItemIdsList", commandText, now);
-
-                return list;
             }
+
+            LogQueryTime("GetItemIdsList", commandText, now);
+
+            return list;
         }
 
         /// <summary>
         /// 获取 GUID + 路径列表（旧 GetItemIdsWithPath）。
         /// </summary>
-        public List<Tuple<Guid, string>> GetItemIdsWithPath(InternalItemsQuery query)
+        public async Task<List<Tuple<Guid, string>>> GetItemIdsWithPathAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
             CheckDisposed();
 
             var now = DateTime.UtcNow;
 
-            var commandText = BuildIdQueryText("A.guid, A.path", query);
+            var commandText = await BuildIdQueryTextAsync("A.guid, A.path", query).ConfigureAwait(false);
 
             var list = new List<Tuple<Guid, string>>();
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using (var cmd = new NpgsqlCommand(commandText, connection))
             {
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                BindQueryParameters(cmd, query);
+
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    BindQueryParameters(cmd, query);
+                    var id = reader.GetGuid(0);
+                    string path = null;
 
-                    using (var reader = cmd.ExecuteReader())
+                    if (!reader.IsDBNull(1))
                     {
-                        while (reader.Read())
-                        {
-                            var id = reader.GetGuid(0);
-                            string path = null;
-
-                            if (!reader.IsDBNull(1))
-                            {
-                                path = reader.GetString(1);
-                            }
-
-                            list.Add(new Tuple<Guid, string>(id, path));
-                        }
+                        path = reader.GetString(1);
                     }
+
+                    list.Add(new Tuple<Guid, string>(id, path));
                 }
             }
 
@@ -2561,18 +2550,18 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 分页 GUID 查询（旧 GetItemIds：列表 + 总数）。
         /// </summary>
-        public QueryResult<Guid> GetItemIds(InternalItemsQuery query)
+        public async Task<QueryResult<Guid>> GetItemIdsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
-                throw new ArgumentNullException("query");
+                throw new ArgumentNullException(nameof(query));
             }
 
             CheckDisposed();
 
             if (!query.EnableTotalRecordCount || (!query.Limit.HasValue && (query.StartIndex ?? 0) == 0))
             {
-                var returnList = GetItemIdsList(query);
+                var returnList = await GetItemIdsListAsync(query, cancellationToken).ConfigureAwait(false);
                 return new QueryResult<Guid>
                 {
                     Items = returnList.ToArray(),
@@ -2582,7 +2571,7 @@ namespace Emby.Server.PgData
 
             var now = DateTime.UtcNow;
 
-            var commandText = BuildIdQueryText("A.guid", query);
+            var commandText = await BuildIdQueryTextAsync("A.guid", query).ConfigureAwait(false);
             var countText = BuildCountText(query);
 
             var list = new List<Guid>();
@@ -2590,28 +2579,26 @@ namespace Emby.Server.PgData
 
             var isReturningZeroItems = query.Limit.HasValue && query.Limit <= 0;
 
-            using (var connection = CreateConnection())
+            await using (var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (!isReturningZeroItems)
                 {
-                    using (var cmd = new NpgsqlCommand(commandText, connection))
+                    await using (var cmd = new NpgsqlCommand(commandText, connection))
                     {
                         BindQueryParameters(cmd, query);
 
-                        using (var reader = cmd.ExecuteReader())
+                        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                         {
-                            while (reader.Read())
-                            {
-                                list.Add(reader.GetGuid(0));
-                            }
+                            list.Add(reader.GetGuid(0));
                         }
                     }
                 }
 
-                using (var countCmd = new NpgsqlCommand(countText, connection))
+                await using (var countCmd = new NpgsqlCommand(countText, connection))
                 {
                     BindQueryParameters(countCmd, query);
-                    result.TotalRecordCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                    result.TotalRecordCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
                 }
             }
 
@@ -2624,7 +2611,7 @@ namespace Emby.Server.PgData
         /// <summary>
         /// GUID/路径查询 SQL（DISTINCT ON 分组时包一层子查询）。
         /// </summary>
-        private string BuildIdQueryText(string columns, InternalItemsQuery query)
+        private async Task<string> BuildIdQueryTextAsync(string columns, InternalItemsQuery query)
         {
             PrepareSimilarToQuery(query);
 
@@ -2647,7 +2634,7 @@ namespace Emby.Server.PgData
 
             var pagingText = BuildPagingText(query);
 
-            var distinctOnExpr = GetDistinctOnExpression(query);
+            var distinctOnExpr = await GetDistinctOnExpressionAsync(query).ConfigureAwait(false);
 
             if (distinctOnExpr == null)
             {

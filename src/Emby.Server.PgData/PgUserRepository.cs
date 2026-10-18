@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Logging;
@@ -10,9 +12,8 @@ using NpgsqlTypes;
 namespace Emby.Server.PgData
 {
     /// <summary>
-    /// PostgreSQL 用户仓储（local_users 表：id SERIAL + guid UUID + data JSONB）。
-    /// 域模型 User 的 GUID ↔ 整数 id 翻译在此完成。
-    /// 对照旧 SqliteUserRepository（LocalUsersv2 表）逐方法保留语义。
+    /// PostgreSQL 用户仓储（local_users 表：id BIGINT IDENTITY + guid UUID + data JSONB）。
+    /// 全链路原生异步（无同步 I/O）。
     /// </summary>
     public class PgUserRepository : BasePgRepository, IUserRepository
     {
@@ -27,169 +28,151 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 初始化：schema 由 PgSchemaInitializer 统一建好，这里只做存在性校验。
         /// </summary>
-        public void Initialize()
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            if (!await TableExistsAsync(connection, "local_users", cancellationToken).ConfigureAwait(false))
             {
-                if (!TableExists(connection, "local_users"))
-                {
-                    throw new InvalidOperationException("local_users table does not exist. Schema initialization failed.");
-                }
+                throw new InvalidOperationException("local_users table does not exist. Schema initialization failed.");
             }
         }
 
         /// <summary>
-        /// 创建用户（旧 CreateUser：插入后回读并填充 InternalId）。
+        /// 创建用户（插入后回读 id 填充 InternalId）。
         /// </summary>
-        public void CreateUser(User user)
+        public Task CreateUserAsync(User user, CancellationToken cancellationToken = default)
         {
             if (user == null)
             {
-                throw new ArgumentNullException("user");
+                throw new ArgumentNullException(nameof(user));
             }
 
             var serialized = _jsonSerializer.SerializeToString(user);
 
-            RunInTransaction((connection, transaction) =>
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                using (var cmd = new NpgsqlCommand(
+                var id = await ExecuteScalarAsync(
+                    connection,
+                    transaction,
                     "INSERT INTO local_users (guid, data) VALUES (@guid, @data) RETURNING id",
-                    connection, transaction))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = user.Id });
-                    cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Jsonb) { Value = serialized });
+                    ct,
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = user.Id },
+                    new NpgsqlParameter("data", NpgsqlDbType.Jsonb) { Value = serialized }).ConfigureAwait(false);
 
-                    user.InternalId = Convert.ToInt64(cmd.ExecuteScalar());
-                }
-            });
+                user.InternalId = Convert.ToInt64(id);
+            }, cancellationToken);
         }
 
         /// <summary>
-        /// 更新用户（旧 UpdateUser：按 InternalId 更新 data）。
+        /// 更新用户（按 InternalId 更新 data）。
         /// </summary>
-        public void UpdateUser(User user)
+        public Task UpdateUserAsync(User user, CancellationToken cancellationToken = default)
         {
             if (user == null)
             {
-                throw new ArgumentNullException("user");
+                throw new ArgumentNullException(nameof(user));
             }
 
             var serialized = _jsonSerializer.SerializeToString(user);
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
+            return RunInTransactionAsync((connection, transaction, ct) =>
+                ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     "UPDATE local_users SET data = @data WHERE id = @id",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Jsonb) { Value = serialized });
-                    cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = user.InternalId });
-
-                    cmd.ExecuteNonQuery();
-                }
-            }
+                    ct,
+                    new NpgsqlParameter("data", NpgsqlDbType.Jsonb) { Value = serialized },
+                    new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = user.InternalId }),
+                cancellationToken);
         }
 
         /// <summary>
-        /// 检索全部用户（旧 RetrieveAllUsers；SQLite 按 rowid 返回，这里按 id 排序等价）。
+        /// 检索全部用户（按 id 排序，等价旧 rowid 顺序）。
         /// </summary>
-        public List<User> RetrieveAllUsers()
+        public async Task<List<User>> RetrieveAllUsersAsync(CancellationToken cancellationToken = default)
         {
             var list = new List<User>();
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using var cmd = new NpgsqlCommand(
+                "SELECT id, guid, data::text FROM local_users ORDER BY id",
+                connection);
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                using (var cmd = new NpgsqlCommand(
-                    "SELECT id, guid, data::text FROM local_users ORDER BY id",
-                    connection))
-                {
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(GetUser(reader));
-                        }
-                    }
-                }
+                list.Add(ReadUser(reader));
             }
 
             return list;
         }
 
         /// <summary>
-        /// 删除用户（旧 DeleteUser：按 InternalId 删除）。
+        /// 删除用户（按 InternalId）。
         /// </summary>
-        public void DeleteUser(User user)
+        public Task DeleteUserAsync(User user, CancellationToken cancellationToken = default)
         {
             if (user == null)
             {
-                throw new ArgumentNullException("user");
+                throw new ArgumentNullException(nameof(user));
             }
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
+            return RunInTransactionAsync((connection, transaction, ct) =>
+                ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     "DELETE FROM local_users WHERE id = @id",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = user.InternalId });
-
-                    cmd.ExecuteNonQuery();
-                }
-            }
+                    ct,
+                    new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = user.InternalId }),
+                cancellationToken);
         }
 
         /// <summary>
-        /// 按 GUID 查询单个用户（旧私有方法 GetUser）。
+        /// 按 GUID 查询单个用户。
         /// </summary>
-        public User GetUser(Guid guid)
+        public async Task<User> GetUserAsync(Guid guid, CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    "SELECT id, guid, data::text FROM local_users WHERE guid = @guid",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            return GetUser(reader);
-                        }
-                    }
-                }
+            await using var cmd = new NpgsqlCommand(
+                "SELECT id, guid, data::text FROM local_users WHERE guid = @guid",
+                connection);
+            cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return ReadUser(reader);
             }
 
             return null;
         }
 
         /// <summary>
-        /// GUID → local_users.id 翻译（供其他仓储解析 user_id 整数外键用）。
+        /// GUID → local_users.id 翻译（供其他仓储解析整数外键）。
         /// </summary>
-        public long? GetInternalId(Guid guid)
+        public async Task<long?> GetInternalIdAsync(Guid guid, CancellationToken cancellationToken = default)
         {
             if (guid.Equals(Guid.Empty))
             {
                 return null;
             }
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    "SELECT id FROM local_users WHERE guid = @guid",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    var result = cmd.ExecuteScalar();
-                    return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
-                }
-            }
+            var result = await ExecuteScalarAsync(
+                connection,
+                null,
+                "SELECT id FROM local_users WHERE guid = @guid",
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid }).ConfigureAwait(false);
+
+            return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
         }
 
-        private User GetUser(NpgsqlDataReader reader)
+        private User ReadUser(NpgsqlDataReader reader)
         {
             var id = reader.GetInt64(0);
             var guid = reader.GetGuid(1);

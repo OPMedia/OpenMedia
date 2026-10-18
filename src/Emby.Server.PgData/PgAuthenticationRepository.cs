@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Security;
 using MediaBrowser.Model.Devices;
 using MediaBrowser.Model.Logging;
@@ -30,14 +32,16 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 初始化：schema 由 PgSchemaInitializer 统一建好，这里只做存在性校验。
         /// </summary>
-        public void Initialize()
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var hasTokens = await TableExistsAsync(connection, "tokens", cancellationToken).ConfigureAwait(false);
+            var hasDevices = await TableExistsAsync(connection, "devices", cancellationToken).ConfigureAwait(false);
+
+            if (!hasTokens || !hasDevices)
             {
-                if (!TableExists(connection, "tokens") || !TableExists(connection, "devices"))
-                {
-                    throw new InvalidOperationException("devices/tokens tables do not exist. Schema initialization failed.");
-                }
+                throw new InvalidOperationException("devices/tokens tables do not exist. Schema initialization failed.");
             }
         }
 
@@ -45,54 +49,58 @@ namespace Emby.Server.PgData
         /// 创建令牌（旧 Create：插入 Tokens 行；IsActive 恒为 true）。
         /// 设备行不存在时自动注册（reported_device_id 唯一索引支持 ON CONFLICT upsert）。
         /// </summary>
-        public void Create(AuthenticationInfo info)
+        public async Task CreateAsync(AuthenticationInfo info, CancellationToken cancellationToken = default)
         {
             if (info == null)
             {
-                throw new ArgumentNullException("info");
+                throw new ArgumentNullException(nameof(info));
             }
 
             // P8 认证事务瘦身（Chief 拍板）：三步里 device upsert 幂等（ON CONFLICT）、
             // user 查找是读——去事务改为单连接顺序执行，缩短连接持有时间
             // （2000 并发认证的池排队主导，RunInTransaction 持连接跨三步是放大器）
-            using (var connection = CreateConnection())
-            {
-                var deviceId = GetOrInsertDevice(connection, null, info.DeviceId, info.DeviceName);
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                using (var cmd = new NpgsqlCommand(
-                    @"INSERT INTO tokens
-                        (access_token, device_id, app_name, app_version, user_id, is_active, date_created, date_last_activity)
-                      VALUES (@access_token, @device_id, @app_name, @app_version, @user_id, @is_active, @date_created, @date_last_activity)
-                      RETURNING id",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("access_token", NpgsqlDbType.Text) { Value = info.AccessToken });
-                    cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Integer) { Value = deviceId });
-                    cmd.Parameters.Add(new NpgsqlParameter("app_name", NpgsqlDbType.Text) { Value = (object)info.AppName ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("app_version", NpgsqlDbType.Text) { Value = (object)info.AppVersion ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = (object)ResolveInternalUserId(connection, null, info.UserId) ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("is_active", NpgsqlDbType.Boolean) { Value = true });
-                    cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateCreated) });
-                    cmd.Parameters.Add(new NpgsqlParameter("date_last_activity", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateLastActivity) });
+            var deviceId = await GetOrInsertDeviceAsync(connection, null, info.DeviceId, info.DeviceName, cancellationToken).ConfigureAwait(false);
+            var internalUserId = await ResolveInternalUserIdAsync(connection, null, info.UserId, cancellationToken).ConfigureAwait(false);
 
-                    info.Id = Convert.ToInt64(cmd.ExecuteScalar());
-                }
-            }
+            var newId = await ExecuteScalarAsync(
+                connection,
+                null,
+                @"INSERT INTO tokens
+                    (access_token, device_id, app_name, app_version, user_id, is_active, date_created, date_last_activity)
+                  VALUES (@access_token, @device_id, @app_name, @app_version, @user_id, @is_active, @date_created, @date_last_activity)
+                  RETURNING id",
+                cancellationToken,
+                new NpgsqlParameter("access_token", NpgsqlDbType.Text) { Value = info.AccessToken },
+                new NpgsqlParameter("device_id", NpgsqlDbType.Integer) { Value = deviceId },
+                new NpgsqlParameter("app_name", NpgsqlDbType.Text) { Value = ToDbValue(info.AppName) },
+                new NpgsqlParameter("app_version", NpgsqlDbType.Text) { Value = ToDbValue(info.AppVersion) },
+                new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = ToDbValue(internalUserId) },
+                new NpgsqlParameter("is_active", NpgsqlDbType.Boolean) { Value = true },
+                new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateCreated) },
+                new NpgsqlParameter("date_last_activity", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateLastActivity) }).ConfigureAwait(false);
+
+            info.Id = Convert.ToInt64(newId);
         }
 
         /// <summary>
         /// 更新令牌（旧 Update：按 Id 更新 Tokens 全部字段；DeviceName 更新到设备行）。
         /// </summary>
-        public void Update(AuthenticationInfo info)
+        public Task UpdateAsync(AuthenticationInfo info, CancellationToken cancellationToken = default)
         {
             if (info == null)
             {
-                throw new ArgumentNullException("info");
+                throw new ArgumentNullException(nameof(info));
             }
 
-            RunInTransaction((connection, transaction) =>
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                using (var cmd = new NpgsqlCommand(
+                var internalUserId = await ResolveInternalUserIdAsync(connection, transaction, info.UserId, ct).ConfigureAwait(false);
+
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     @"UPDATE tokens SET
                         access_token = @access_token,
                         app_name = @app_name,
@@ -101,51 +109,45 @@ namespace Emby.Server.PgData
                         date_created = @date_created,
                         date_last_activity = @date_last_activity
                       WHERE id = @id",
-                    connection, transaction))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = info.Id });
-                    cmd.Parameters.Add(new NpgsqlParameter("access_token", NpgsqlDbType.Text) { Value = info.AccessToken });
-                    cmd.Parameters.Add(new NpgsqlParameter("app_name", NpgsqlDbType.Text) { Value = (object)info.AppName ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("app_version", NpgsqlDbType.Text) { Value = (object)info.AppVersion ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = (object)ResolveInternalUserId(connection, transaction, info.UserId) ?? DBNull.Value });
-                    cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateCreated) });
-                    cmd.Parameters.Add(new NpgsqlParameter("date_last_activity", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateLastActivity) });
-
-                    cmd.ExecuteNonQuery();
-                }
+                    ct,
+                    new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = info.Id },
+                    new NpgsqlParameter("access_token", NpgsqlDbType.Text) { Value = info.AccessToken },
+                    new NpgsqlParameter("app_name", NpgsqlDbType.Text) { Value = ToDbValue(info.AppName) },
+                    new NpgsqlParameter("app_version", NpgsqlDbType.Text) { Value = ToDbValue(info.AppVersion) },
+                    new NpgsqlParameter("user_id", NpgsqlDbType.Integer) { Value = ToDbValue(internalUserId) },
+                    new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateCreated) },
+                    new NpgsqlParameter("date_last_activity", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(info.DateLastActivity) }).ConfigureAwait(false);
 
                 // 旧实现把 DeviceName 快照存进 Tokens；新 schema 设备名归 devices 管
-                using (var cmd = new NpgsqlCommand(
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     @"UPDATE devices SET reported_name = @reported_name
                       WHERE id = (SELECT device_id FROM tokens WHERE id = @token_id)",
-                    connection, transaction))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("token_id", NpgsqlDbType.Bigint) { Value = info.Id });
-                    cmd.Parameters.Add(new NpgsqlParameter("reported_name", NpgsqlDbType.Text) { Value = (object)info.DeviceName ?? DBNull.Value });
-
-                    cmd.ExecuteNonQuery();
-                }
-            });
+                    ct,
+                    new NpgsqlParameter("token_id", NpgsqlDbType.Bigint) { Value = info.Id },
+                    new NpgsqlParameter("reported_name", NpgsqlDbType.Text) { Value = ToDbValue(info.DeviceName) }).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         /// <summary>
         /// 删除令牌（旧 Delete：按 Id 删除 Tokens 行，设备行保留）。
         /// </summary>
-        public void Delete(AuthenticationInfo existing)
+        public async Task DeleteAsync(AuthenticationInfo existing, CancellationToken cancellationToken = default)
         {
             if (existing == null)
             {
-                throw new ArgumentNullException("existing");
+                throw new ArgumentNullException(nameof(existing));
             }
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand("DELETE FROM tokens WHERE id = @id", connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = existing.Id });
-                    cmd.ExecuteNonQuery();
-                }
-            }
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            await ExecuteNonQueryAsync(
+                connection,
+                null,
+                "DELETE FROM tokens WHERE id = @id",
+                cancellationToken,
+                new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = existing.Id }).ConfigureAwait(false);
         }
 
         private const string BaseSelectText = @"
@@ -167,7 +169,7 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 查询令牌（旧 Get：AccessToken/DeviceId/UserId/HasUser 过滤 + DateLastActivity 倒序 + 分页 + 总数）。
         /// </summary>
-        public QueryResult<AuthenticationInfo> Get(AuthenticationInfoQuery query)
+        public async Task<QueryResult<AuthenticationInfo>> GetAsync(AuthenticationInfoQuery query, CancellationToken cancellationToken = default)
         {
             if (query == null)
             {
@@ -224,28 +226,26 @@ namespace Emby.Server.PgData
             var list = new List<AuthenticationInfo>();
             var result = new QueryResult<AuthenticationInfo>();
 
-            using (var connection = CreateConnection())
+            await using (var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false))
             {
-                using (var cmd = new NpgsqlCommand(commandText, connection))
+                await using (var cmd = new NpgsqlCommand(commandText, connection))
                 {
                     BindAuthenticationQueryParams(cmd, query);
 
-                    using (var reader = cmd.ExecuteReader())
+                    await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                     {
-                        while (reader.Read())
-                        {
-                            list.Add(Get(reader));
-                        }
+                        list.Add(Get(reader));
                     }
                 }
 
-                using (var countCmd = new NpgsqlCommand(
+                await using (var countCmd = new NpgsqlCommand(
                     "SELECT count(*) FROM tokens t LEFT JOIN devices d ON d.id = t.device_id" + whereText,
                     connection))
                 {
                     BindAuthenticationQueryParams(countCmd, query);
 
-                    result.TotalRecordCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                    result.TotalRecordCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));
                 }
             }
 
@@ -326,25 +326,22 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 读取设备自定义名（旧 GetDeviceOptions：按设备 ID 查 CustomName）。
         /// </summary>
-        public DeviceOptions GetDeviceOptions(string deviceId)
+        public async Task<DeviceOptions> GetDeviceOptionsAsync(string deviceId, CancellationToken cancellationToken = default)
         {
             var result = new DeviceOptions();
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    "SELECT custom_name FROM devices WHERE reported_device_id = @device_id",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read() && !reader.IsDBNull(0))
-                        {
-                            result.CustomName = reader.GetString(0);
-                        }
-                    }
+            await using (var cmd = new NpgsqlCommand(
+                "SELECT custom_name FROM devices WHERE reported_device_id = @device_id",
+                connection))
+            {
+                cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId });
+
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !reader.IsDBNull(0))
+                {
+                    result.CustomName = reader.GetString(0);
                 }
             }
 
@@ -355,73 +352,66 @@ namespace Emby.Server.PgData
         /// 更新设备自定义名（旧 UpdateDeviceOptions：replace into 保留 Capabilities）。
         /// 设备行不存在时创建占位行（reported_name='Unknown'，与旧迁移默认值一致）。
         /// </summary>
-        public void UpdateDeviceOptions(string deviceId, DeviceOptions options)
+        public async Task UpdateDeviceOptionsAsync(string deviceId, DeviceOptions options, CancellationToken cancellationToken = default)
         {
             if (options == null)
             {
-                throw new ArgumentNullException("options");
+                throw new ArgumentNullException(nameof(options));
             }
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    @"INSERT INTO devices (reported_device_id, reported_name, custom_name)
-                      VALUES (@device_id, 'Unknown', @custom_name)
-                      ON CONFLICT (reported_device_id) DO UPDATE SET custom_name = EXCLUDED.custom_name",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId });
-                    cmd.Parameters.Add(new NpgsqlParameter("custom_name", NpgsqlDbType.Text)
-                    {
-                        Value = string.IsNullOrWhiteSpace(options.CustomName) ? (object)DBNull.Value : options.CustomName
-                    });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    cmd.ExecuteNonQuery();
-                }
-            }
+            await ExecuteNonQueryAsync(
+                connection,
+                null,
+                @"INSERT INTO devices (reported_device_id, reported_name, custom_name)
+                  VALUES (@device_id, 'Unknown', @custom_name)
+                  ON CONFLICT (reported_device_id) DO UPDATE SET custom_name = EXCLUDED.custom_name",
+                cancellationToken,
+                new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId },
+                new NpgsqlParameter("custom_name", NpgsqlDbType.Text) { Value = ToDbValue(options.CustomName) }).ConfigureAwait(false);
         }
 
         /// <summary>
         /// 设备 upsert：不存在则注册，存在则刷新 reported_name；返回 devices.id。
         /// </summary>
-        private static int GetOrInsertDevice(NpgsqlConnection connection, NpgsqlTransaction transaction, string deviceId, string deviceName)
+        private static async Task<int> GetOrInsertDeviceAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string deviceId, string deviceName, CancellationToken cancellationToken)
         {
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 @"INSERT INTO devices (reported_device_id, reported_name)
                   VALUES (@device_id, @reported_name)
                   ON CONFLICT (reported_device_id) DO UPDATE SET reported_name = EXCLUDED.reported_name
                   RETURNING id",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId });
-                cmd.Parameters.Add(new NpgsqlParameter("reported_name", NpgsqlDbType.Text)
+                cancellationToken,
+                new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId },
+                new NpgsqlParameter("reported_name", NpgsqlDbType.Text)
                 {
                     Value = string.IsNullOrWhiteSpace(deviceName) ? (object)"Unknown" : deviceName
-                });
+                }).ConfigureAwait(false);
 
-                return Convert.ToInt32(cmd.ExecuteScalar());
-            }
+            return Convert.ToInt32(result);
         }
 
         /// <summary>
         /// GUID → local_users.id（空 GUID 或用户不存在返回 null）。
         /// </summary>
-        private static long? ResolveInternalUserId(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId)
+        private static async Task<long?> ResolveInternalUserIdAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid userId, CancellationToken cancellationToken)
         {
             if (userId.Equals(Guid.Empty))
             {
                 return null;
             }
 
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 "SELECT id FROM local_users WHERE guid = @guid",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId });
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = userId }).ConfigureAwait(false);
 
-                var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
-            }
+            return result == null || result == DBNull.Value ? (long?)null : Convert.ToInt64(result);
         }
     }
 }

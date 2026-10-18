@@ -16,4 +16,7 @@
     <NoWarn>$(NoWarn);CS1591;CS0618;CS0672;CS0108;CS0114;CS0169;CS0649;CS0414;CS8632</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.13.2" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

@@ -1,17 +1,34 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Entities;
 
 namespace MediaBrowser.Controller.Persistence;
 
+/// <summary>
+/// 显示偏好仓储。异步方法为真实实现，同步方法为遗留门面桥接。
+/// </summary>
 public interface IDisplayPreferencesRepository : IRepository, IDisposable
 {
-	void SaveDisplayPreferences(DisplayPreferences displayPreferences, string userId, string client, CancellationToken cancellationToken);
+	Task SaveDisplayPreferencesAsync(DisplayPreferences displayPreferences, Guid userId, string client, CancellationToken cancellationToken);
 
-	void SaveAllDisplayPreferences(IEnumerable<DisplayPreferences> displayPreferences, Guid userId, CancellationToken cancellationToken);
+	Task SaveAllDisplayPreferencesAsync(IEnumerable<DisplayPreferences> displayPreferences, Guid userId, CancellationToken cancellationToken);
 
-	DisplayPreferences GetDisplayPreferences(string displayPreferencesId, string userId, string client);
+	Task<DisplayPreferences> GetDisplayPreferencesAsync(string displayPreferencesId, Guid userId, string client, CancellationToken cancellationToken = default);
 
-	IEnumerable<DisplayPreferences> GetAllDisplayPreferences(Guid userId);
+	Task<List<DisplayPreferences>> GetAllDisplayPreferencesAsync(Guid userId, CancellationToken cancellationToken = default);
+
+	// ---- 兼容桥接（默认实现 → 异步）----
+	void SaveDisplayPreferences(DisplayPreferences displayPreferences, string userId, string client, CancellationToken cancellationToken)
+		=> SaveDisplayPreferencesAsync(displayPreferences, new Guid(userId), client, cancellationToken).GetAwaiter().GetResult();
+
+	void SaveAllDisplayPreferences(IEnumerable<DisplayPreferences> displayPreferences, Guid userId, CancellationToken cancellationToken)
+		=> SaveAllDisplayPreferencesAsync(displayPreferences, userId, cancellationToken).GetAwaiter().GetResult();
+
+	DisplayPreferences GetDisplayPreferences(string displayPreferencesId, string userId, string client)
+		=> GetDisplayPreferencesAsync(displayPreferencesId, new Guid(userId), client).GetAwaiter().GetResult();
+
+	IEnumerable<DisplayPreferences> GetAllDisplayPreferences(Guid userId)
+		=> GetAllDisplayPreferencesAsync(userId).GetAwaiter().GetResult();
 }

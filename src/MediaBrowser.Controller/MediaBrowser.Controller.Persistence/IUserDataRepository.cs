@@ -1,19 +1,41 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 
 namespace MediaBrowser.Controller.Persistence;
 
+/// <summary>
+/// 用户数据仓储。
+/// 异步方法（*Async）为唯一真实实现；同步方法仅为兼容既有上层门面的过渡桥接，
+/// 由默认接口实现转发到异步版本（不在实现类内重复同步 I/O）。
+/// </summary>
 public interface IUserDataRepository : IRepository, IDisposable
 {
-	void SaveUserData(long internalUserId, string key, UserItemData userData, CancellationToken cancellationToken);
+	Task SaveUserDataAsync(long internalUserId, string key, UserItemData userData, CancellationToken cancellationToken);
 
-	UserItemData GetUserData(long internalUserId, string key);
+	Task<UserItemData> GetUserDataAsync(long internalUserId, string key, CancellationToken cancellationToken = default);
 
-	UserItemData GetUserData(long internalUserId, List<string> keys);
+	Task<UserItemData> GetUserDataAsync(long internalUserId, List<string> keys, CancellationToken cancellationToken = default);
 
-	List<UserItemData> GetAllUserData(long internalUserId);
+	Task<List<UserItemData>> GetAllUserDataAsync(long internalUserId, CancellationToken cancellationToken = default);
 
-	void SaveAllUserData(long internalUserId, UserItemData[] userData, CancellationToken cancellationToken);
+	Task SaveAllUserDataAsync(long internalUserId, UserItemData[] userData, CancellationToken cancellationToken);
+
+	// ---- 兼容桥接（默认实现 → 异步）----
+	void SaveUserData(long internalUserId, string key, UserItemData userData, CancellationToken cancellationToken)
+		=> SaveUserDataAsync(internalUserId, key, userData, cancellationToken).GetAwaiter().GetResult();
+
+	UserItemData GetUserData(long internalUserId, string key)
+		=> GetUserDataAsync(internalUserId, key).GetAwaiter().GetResult();
+
+	UserItemData GetUserData(long internalUserId, List<string> keys)
+		=> GetUserDataAsync(internalUserId, keys).GetAwaiter().GetResult();
+
+	List<UserItemData> GetAllUserData(long internalUserId)
+		=> GetAllUserDataAsync(internalUserId).GetAwaiter().GetResult();
+
+	void SaveAllUserData(long internalUserId, UserItemData[] userData, CancellationToken cancellationToken)
+		=> SaveAllUserDataAsync(internalUserId, userData, cancellationToken).GetAwaiter().GetResult();
 }

@@ -4,68 +4,23 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
-using MediaBrowser.Model.Net;
 using Npgsql;
 
 namespace Emby.Server.PgData
 {
     /// <summary>
-    /// PostgreSQL 仓储基类：NpgsqlDataSource 管理（按连接串共享、内置连接池）、
-    /// 连接获取、日志与事务助手。替代旧 BaseSqliteRepository + ManagedConnection。
+    /// PostgreSQL 仓储基类：NpgsqlDataSource 生命周期（按连接串共享、进程级单例）、
+    /// 原生异步连接获取与异步事务助手。
+    ///
+    /// 设计约束（工业级）：
+    /// - 唯一数据访问入口为 async（CreateConnectionAsync / RunInTransactionAsync / ExecuteNonQueryAsync ...），
+    ///   仓储实现内不再提供同步模板，从类型系统上杜绝“异步外壳里同步阻塞线程池”。
+    /// - 并发控制完全交还 Npgsql 连接池 + PG 内核，不设应用层人为信号量。
     /// </summary>
     public abstract class BasePgRepository : IDisposable
     {
         /// <summary>
-        /// P8 并发防护（docs/p8-analysis.md ③方案，Chief 拍板 + Reviewer/Architect 护栏）：
-        /// 全局单门信号量——所有仓储共用同一个池（同连接串=同一 NpgsqlDataSource），
-        /// 门也必须全局一个（Architect 护栏①：不能按仓储×N，否则 N×50 > 池 100 自己打穿）。
-        /// 只守 DB 执行点（护栏②），不包请求管道。
-        /// 嵌套连接检查（护栏③）已做：GetItem 的 connection 参数零使用、
-        /// GetItems/GetItemList 执行体内无嵌套仓储调用——持门槽位内不开第二条连接。
-        /// </summary>
-        private static readonly SemaphoreSlim QueryGate = new SemaphoreSlim(QueryGateCapacity, QueryGateCapacity);
-        private const int QueryGateCapacity = 50;
-
-        /// <summary>
-        /// 池等待快速失败（P8 ③方案 B）：15s 默认收窄到 3s——池耗尽时快速失败
-        /// 不雪崩（U2 的 60s 超时级联止损层）。
-        /// </summary>
-        private const int PoolWaitTimeoutMs = 3000;
-
-        /// <summary>
-        /// 查询门：获取槽位（等待 3s 后 503），执行查询，释放。
-        /// 覆盖：GetItems/GetItemList/GetItemValues（Reviewer 备注②：不留第二个 U2 形态）。
-        /// 不覆盖：单条 RetrieveItem/认证/写入（信号量 50 < 池 100 留 50 余量）。
-        /// </summary>
-        protected static T WithQueryGate<T>(Func<T> action)
-        {
-            if (!QueryGate.Wait(PoolWaitTimeoutMs))
-            {
-                throw new PoolExhaustedException(QueryGateCapacity);
-            }
-
-            try
-            {
-                return action();
-            }
-            finally
-            {
-                QueryGate.Release();
-            }
-        }
-
-        protected static void WithQueryGate(Action action)
-        {
-            WithQueryGate<object>(() =>
-            {
-                action();
-                return null;
-            });
-        }
-        /// <summary>
-        /// 默认连接串（方案 §5.1；可被 OPENMEDIA_PGCONN 环境变量覆盖——ApplicationHost.GetPostgresConnectionString）。
-        /// 端口 15432：2026-10-15 起本机安全软件屏蔽数据库端口（5432/5433/3306 回环全堵，高位端口正常），
-        /// PG 已迁移至 15432。若日后解除屏蔽可改回 5432。
+        /// 默认连接串（可被 OPENMEDIA_PGCONN 环境变量覆盖——ApplicationHost.GetPostgresConnectionString）。
         /// </summary>
         public const string DefaultConnectionString =
             "Host=localhost;Port=15432;Database=openmedia;Username=postgres;Password=123456";
@@ -99,143 +54,148 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
-        /// 从连接池获取并打开一个新连接。
+        /// 获取（或惰性创建）进程级共享的 NpgsqlDataSource。
         /// </summary>
-        protected NpgsqlConnection CreateConnection()
+        protected NpgsqlDataSource GetDataSource()
         {
             CheckDisposed();
 
-            var dataSource = DataSources.GetOrAdd(_connectionString, cs =>
+            return DataSources.GetOrAdd(_connectionString, cs =>
             {
                 var builder = new NpgsqlConnectionStringBuilder(cs)
                 {
-                    // 与旧 ManagedConnection 语义对齐：池化由 Npgsql 自带，默认即可。
-                    // P8：池等待超时 15s→3s（快速失败不雪崩——U2 60s 级联的止损层）
                     Pooling = true,
-                    Timeout = 3
+                    // 连接池等待上限：由 Npgsql 内部排队，超时才失败（不设应用层信号量）
+                    Timeout = 15,
+                    MaxPoolSize = 100,
+                    // 长事务/慢查询保护：单条命令 30s 上限，防止连接被无限期占用
+                    CommandTimeout = 30
                 };
                 return NpgsqlDataSource.Create(builder.ConnectionString);
             });
-
-            var connection = dataSource.CreateConnection();
-            connection.Open();
-            return connection;
         }
 
         /// <summary>
-        /// 在事务中执行操作（异常时回滚）。
+        /// 异步从连接池获取并打开一个新连接（调用方负责 await using 释放）。
         /// </summary>
-        protected T RunInTransaction<T>(Func<NpgsqlConnection, NpgsqlTransaction, T> action)
+        protected async Task<NpgsqlConnection> CreateConnectionAsync(CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
+            var connection = GetDataSource().CreateConnection();
+            try
             {
-                return RunInTransaction(connection, action);
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                return connection;
+            }
+            catch
+            {
+                await connection.DisposeAsync().ConfigureAwait(false);
+                throw;
             }
         }
 
-        protected T RunInTransaction<T>(NpgsqlConnection connection, Func<NpgsqlConnection, NpgsqlTransaction, T> action)
+        /// <summary>
+        /// 原生异步事务执行器：异常自动回滚，成功自动提交。
+        /// </summary>
+        protected async Task<T> RunInTransactionAsync<T>(
+            Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<T>> action,
+            CancellationToken cancellationToken = default)
         {
-            using (var transaction = connection.BeginTransaction())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                var result = await action(connection, transaction, cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+            catch
             {
                 try
                 {
-                    var result = action(connection, transaction);
-                    transaction.Commit();
-                    return result;
+                    await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 catch
                 {
-                    try
-                    {
-                        transaction.Rollback();
-                    }
-                    catch
-                    {
-                        // 回滚失败：连接归还连接池时会重置状态
-                    }
-
-                    throw;
+                    // 回滚失败：连接归还池时由 Npgsql 重置会话状态
                 }
+
+                throw;
             }
         }
 
-        protected void RunInTransaction(Action<NpgsqlConnection, NpgsqlTransaction> action)
+        /// <summary>
+        /// 原生异步事务执行器（无返回值）。
+        /// </summary>
+        protected Task RunInTransactionAsync(
+            Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task> action,
+            CancellationToken cancellationToken = default)
         {
-            RunInTransaction<object>((connection, transaction) =>
+            return RunInTransactionAsync<object>(async (conn, tx, ct) =>
             {
-                action(connection, transaction);
+                await action(conn, tx, ct).ConfigureAwait(false);
                 return null;
-            });
+            }, cancellationToken);
         }
 
-        protected void RunInTransaction(NpgsqlConnection connection, Action<NpgsqlConnection, NpgsqlTransaction> action)
+        // ===========================================================
+        // 异步命令助手（统一参数化 + CancellationToken 传递）
+        // ===========================================================
+
+        /// <summary>
+        /// 执行非查询语句（异步）。
+        /// </summary>
+        protected static async Task<int> ExecuteNonQueryAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            string sql,
+            CancellationToken cancellationToken,
+            params NpgsqlParameter[] parameters)
         {
-            RunInTransaction(connection, (conn, transaction) =>
+            await using var cmd = new NpgsqlCommand(sql, connection, transaction);
+            if (parameters != null && parameters.Length > 0)
             {
-                action(conn, transaction);
-                return (object)null;
-            });
+                cmd.Parameters.AddRange(parameters);
+            }
+
+            return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// 判断表是否存在（幂等 DDL 门卫用）。
+        /// 执行标量查询（异步）。
         /// </summary>
-        protected static bool TableExists(NpgsqlConnection connection, string tableName)
+        protected static async Task<object> ExecuteScalarAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            string sql,
+            CancellationToken cancellationToken,
+            params NpgsqlParameter[] parameters)
         {
-            using (var cmd = new NpgsqlCommand("SELECT to_regclass(@table) IS NOT NULL", connection))
+            await using var cmd = new NpgsqlCommand(sql, connection, transaction);
+            if (parameters != null && parameters.Length > 0)
             {
-                cmd.Parameters.AddWithValue("table", "public." + tableName);
-                return (bool)cmd.ExecuteScalar();
+                cmd.Parameters.AddRange(parameters);
             }
+
+            return await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// 读取表的主键列数（schema 对齐迁移判断用）。
-        /// 数 indkey 数组长度（列数）；不能数 pg_index 行数（那是索引个数，恒为 1）。
+        /// 判断表是否存在（异步；幂等 DDL 门卫用）。
         /// </summary>
-        protected static int GetPrimaryKeyColumnCount(NpgsqlConnection connection, string tableName)
+        protected static async Task<bool> TableExistsAsync(
+            NpgsqlConnection connection,
+            string tableName,
+            CancellationToken cancellationToken)
         {
-            const string sql = @"
-                SELECT COALESCE(array_length(i.indkey, 1), 0)
-                FROM pg_index i
-                WHERE i.indrelid = @table::regclass
-                  AND i.indisprimary";
+            var result = await ExecuteScalarAsync(
+                connection,
+                null,
+                "SELECT to_regclass(@table) IS NOT NULL",
+                cancellationToken,
+                new NpgsqlParameter("table", "public." + tableName)).ConfigureAwait(false);
 
-            using (var cmd = new NpgsqlCommand(sql, connection))
-            {
-                cmd.Parameters.AddWithValue("table", "public." + tableName);
-                var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? 0 : Convert.ToInt32(result);
-            }
-        }
-
-        /// <summary>
-        /// 获取表的列名列表（小写）。
-        /// </summary>
-        protected static List<string> GetColumnNames(NpgsqlConnection connection, string tableName)
-        {
-            var list = new List<string>();
-
-            const string sql = @"
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = @table
-                ORDER BY ordinal_position";
-
-            using (var cmd = new NpgsqlCommand(sql, connection))
-            {
-                cmd.Parameters.AddWithValue("table", tableName);
-
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        list.Add(reader.GetString(0));
-                    }
-                }
-            }
-
-            return list;
+            return result != null && result != DBNull.Value && (bool)result;
         }
 
         /// <summary>
@@ -254,6 +214,30 @@ namespace Emby.Server.PgData
             }
 
             return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        }
+
+        /// <summary>
+        /// 可空 DateTime → 参数值（UTC 归一或 DBNull）。
+        /// </summary>
+        protected static object ToDbValue(DateTime? value)
+        {
+            return value.HasValue ? (object)ToUtcDateTime(value.Value) : DBNull.Value;
+        }
+
+        /// <summary>
+        /// 可空值类型 → 参数值（null 转 DBNull）。
+        /// </summary>
+        protected static object ToDbValue<T>(T? value) where T : struct
+        {
+            return value.HasValue ? (object)value.Value : DBNull.Value;
+        }
+
+        /// <summary>
+        /// 可空字符串 → 参数值（null/空 转 DBNull）。
+        /// </summary>
+        protected static object ToDbValue(string value)
+        {
+            return string.IsNullOrEmpty(value) ? (object)DBNull.Value : value;
         }
 
         protected void CheckDisposed()

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
@@ -61,68 +63,55 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 获取章节（旧 GetChapters：按 ChapterIndex 升序）。
         /// </summary>
-        public List<ChapterInfo> GetChapters(BaseItem item)
+        public async Task<List<ChapterInfo>> GetChaptersAsync(BaseItem item, CancellationToken cancellationToken = default)
         {
             CheckDisposed();
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<ChapterInfo>();
+
+            await using (var cmd = new NpgsqlCommand(
+                @"SELECT start_position_ticks, name, image_path, image_date_modified
+                  FROM chapters
+                  WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)
+                  ORDER BY chapter_index ASC",
+                connection))
             {
-                var list = new List<ChapterInfo>();
+                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
 
-                using (var cmd = new NpgsqlCommand(
-                    @"SELECT start_position_ticks, name, image_path, image_date_modified
-                      FROM chapters
-                      WHERE item_id = @item_id
-                      ORDER BY chapter_index ASC",
-                    connection))
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint)
-                    {
-                        Value = GetInternalId(connection, item.Id) ?? -1L
-                    });
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(GetChapter(reader, item));
-                        }
-                    }
+                    list.Add(GetChapter(reader, item));
                 }
-
-                return list;
             }
+
+            return list;
         }
 
         /// <summary>
         /// 获取单个章节（旧 GetChapter）。
         /// </summary>
-        public ChapterInfo GetChapter(BaseItem item, int index)
+        public async Task<ChapterInfo> GetChapterAsync(BaseItem item, int index, CancellationToken cancellationToken = default)
         {
             CheckDisposed();
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    @"SELECT start_position_ticks, name, image_path, image_date_modified
-                      FROM chapters
-                      WHERE item_id = @item_id AND chapter_index = @chapter_index",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint)
-                    {
-                        Value = GetInternalId(connection, item.Id) ?? -1L
-                    });
-                    cmd.Parameters.Add(new NpgsqlParameter("chapter_index", NpgsqlDbType.Integer) { Value = index });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            return GetChapter(reader, item);
-                        }
-                    }
-                }
+            await using var cmd = new NpgsqlCommand(
+                @"SELECT start_position_ticks, name, image_path, image_date_modified
+                  FROM chapters
+                  WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)
+                    AND chapter_index = @chapter_index",
+                connection);
+            cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
+            cmd.Parameters.Add(new NpgsqlParameter("chapter_index", NpgsqlDbType.Integer) { Value = index });
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return GetChapter(reader, item);
             }
 
             return null;
@@ -163,7 +152,7 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 保存章节（旧 SaveChapters：先删后插，ChapterIndex 按列表顺序重编号）。
         /// </summary>
-        public void SaveChapters(Guid id, List<ChapterInfo> chapters)
+        public Task SaveChaptersAsync(Guid id, List<ChapterInfo> chapters, CancellationToken cancellationToken = default)
         {
             CheckDisposed();
 
@@ -177,10 +166,11 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException("chapters");
             }
 
-            RunInTransaction((connection, transaction) =>
-            {
-                var internalId = GetInternalId(connection, transaction, id);
+            var validChapters = chapters.Where(c => c != null).ToList();
 
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
+            {
+                var internalId = await GetInternalIdAsync(connection, transaction, id, ct).ConfigureAwait(false);
                 if (internalId == null)
                 {
                     return;
@@ -188,43 +178,44 @@ namespace Emby.Server.PgData
 
                 var itemId = internalId.Value;
 
-                using (var deleteCmd = new NpgsqlCommand(
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     "DELETE FROM chapters WHERE item_id = @item_id",
-                    connection, transaction))
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
+
+                if (validChapters.Count == 0)
                 {
-                    deleteCmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId });
-                    deleteCmd.ExecuteNonQuery();
+                    return;
                 }
 
-                var chapterIndex = 0;
+                // 单条 UNNEST 批量插入全部章节
+                var count = validChapters.Count;
+                var indices = Enumerable.Range(0, count).ToArray();
+                var ticks = validChapters.Select(c => c.StartPositionTicks).ToArray();
+                var names = validChapters.Select(c => c.Name).ToArray();
+                var imagePaths = validChapters.Select(c => c.ImagePath).ToArray();
+                var imageDates = validChapters
+                    .Select(c => c.ImageDateModified != default(DateTime) ? (object)ToUtcDateTime(c.ImageDateModified) : DBNull.Value)
+                    .ToArray();
 
-                foreach (var chapter in chapters)
-                {
-                    using (var cmd = new NpgsqlCommand(
-                        @"INSERT INTO chapters
-                            (item_id, chapter_index, start_position_ticks, name, image_path, image_date_modified)
-                          VALUES
-                            (@item_id, @chapter_index, @start_position_ticks, @name, @image_path, @image_date_modified)",
-                        connection, transaction))
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId });
-                        cmd.Parameters.Add(new NpgsqlParameter("chapter_index", NpgsqlDbType.Integer) { Value = chapterIndex });
-                        cmd.Parameters.Add(new NpgsqlParameter("start_position_ticks", NpgsqlDbType.Bigint) { Value = chapter.StartPositionTicks });
-                        cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = (object)chapter.Name ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("image_path", NpgsqlDbType.Text) { Value = (object)chapter.ImagePath ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("image_date_modified", NpgsqlDbType.TimestampTz)
-                        {
-                            Value = chapter.ImageDateModified != default(DateTime)
-                                ? (object)ToUtcDateTime(chapter.ImageDateModified)
-                                : DBNull.Value
-                        });
-
-                        cmd.ExecuteNonQuery();
-                    }
-
-                    chapterIndex++;
-                }
-            });
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"INSERT INTO chapters
+                        (item_id, chapter_index, start_position_ticks, name, image_path, image_date_modified)
+                      SELECT @item_id, u.idx, u.ticks, u.name, u.image_path, u.image_date_modified
+                      FROM UNNEST(@indices, @ticks, @names, @image_paths, @image_dates)
+                           AS u(idx, ticks, name, image_path, image_date_modified)",
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId },
+                    new NpgsqlParameter("indices", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = indices },
+                    new NpgsqlParameter("ticks", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = ticks },
+                    new NpgsqlParameter("names", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = names },
+                    new NpgsqlParameter("image_paths", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = imagePaths },
+                    new NpgsqlParameter("image_dates", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = imageDates }).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         // ===========================================================
@@ -234,7 +225,7 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 获取媒体流（旧 GetMediaStreams：ItemId + 可选 Type/Index 过滤，按 StreamIndex 升序）。
         /// </summary>
-        public List<MediaStream> GetMediaStreams(MediaStreamQuery query)
+        public async Task<List<MediaStream>> GetMediaStreamsAsync(MediaStreamQuery query, CancellationToken cancellationToken = default)
         {
             CheckDisposed();
 
@@ -251,7 +242,7 @@ namespace Emby.Server.PgData
                                    is_avc, title, time_base, codec_time_base, color_primaries,
                                    color_space, color_transfer
                             FROM media_streams
-                            WHERE item_id = @item_id";
+                            WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)";
 
             if (query.Type.HasValue)
             {
@@ -271,63 +262,64 @@ namespace Emby.Server.PgData
 
             cmdText += " ORDER BY stream_index ASC";
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            var list = new List<MediaStream>();
+
+            await using (var cmd = new NpgsqlCommand(cmdText, connection))
             {
-                var list = new List<MediaStream>();
+                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = query.ItemId });
 
-                using (var cmd = new NpgsqlCommand(cmdText, connection))
+                if (query.Type.HasValue)
                 {
-                    cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint)
-                    {
-                        Value = GetInternalId(connection, query.ItemId) ?? -1L
-                    });
-
-                    if (query.Type.HasValue)
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("stream_type", NpgsqlDbType.Smallint) { Value = MapStreamType(query.Type.Value) });
-                    }
-
-                    if (query.Index.HasValue)
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("stream_index", NpgsqlDbType.Integer) { Value = query.Index.Value });
-                    }
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(GetMediaStream(reader));
-                        }
-                    }
+                    cmd.Parameters.Add(new NpgsqlParameter("stream_type", NpgsqlDbType.Smallint) { Value = MapStreamType(query.Type.Value) });
                 }
 
-                return list;
+                if (query.Index.HasValue)
+                {
+                    cmd.Parameters.Add(new NpgsqlParameter("stream_index", NpgsqlDbType.Integer) { Value = query.Index.Value });
+                }
+
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    list.Add(GetMediaStream(reader));
+                }
             }
+
+            return list;
         }
 
         /// <summary>
         /// 保存媒体流（旧 SaveMediaStreams：先删后插）。
         /// </summary>
-        public void SaveMediaStreams(Guid id, List<MediaStream> streams, CancellationToken cancellationToken)
+        public Task SaveMediaStreamsAsync(Guid id, List<MediaStream> streams, CancellationToken cancellationToken)
         {
             CheckDisposed();
 
             if (id.Equals(Guid.Empty))
             {
-                throw new ArgumentNullException("id");
+                throw new ArgumentNullException(nameof(id));
             }
 
             if (streams == null)
             {
-                throw new ArgumentNullException("streams");
+                throw new ArgumentNullException(nameof(streams));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            RunInTransaction((connection, transaction) =>
-            {
-                var internalId = GetInternalId(connection, transaction, id);
+            // 事务外完成映射与过滤（EmbeddedImage 等超出 schema CHECK 的类型跳过）
+            var rows = streams
+                .Where(s => s != null)
+                .Select(s => new { Stream = s, Type = MapStreamType(s.Type) })
+                .Where(x => x.Type != null)
+                .OrderBy(x => x.Stream.Index)
+                .ToList();
 
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
+            {
+                var internalId = await GetInternalIdAsync(connection, transaction, id, ct).ConfigureAwait(false);
                 if (internalId == null)
                 {
                     return;
@@ -335,119 +327,169 @@ namespace Emby.Server.PgData
 
                 var itemId = internalId.Value;
 
-                using (var deleteCmd = new NpgsqlCommand(
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
                     "DELETE FROM media_streams WHERE item_id = @item_id",
-                    connection, transaction))
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
+
+                if (rows.Count == 0)
                 {
-                    deleteCmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId });
-                    deleteCmd.ExecuteNonQuery();
+                    return;
                 }
 
-                foreach (var stream in streams)
+                // 单条 UNNEST 批量插入全部媒体流（1 次网络往返）
+                var n = rows.Count;
+                var indices = new int[n];
+                var types = new short[n];
+                var codecs = new string[n];
+                var languages = new string[n];
+                var channelLayouts = new string[n];
+                var profiles = new string[n];
+                var aspectRatios = new string[n];
+                var paths = new string[n];
+                var interlaced = new bool[n];
+                var bitRates = new object[n];
+                var channels = new object[n];
+                var sampleRates = new object[n];
+                var isDefaults = new bool[n];
+                var isForceds = new bool[n];
+                var isExternals = new bool[n];
+                var heights = new object[n];
+                var widths = new object[n];
+                var avgFrameRates = new object[n];
+                var realFrameRates = new object[n];
+                var levels = new object[n];
+                var pixelFormats = new string[n];
+                var bitDepths = new object[n];
+                var isAnamorphics = new object[n];
+                var refFrames = new object[n];
+                var codecTags = new string[n];
+                var comments = new string[n];
+                var nalLengthSizes = new string[n];
+                var isAvcs = new object[n];
+                var titles = new string[n];
+                var timeBases = new string[n];
+                var codecTimeBases = new string[n];
+                var colorPrimaries = new string[n];
+                var colorSpaces = new string[n];
+                var colorTransfers = new string[n];
+
+                for (int i = 0; i < n; i++)
                 {
-                    var streamType = MapStreamType(stream.Type);
+                    var x = rows[i];
+                    var st = x.Stream;
 
-                    if (streamType == null)
-                    {
-                        // EmbeddedImage 等超出 schema CHECK (0,1,2)，跳过（见类注释）
-                        continue;
-                    }
-
-                    using (var cmd = new NpgsqlCommand(
-                        @"INSERT INTO media_streams
-                            (item_id, stream_index, stream_type, codec, language, channel_layout,
-                             profile, aspect_ratio, path, is_interlaced, bit_rate, channels,
-                             sample_rate, is_default, is_forced, is_external, height, width,
-                             average_frame_rate, real_frame_rate, level, pixel_format, bit_depth,
-                             is_anamorphic, ref_frames, codec_tag, comment, nal_length_size,
-                             is_avc, title, time_base, codec_time_base, color_primaries,
-                             color_space, color_transfer)
-                          VALUES
-                            (@item_id, @stream_index, @stream_type, @codec, @language, @channel_layout,
-                             @profile, @aspect_ratio, @path, @is_interlaced, @bit_rate, @channels,
-                             @sample_rate, @is_default, @is_forced, @is_external, @height, @width,
-                             @average_frame_rate, @real_frame_rate, @level, @pixel_format, @bit_depth,
-                             @is_anamorphic, @ref_frames, @codec_tag, @comment, @nal_length_size,
-                             @is_avc, @title, @time_base, @codec_time_base, @color_primaries,
-                             @color_space, @color_transfer)",
-                        connection, transaction))
-                    {
-                        cmd.Parameters.Add(new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId });
-                        cmd.Parameters.Add(new NpgsqlParameter("stream_index", NpgsqlDbType.Integer) { Value = stream.Index });
-                        cmd.Parameters.Add(new NpgsqlParameter("stream_type", NpgsqlDbType.Smallint) { Value = streamType });
-                        cmd.Parameters.Add(new NpgsqlParameter("codec", NpgsqlDbType.Text) { Value = (object)stream.Codec ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("language", NpgsqlDbType.Text) { Value = (object)stream.Language ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("channel_layout", NpgsqlDbType.Text) { Value = (object)stream.ChannelLayout ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("profile", NpgsqlDbType.Text) { Value = (object)stream.Profile ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("aspect_ratio", NpgsqlDbType.Text) { Value = (object)stream.AspectRatio ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Text) { Value = (object)GetPathToSave(stream.Path) ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_interlaced", NpgsqlDbType.Boolean) { Value = stream.IsInterlaced });
-                        cmd.Parameters.Add(new NpgsqlParameter("bit_rate", NpgsqlDbType.Integer)
-                        {
-                            Value = stream.BitRate.HasValue ? (object)stream.BitRate.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("channels", NpgsqlDbType.Smallint)
-                        {
-                            Value = stream.Channels.HasValue ? (object)stream.Channels.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("sample_rate", NpgsqlDbType.Integer)
-                        {
-                            Value = stream.SampleRate.HasValue ? (object)stream.SampleRate.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_default", NpgsqlDbType.Boolean) { Value = stream.IsDefault });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_forced", NpgsqlDbType.Boolean) { Value = stream.IsForced });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_external", NpgsqlDbType.Boolean) { Value = stream.IsExternal });
-                        cmd.Parameters.Add(new NpgsqlParameter("height", NpgsqlDbType.Integer)
-                        {
-                            Value = stream.Height.HasValue && stream.Height.Value > 0 ? (object)stream.Height.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("width", NpgsqlDbType.Integer)
-                        {
-                            Value = stream.Width.HasValue && stream.Width.Value > 0 ? (object)stream.Width.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("average_frame_rate", NpgsqlDbType.Double)
-                        {
-                            Value = stream.AverageFrameRate.HasValue ? (object)(double)stream.AverageFrameRate.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("real_frame_rate", NpgsqlDbType.Double)
-                        {
-                            Value = stream.RealFrameRate.HasValue ? (object)(double)stream.RealFrameRate.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("level", NpgsqlDbType.Double)
-                        {
-                            Value = stream.Level.HasValue ? (object)stream.Level.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("pixel_format", NpgsqlDbType.Text) { Value = (object)stream.PixelFormat ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("bit_depth", NpgsqlDbType.Smallint)
-                        {
-                            Value = stream.BitDepth.HasValue ? (object)stream.BitDepth.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_anamorphic", NpgsqlDbType.Boolean)
-                        {
-                            Value = stream.IsAnamorphic.HasValue ? (object)stream.IsAnamorphic.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("ref_frames", NpgsqlDbType.Smallint)
-                        {
-                            Value = stream.RefFrames.HasValue ? (object)stream.RefFrames.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("codec_tag", NpgsqlDbType.Text) { Value = (object)stream.CodecTag ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("comment", NpgsqlDbType.Text) { Value = (object)stream.Comment ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("nal_length_size", NpgsqlDbType.Text) { Value = (object)stream.NalLengthSize ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("is_avc", NpgsqlDbType.Boolean)
-                        {
-                            Value = stream.IsAVC.HasValue ? (object)stream.IsAVC.Value : DBNull.Value
-                        });
-                        cmd.Parameters.Add(new NpgsqlParameter("title", NpgsqlDbType.Text) { Value = (object)stream.Title ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("time_base", NpgsqlDbType.Text) { Value = (object)stream.TimeBase ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("codec_time_base", NpgsqlDbType.Text) { Value = (object)stream.CodecTimeBase ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("color_primaries", NpgsqlDbType.Text) { Value = (object)stream.ColorPrimaries ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("color_space", NpgsqlDbType.Text) { Value = (object)stream.ColorSpace ?? DBNull.Value });
-                        cmd.Parameters.Add(new NpgsqlParameter("color_transfer", NpgsqlDbType.Text) { Value = (object)stream.ColorTransfer ?? DBNull.Value });
-
-                        cmd.ExecuteNonQuery();
-                    }
+                    indices[i] = st.Index;
+                    types[i] = (short)x.Type.Value;
+                    codecs[i] = st.Codec;
+                    languages[i] = st.Language;
+                    channelLayouts[i] = st.ChannelLayout;
+                    profiles[i] = st.Profile;
+                    aspectRatios[i] = st.AspectRatio;
+                    paths[i] = GetPathToSave(st.Path);
+                    interlaced[i] = st.IsInterlaced;
+                    bitRates[i] = ToDbValue(st.BitRate);
+                    channels[i] = ToDbValue(st.Channels);
+                    sampleRates[i] = ToDbValue(st.SampleRate);
+                    isDefaults[i] = st.IsDefault;
+                    isForceds[i] = st.IsForced;
+                    isExternals[i] = st.IsExternal;
+                    heights[i] = st.Height.HasValue && st.Height.Value > 0 ? (object)st.Height.Value : DBNull.Value;
+                    widths[i] = st.Width.HasValue && st.Width.Value > 0 ? (object)st.Width.Value : DBNull.Value;
+                    avgFrameRates[i] = st.AverageFrameRate.HasValue ? (object)(double)st.AverageFrameRate.Value : DBNull.Value;
+                    realFrameRates[i] = st.RealFrameRate.HasValue ? (object)(double)st.RealFrameRate.Value : DBNull.Value;
+                    levels[i] = ToDbValue(st.Level);
+                    pixelFormats[i] = st.PixelFormat;
+                    bitDepths[i] = ToDbValue(st.BitDepth);
+                    isAnamorphics[i] = st.IsAnamorphic.HasValue ? (object)st.IsAnamorphic.Value : DBNull.Value;
+                    refFrames[i] = ToDbValue(st.RefFrames);
+                    codecTags[i] = st.CodecTag;
+                    comments[i] = st.Comment;
+                    nalLengthSizes[i] = st.NalLengthSize;
+                    isAvcs[i] = st.IsAVC.HasValue ? (object)st.IsAVC.Value : DBNull.Value;
+                    titles[i] = st.Title;
+                    timeBases[i] = st.TimeBase;
+                    codecTimeBases[i] = st.CodecTimeBase;
+                    colorPrimaries[i] = st.ColorPrimaries;
+                    colorSpaces[i] = st.ColorSpace;
+                    colorTransfers[i] = st.ColorTransfer;
                 }
-            });
+
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"INSERT INTO media_streams
+                        (item_id, stream_index, stream_type, codec, language, channel_layout,
+                         profile, aspect_ratio, path, is_interlaced, bit_rate, channels,
+                         sample_rate, is_default, is_forced, is_external, height, width,
+                         average_frame_rate, real_frame_rate, level, pixel_format, bit_depth,
+                         is_anamorphic, ref_frames, codec_tag, comment, nal_length_size,
+                         is_avc, title, time_base, codec_time_base, color_primaries,
+                         color_space, color_transfer)
+                      SELECT
+                        @item_id, u.stream_index, u.stream_type, u.codec, u.language, u.channel_layout,
+                        u.profile, u.aspect_ratio, u.path, u.is_interlaced, u.bit_rate, u.channels,
+                        u.sample_rate, u.is_default, u.is_forced, u.is_external, u.height, u.width,
+                        u.average_frame_rate, u.real_frame_rate, u.level, u.pixel_format, u.bit_depth,
+                        u.is_anamorphic, u.ref_frames, u.codec_tag, u.comment, u.nal_length_size,
+                        u.is_avc, u.title, u.time_base, u.codec_time_base, u.color_primaries,
+                        u.color_space, u.color_transfer
+                      FROM UNNEST(
+                        @indices, @types, @codecs, @languages, @channel_layouts,
+                        @profiles, @aspect_ratios, @paths, @interlaceds, @bit_rates, @channels,
+                        @sample_rates, @is_defaults, @is_forceds, @is_externals, @heights, @widths,
+                        @avg_frame_rates, @real_frame_rates, @levels, @pixel_formats, @bit_depths,
+                        @is_anamorphics, @ref_frames, @codec_tags, @comments, @nal_length_sizes,
+                        @is_avcs, @titles, @time_bases, @codec_time_bases, @color_primaries,
+                        @color_spaces, @color_transfers
+                      ) AS u(
+                        stream_index, stream_type, codec, language, channel_layout,
+                        profile, aspect_ratio, path, is_interlaced, bit_rate, channels,
+                        sample_rate, is_default, is_forced, is_external, height, width,
+                        average_frame_rate, real_frame_rate, level, pixel_format, bit_depth,
+                        is_anamorphic, ref_frames, codec_tag, comment, nal_length_size,
+                        is_avc, title, time_base, codec_time_base, color_primaries,
+                        color_space, color_transfer
+                      )",
+                    ct,
+                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId },
+                    new NpgsqlParameter("indices", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = indices },
+                    new NpgsqlParameter("types", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = types },
+                    new NpgsqlParameter("codecs", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = codecs },
+                    new NpgsqlParameter("languages", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = languages },
+                    new NpgsqlParameter("channel_layouts", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = channelLayouts },
+                    new NpgsqlParameter("profiles", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = profiles },
+                    new NpgsqlParameter("aspect_ratios", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = aspectRatios },
+                    new NpgsqlParameter("paths", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = paths },
+                    new NpgsqlParameter("interlaceds", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = interlaced },
+                    new NpgsqlParameter("bit_rates", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = bitRates },
+                    new NpgsqlParameter("channels", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = channels },
+                    new NpgsqlParameter("sample_rates", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = sampleRates },
+                    new NpgsqlParameter("is_defaults", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isDefaults },
+                    new NpgsqlParameter("is_forceds", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isForceds },
+                    new NpgsqlParameter("is_externals", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isExternals },
+                    new NpgsqlParameter("heights", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = heights },
+                    new NpgsqlParameter("widths", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = widths },
+                    new NpgsqlParameter("avg_frame_rates", NpgsqlDbType.Array | NpgsqlDbType.Double) { Value = avgFrameRates },
+                    new NpgsqlParameter("real_frame_rates", NpgsqlDbType.Array | NpgsqlDbType.Double) { Value = realFrameRates },
+                    new NpgsqlParameter("levels", NpgsqlDbType.Array | NpgsqlDbType.Double) { Value = levels },
+                    new NpgsqlParameter("pixel_formats", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = pixelFormats },
+                    new NpgsqlParameter("bit_depths", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = bitDepths },
+                    new NpgsqlParameter("is_anamorphics", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isAnamorphics },
+                    new NpgsqlParameter("ref_frames", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = refFrames },
+                    new NpgsqlParameter("codec_tags", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = codecTags },
+                    new NpgsqlParameter("comments", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = comments },
+                    new NpgsqlParameter("nal_length_sizes", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = nalLengthSizes },
+                    new NpgsqlParameter("is_avcs", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isAvcs },
+                    new NpgsqlParameter("titles", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = titles },
+                    new NpgsqlParameter("time_bases", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = timeBases },
+                    new NpgsqlParameter("codec_time_bases", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = codecTimeBases },
+                    new NpgsqlParameter("color_primaries", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = colorPrimaries },
+                    new NpgsqlParameter("color_spaces", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = colorSpaces },
+                    new NpgsqlParameter("color_transfers", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = colorTransfers }).ConfigureAwait(false);
+            }, cancellationToken);
         }
 
         /// <summary>

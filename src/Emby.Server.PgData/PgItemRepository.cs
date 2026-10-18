@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Configuration;
@@ -98,18 +99,17 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 初始化：schema 由 PgSchemaInitializer 统一建好，这里只做存在性校验。
         /// </summary>
-        public void Initialize()
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            using (var connection = CreateConnection())
-            {
-                var tables = new[] { "media_items", "chapters", "media_streams", "item_people", "ancestor_ids", "item_extradata" };
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                foreach (var table in tables)
+            var tables = new[] { "media_items", "chapters", "media_streams", "item_people", "ancestor_ids", "item_extradata" };
+
+            foreach (var table in tables)
+            {
+                if (!await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
                 {
-                    if (!TableExists(connection, table))
-                    {
-                        throw new InvalidOperationException(table + " table does not exist. Schema initialization failed.");
-                    }
+                    throw new InvalidOperationException(table + " table does not exist. Schema initialization failed.");
                 }
             }
         }
@@ -200,68 +200,37 @@ namespace Emby.Server.PgData
         /// <summary>
         /// GUID → media_items.id（先查缓存，未命中查库并回填；不存在返回 null）。
         /// </summary>
-        internal long? GetInternalId(NpgsqlConnection connection, Guid guid)
-        {
-            return GetInternalId(connection, null, guid);
-        }
-
-        internal long? GetInternalId(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid guid)
+        internal async Task<long?> GetInternalIdAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid guid,
+            CancellationToken cancellationToken)
         {
             if (guid.Equals(Guid.Empty))
             {
                 return null;
             }
 
-            long cached;
-            if (_guidToIdMap.TryGetValue(guid, out cached))
+            if (_guidToIdMap.TryGetValue(guid, out var cached))
             {
                 return cached;
             }
 
-            using (var cmd = new NpgsqlCommand(
+            var result = await ExecuteScalarAsync(
+                connection,
+                transaction,
                 "SELECT id FROM media_items WHERE guid = @guid LIMIT 1",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid });
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid }).ConfigureAwait(false);
 
-                var result = cmd.ExecuteScalar();
-
-                if (result == null || result == DBNull.Value)
-                {
-                    return null;
-                }
-
-                var id = Convert.ToInt64(result);
-                _guidToIdMap[guid] = id;
-                return id;
-            }
-        }
-
-        /// <summary>
-        /// id → GUID 反查（读取水合时把 parent_id/series_id 翻译回 GUID）。
-        /// </summary>
-        internal static Guid? GetGuidForInternalId(NpgsqlConnection connection, long? internalId)
-        {
-            if (internalId == null)
+            if (result == null || result == DBNull.Value)
             {
                 return null;
             }
 
-            using (var cmd = new NpgsqlCommand(
-                "SELECT guid FROM media_items WHERE id = @id LIMIT 1",
-                connection))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = internalId });
-
-                var result = cmd.ExecuteScalar();
-
-                if (result == null || result == DBNull.Value)
-                {
-                    return null;
-                }
-
-                return (Guid)result;
-            }
+            var id = Convert.ToInt64(result);
+            _guidToIdMap[guid] = id;
+            return id;
         }
 
         // ===========================================================
@@ -271,195 +240,567 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 保存单个媒体项（旧 SaveItem → SaveItems）。
         /// </summary>
-        public void SaveItem(BaseItem item, CancellationToken cancellationToken)
+        public Task SaveItemAsync(BaseItem item, CancellationToken cancellationToken)
         {
             if (item == null)
             {
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             }
 
-            SaveItems(new List<BaseItem> { item }, cancellationToken);
+            return SaveItemsAsync(new List<BaseItem> { item }, cancellationToken);
         }
 
         /// <summary>
         /// 保存图片列（旧 SaveImages：Update TypedBaseItems set Images where guid）。
         /// </summary>
-        public void SaveImages(BaseItem item)
+        public async Task SaveImagesAsync(BaseItem item, CancellationToken cancellationToken = default)
         {
             if (item == null)
             {
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             }
 
             CheckDisposed();
 
-            using (var connection = CreateConnection())
-            {
-                using (var cmd = new NpgsqlCommand(
-                    "UPDATE media_items SET images = @images WHERE guid = @guid",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
-                    cmd.Parameters.Add(new NpgsqlParameter("images", NpgsqlDbType.Jsonb)
-                    {
-                        Value = (object)SerializeImages(item) ?? DBNull.Value
-                    });
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-                    cmd.ExecuteNonQuery();
-                }
-            }
+            await ExecuteNonQueryAsync(
+                connection,
+                null,
+                "UPDATE media_items SET images = @images WHERE guid = @guid",
+                cancellationToken,
+                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id },
+                new NpgsqlParameter("images", NpgsqlDbType.Jsonb) { Value = ToDbValue(SerializeImages(item)) }).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// 批量保存（旧 SaveItems：单事务内逐项 replace + 祖先 + item values）。
-        /// 两遍式：第一遍 upsert 全部行（父/系列/专辑引用可能暂缺 → NULL），
-        /// 第二遍回填 parent_id/series_id/album_id（批量内拓扑顺序无关）+ 祖先 + extradata。
+        /// 批量提交块大小（工业级推荐 200~500：短事务限制锁持有时间与 WAL 体积）。
         /// </summary>
-        public void SaveItems(List<BaseItem> items, CancellationToken cancellationToken)
+        private const int BatchChunkSize = 250;
+
+        /// <summary>
+        /// 媒体项批量写入的列清单（顺序与 SaveItemsBatchAsync 的参数数组严格一致）。
+        /// </summary>
+        private const string MediaItemsBatchColumns =
+            "guid, type, type_name, data, parent_id, path, start_date, end_date, " +
+            "is_movie, is_series, is_repeat, community_rating, custom_rating, " +
+            "index_number, is_locked, name, official_rating, overview, " +
+            "parent_index_number, premiere_date, production_year, sort_name, " +
+            "runtime_ticks, date_created, date_modified, preferred_metadata_language, " +
+            "preferred_metadata_country_code, date_last_refreshed, date_last_saved, " +
+            "is_in_mixed_folder, locked_fields, inherited_parental_rating_value, " +
+            "critic_rating, presentation_unique_key, original_title, series_name, " +
+            "series_id, album_id, tagline, provider_ids, images, production_locations, " +
+            "total_bitrate, extra_type, series_presentation_unique_key, external_id, " +
+            "width, height, size, container, user_data_key_id, " +
+            "is_folder, is_virtual_item, media_type, channel_id, top_parent_id, " +
+            "clean_name, album, extra_ids, unrated_type, trailer_types, " +
+            "external_series_id, owner_id, date_last_media_added";
+
+        /// <summary>
+        /// 批量保存（真批量：单条 UNNEST 语句落库整块，网络往返 O(1)）。
+        ///
+        /// 流程（每块 250 条，独立短事务）：
+        ///  1. 删除同 guid 异 type 的历史行（罕见类型变更路径）；
+        ///  2. 批量解析 user_data_key → id（单次 UNNEST）；
+        ///  3. 单条 INSERT ... SELECT FROM UNNEST(...) ON CONFLICT (guid, type) DO UPDATE 落库全部行；
+        ///  4. 单条 UPDATE ... FROM (VALUES ...) 回填 parent_id/series_id；
+        ///  5. 祖先闭包表与 extradata 亦为批量 UNNEST。
+        /// 块内按 Guid 升序，保证并发事务加锁顺序一致（杜绝 40P01）。
+        /// </summary>
+        public async Task SaveItemsAsync(List<BaseItem> items, CancellationToken cancellationToken)
         {
             if (items == null)
             {
-                throw new ArgumentNullException("items");
+                throw new ArgumentNullException(nameof(items));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-
             CheckDisposed();
 
-
-            var tuples = new List<Tuple<BaseItem, List<Guid>, BaseItem, string, List<string>>>();
-
-            foreach (var item in items)
+            var sortedItems = items.Where(i => i != null).OrderBy(i => i.Id).ToList();
+            if (sortedItems.Count == 0)
             {
-                var ancestorIds = item.SupportsAncestors
-                    ? item.GetAncestorIds().Distinct().ToList()
-                    : null;
-
-                var topParent = item.GetTopParent();
-
-                var userdataKey = item.GetUserDataKeys().FirstOrDefault();
-                var inheritedTags = item.GetInheritedTags();
-
-                tuples.Add(new Tuple<BaseItem, List<Guid>, BaseItem, string, List<string>>(
-                    item, ancestorIds, topParent, userdataKey, inheritedTags));
+                return;
             }
 
-            RunInTransaction((connection, transaction) =>
+            for (int chunkStart = 0; chunkStart < sortedItems.Count; chunkStart += BatchChunkSize)
             {
-                foreach (var tuple in tuples)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    SaveItemInternal(connection, transaction, tuple.Item1, tuple.Item3, tuple.Item4);
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunk = sortedItems.Skip(chunkStart).Take(BatchChunkSize).ToList();
 
-                // 第二遍：批量内所有行已存在，回填父/系列/专辑整数引用
-                foreach (var tuple in tuples)
-                {
-                    UpdateItemReferences(connection, transaction, tuple.Item1);
-                }
-
-                foreach (var tuple in tuples)
-                {
-                    var item = tuple.Item1;
-
-                    if (item.SupportsAncestors)
-                    {
-                        UpdateAncestors(connection, transaction, item.Id, tuple.Item2);
-                    }
-
-                    UpdateItemValues(connection, transaction, item.Id, GetItemValuesToSave(item, tuple.Item5));
-                }
-            });
+                await SaveItemsChunkAsync(chunk, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
-        /// 单项 upsert（旧 SaveItem 的 replace into 语义：guid 存在则整行更新，id 保持稳定）。
-        /// ON CONFLICT (guid, type) 依赖补充唯一索引 idx_media_items_guid；
-        /// 同 guid 不同 type 的历史行先清理（罕见路径：类型变更，等价旧行为的整行替换）。
+        /// 单块批量落库（一个短事务内完成，全部为集合式 SQL）。
         /// </summary>
-        private void SaveItemInternal(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, BaseItem topParent, string userDataKey)
+        private Task SaveItemsChunkAsync(List<BaseItem> chunk, CancellationToken cancellationToken)
+        {
+            // ---- 事务外完成全部内存侧字段提取（不占用连接）----
+            var rows = chunk.Select(item => BuildBatchRow(item)).ToList();
+            var ancestorRows = chunk
+                .Where(i => i.SupportsAncestors)
+                .Select(i => (Item: i.Id, Ancestors: i.GetAncestorIds().Distinct().OrderBy(g => g).ToList()))
+                .ToList();
+            var extraRows = chunk
+                .Select(i => (Item: i.Id, Values: GetItemValuesToSave(i, i.GetInheritedTags())))
+                .ToList();
+
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
+            {
+                // ---- 1. 清理同 guid 异 type 的历史行（一次集合删除）----
+                var guids = rows.Select(r => r.Guid).ToArray();
+                var types = rows.Select(r => r.TypeCode).ToArray();
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    @"DELETE FROM media_items t
+                      WHERE t.guid = ANY(@guids)
+                        AND EXISTS (
+                            SELECT 1 FROM UNNEST(@guids, @types) AS x(g, ty)
+                            WHERE x.g = t.guid AND x.ty <> t.type)",
+                    ct,
+                    new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guids },
+                    new NpgsqlParameter("types", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = types }).ConfigureAwait(false);
+
+                // ---- 2. 批量解析 user_data_key → id ----
+                var userDataKeyIdMap = await ResolveUserDataKeyIdsAsync(connection, transaction, rows, ct).ConfigureAwait(false);
+
+                // ---- 3. 单条 UNNEST 批量 UPSERT 全部媒体项（引用列先留 NULL）----
+                var insertedIds = await UpsertMediaItemsBatchAsync(connection, transaction, rows, userDataKeyIdMap, ct).ConfigureAwait(false);
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    _guidToIdMap[rows[i].Guid] = insertedIds[i];
+                }
+
+                // ---- 4. 单条集合 UPDATE 回填 parent_id / series_id（GUID → id 子查询）----
+                await BackfillReferencesAsync(connection, transaction, rows, ct).ConfigureAwait(false);
+
+                // ---- 5. 祖先闭包 + extradata 批量写入 ----
+                await WriteAncestorsBatchAsync(connection, transaction, ancestorRows, ct).ConfigureAwait(false);
+                await WriteExtraDataBatchAsync(connection, transaction, extraRows, ct).ConfigureAwait(false);
+            }, cancellationToken);
+        }
+
+        /// <summary>
+        /// 单条媒体项 → 批量行快照（全部标量字段，事务外提取，避免持连接做序列化）。
+        /// </summary>
+        private sealed class MediaItemBatchRow
+        {
+            public Guid Guid;
+            public int TypeCode;
+            public string TypeName;
+            public string Data;
+            public Guid ParentGuid;
+            public string Path;
+            public DateTime? StartDate;
+            public DateTime? EndDate;
+            public bool? IsMovie;
+            public bool? IsSeries;
+            public bool? IsRepeat;
+            public double? CommunityRating;
+            public string CustomRating;
+            public int? IndexNumber;
+            public bool IsLocked;
+            public string Name;
+            public string OfficialRating;
+            public string Overview;
+            public int? ParentIndexNumber;
+            public DateTime? PremiereDate;
+            public int? ProductionYear;
+            public string SortName;
+            public long? RuntimeTicks;
+            public DateTime DateCreated;
+            public DateTime DateModified;
+            public string PreferredMetadataLanguage;
+            public string PreferredMetadataCountryCode;
+            public DateTime? DateLastRefreshed;
+            public DateTime? DateLastSaved;
+            public bool IsInMixedFolder;
+            public string LockedFields;
+            public int? InheritedParentalRatingValue;
+            public double? CriticRating;
+            public string PresentationUniqueKey;
+            public string OriginalTitle;
+            public string SeriesName;
+            public Guid SeriesGuid;
+            public string Tagline;
+            public string ProviderIds;
+            public string Images;
+            public string ProductionLocations;
+            public int? TotalBitrate;
+            public int? ExtraType;
+            public string SeriesPresentationUniqueKey;
+            public string ExternalId;
+            public int? Width;
+            public int? Height;
+            public long? Size;
+            public string Container;
+            public string UserDataKey;
+            public bool IsFolder;
+            public bool IsVirtualItem;
+            public string MediaType;
+            public string ChannelId;
+            public string TopParentId;
+            public string CleanName;
+            public string Album;
+            public string ExtraIds;
+            public string UnratedType;
+            public string TrailerTypes;
+            public string ExternalSeriesId;
+            public string OwnerId;
+            public DateTime? DateLastMediaAdded;
+        }
+
+        /// <summary>
+        /// 从 BaseItem 提取批量写入所需的全部标量字段（纯内存操作，无 DB 访问）。
+        /// </summary>
+        private MediaItemBatchRow BuildBatchRow(BaseItem item)
         {
             var type = item.GetType();
-            var typeCode = GetTypeCode(type);
+            var topParent = item.GetTopParent();
+            var hasProgramAttributes = item as IHasProgramAttributes;
+            var hasSeries = item as IHasSeries;
+            var hasSeriesName = item as IHasSeriesName;
+            var hasStartDate = item as IHasStartDate;
+            var trailer = item as Trailer;
+            var folder = item as Folder;
 
-            using (var cmd = new NpgsqlCommand(
-                "DELETE FROM media_items WHERE guid = @guid AND type <> @type",
+            return new MediaItemBatchRow
+            {
+                Guid = item.Id,
+                TypeCode = GetTypeCode(type),
+                TypeName = type.FullName,
+                Data = TypeRequiresDeserialization(type) ? _jsonSerializer.SerializeToString(item) : null,
+                ParentGuid = item.ParentId,
+                Path = GetPathToSave(item.Path),
+                StartDate = hasStartDate != null ? hasStartDate.StartDate : (DateTime?)null,
+                EndDate = item.EndDate,
+                IsMovie = hasProgramAttributes != null ? hasProgramAttributes.IsMovie : (bool?)null,
+                IsSeries = hasProgramAttributes != null ? hasProgramAttributes.IsSeries : (bool?)null,
+                IsRepeat = hasProgramAttributes != null ? hasProgramAttributes.IsRepeat : (bool?)null,
+                CommunityRating = item.CommunityRating.HasValue ? (double?)item.CommunityRating.Value : null,
+                CustomRating = item.CustomRating,
+                IndexNumber = item.IndexNumber,
+                IsLocked = item.IsLocked,
+                Name = item.Name,
+                OfficialRating = item.OfficialRating,
+                Overview = item.Overview,
+                ParentIndexNumber = item.ParentIndexNumber,
+                PremiereDate = item.PremiereDate,
+                ProductionYear = item.ProductionYear,
+                SortName = item.SortName,
+                RuntimeTicks = item.RunTimeTicks,
+                DateCreated = item.DateCreated,
+                DateModified = item.DateModified,
+                PreferredMetadataLanguage = item.PreferredMetadataLanguage,
+                PreferredMetadataCountryCode = item.PreferredMetadataCountryCode,
+                DateLastRefreshed = item.DateLastRefreshed != default(DateTime) ? item.DateLastRefreshed : (DateTime?)null,
+                DateLastSaved = item.DateLastSaved != default(DateTime) ? item.DateLastSaved : (DateTime?)null,
+                IsInMixedFolder = item.IsInMixedFolder,
+                LockedFields = item.LockedFields != null && item.LockedFields.Length > 0
+                    ? string.Join("|", item.LockedFields.Select(i => i.ToString()).ToArray())
+                    : null,
+                InheritedParentalRatingValue = item.InheritedParentalRatingValue > 0 ? item.InheritedParentalRatingValue : (int?)null,
+                CriticRating = item.CriticRating.HasValue ? (double?)item.CriticRating.Value : null,
+                PresentationUniqueKey = item.PresentationUniqueKey,
+                OriginalTitle = item.OriginalTitle,
+                SeriesName = hasSeriesName != null && !string.IsNullOrEmpty(hasSeriesName.SeriesName) ? hasSeriesName.SeriesName : null,
+                SeriesGuid = hasSeries != null ? hasSeries.SeriesId : Guid.Empty,
+                Tagline = item.Tagline,
+                ProviderIds = SerializeProviderIds(item),
+                Images = SerializeImages(item),
+                ProductionLocations = item.ProductionLocations != null && item.ProductionLocations.Length > 0
+                    ? _jsonSerializer.SerializeToString(item.ProductionLocations)
+                    : null,
+                TotalBitrate = item.TotalBitrate,
+                ExtraType = item.ExtraType.HasValue ? (int?)item.ExtraType.Value : null,
+                SeriesPresentationUniqueKey = hasSeries != null && !string.IsNullOrEmpty(hasSeries.SeriesPresentationUniqueKey)
+                    ? hasSeries.SeriesPresentationUniqueKey
+                    : null,
+                ExternalId = item.ExternalId,
+                Width = item.Width > 0 ? item.Width : (int?)null,
+                Height = item.Height > 0 ? item.Height : (int?)null,
+                Size = item.Size,
+                Container = item.Container,
+                UserDataKey = item.GetUserDataKeys().FirstOrDefault(),
+                IsFolder = item.IsFolder,
+                IsVirtualItem = item.IsVirtualItem,
+                MediaType = item.MediaType,
+                ChannelId = item.ChannelId.Equals(Guid.Empty) ? null : item.ChannelId.ToString("N"),
+                TopParentId = topParent != null ? topParent.Id.ToString("N") : null,
+                CleanName = string.IsNullOrWhiteSpace(item.Name) ? null : GetCleanValue(item.Name),
+                Album = item.Album,
+                ExtraIds = item.ExtraIds != null && item.ExtraIds.Length > 0
+                    ? string.Join("|", item.ExtraIds.Select(i => i.ToString()).ToArray())
+                    : null,
+                UnratedType = item.GetBlockUnratedType().ToString(),
+                TrailerTypes = trailer != null && trailer.TrailerTypes != null && trailer.TrailerTypes.Length > 0
+                    ? string.Join("|", trailer.TrailerTypes.Select(i => i.ToString()).ToArray())
+                    : null,
+                ExternalSeriesId = item.ExternalSeriesId,
+                OwnerId = item.OwnerId.Equals(Guid.Empty) ? null : item.OwnerId.ToString("N"),
+                DateLastMediaAdded = folder != null ? folder.DateLastMediaAdded : (DateTime?)null
+            };
+        }
+
+        /// <summary>
+        /// 批量解析 user_data_key → user_data_keys.id（单次 UNNEST upsert + 单次查询）。
+        /// </summary>
+        private static async Task<Dictionary<string, int>> ResolveUserDataKeyIdsAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            List<MediaItemBatchRow> rows,
+            CancellationToken cancellationToken)
+        {
+            var map = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            var keys = rows
+                .Select(r => r.UserDataKey)
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(k => k, StringComparer.Ordinal)
+                .ToArray();
+
+            if (keys.Length == 0)
+            {
+                return map;
+            }
+
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"INSERT INTO user_data_keys (user_data_key)
+                  SELECT unnest_key FROM UNNEST(@keys) AS unnest_key
+                  ON CONFLICT (user_data_key) DO UPDATE SET user_data_key = EXCLUDED.user_data_key",
+                cancellationToken,
+                new NpgsqlParameter("keys", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = keys }).ConfigureAwait(false);
+
+            await using (var cmd = new NpgsqlCommand(
+                "SELECT id, user_data_key FROM user_data_keys WHERE user_data_key = ANY(@keys)",
                 connection, transaction))
             {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
-                cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Integer) { Value = typeCode });
-                cmd.ExecuteNonQuery();
+                cmd.Parameters.Add(new NpgsqlParameter("keys", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = keys });
+                await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    map[reader.GetString(1)] = reader.GetInt32(0);
+                }
             }
 
-            int? userDataKeyId = null;
+            return map;
+        }
 
-            if (!string.IsNullOrWhiteSpace(userDataKey))
+        /// <summary>
+        /// 单条 UNNEST 语句批量 UPSERT 全部媒体项，返回按输入顺序排列的 id 数组。
+        /// </summary>
+        private static async Task<long[]> UpsertMediaItemsBatchAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            List<MediaItemBatchRow> rows,
+            Dictionary<string, int> userDataKeyIdMap,
+            CancellationToken cancellationToken)
+        {
+            var count = rows.Count;
+
+            var guid = new Guid[count];
+            var type = new int[count];
+            var typeName = new string[count];
+            var data = new string[count];
+            var parentGuid = new Guid[count];
+            var path = new string[count];
+            var startDate = new object[count];
+            var endDate = new object[count];
+            var isMovie = new object[count];
+            var isSeries = new object[count];
+            var isRepeat = new object[count];
+            var communityRating = new object[count];
+            var customRating = new string[count];
+            var indexNumber = new object[count];
+            var isLocked = new bool[count];
+            var name = new string[count];
+            var officialRating = new string[count];
+            var overview = new string[count];
+            var parentIndexNumber = new object[count];
+            var premiereDate = new object[count];
+            var productionYear = new object[count];
+            var sortName = new string[count];
+            var runtimeTicks = new object[count];
+            var dateCreated = new DateTime[count];
+            var dateModified = new DateTime[count];
+            var prefLang = new string[count];
+            var prefCountry = new string[count];
+            var dateLastRefreshed = new object[count];
+            var dateLastSaved = new object[count];
+            var isInMixedFolder = new bool[count];
+            var lockedFields = new string[count];
+            var inheritedParentalRating = new object[count];
+            var criticRating = new object[count];
+            var presentationUniqueKey = new string[count];
+            var originalTitle = new string[count];
+            var seriesName = new string[count];
+            var seriesGuid = new Guid[count];
+            var tagline = new string[count];
+            var providerIds = new string[count];
+            var images = new string[count];
+            var productionLocations = new string[count];
+            var totalBitrate = new object[count];
+            var extraType = new object[count];
+            var seriesPresentationUniqueKey = new string[count];
+            var externalId = new string[count];
+            var width = new object[count];
+            var height = new object[count];
+            var size = new object[count];
+            var container = new string[count];
+            var userDataKeyId = new object[count];
+            var isFolder = new bool[count];
+            var isVirtualItem = new bool[count];
+            var mediaType = new string[count];
+            var channelId = new string[count];
+            var topParentId = new string[count];
+            var cleanName = new string[count];
+            var album = new string[count];
+            var extraIds = new string[count];
+            var unratedType = new string[count];
+            var trailerTypes = new string[count];
+            var externalSeriesId = new string[count];
+            var ownerId = new string[count];
+            var dateLastMediaAdded = new object[count];
+
+            for (int i = 0; i < count; i++)
             {
-                userDataKeyId = GetOrInsertUserDataKey(connection, transaction, userDataKey);
+                var r = rows[i];
+                guid[i] = r.Guid;
+                type[i] = r.TypeCode;
+                typeName[i] = r.TypeName;
+                data[i] = r.Data;
+                parentGuid[i] = r.ParentGuid;
+                path[i] = r.Path;
+                startDate[i] = ToDbValue(r.StartDate);
+                endDate[i] = ToDbValue(r.EndDate);
+                isMovie[i] = r.IsMovie.HasValue ? (object)r.IsMovie.Value : DBNull.Value;
+                isSeries[i] = r.IsSeries.HasValue ? (object)r.IsSeries.Value : DBNull.Value;
+                isRepeat[i] = r.IsRepeat.HasValue ? (object)r.IsRepeat.Value : DBNull.Value;
+                communityRating[i] = r.CommunityRating.HasValue ? (object)r.CommunityRating.Value : DBNull.Value;
+                customRating[i] = r.CustomRating;
+                indexNumber[i] = r.IndexNumber.HasValue ? (object)r.IndexNumber.Value : DBNull.Value;
+                isLocked[i] = r.IsLocked;
+                name[i] = r.Name;
+                officialRating[i] = r.OfficialRating;
+                overview[i] = r.Overview;
+                parentIndexNumber[i] = r.ParentIndexNumber.HasValue ? (object)r.ParentIndexNumber.Value : DBNull.Value;
+                premiereDate[i] = ToDbValue(r.PremiereDate);
+                productionYear[i] = r.ProductionYear.HasValue ? (object)r.ProductionYear.Value : DBNull.Value;
+                sortName[i] = r.SortName;
+                runtimeTicks[i] = r.RuntimeTicks.HasValue ? (object)r.RuntimeTicks.Value : DBNull.Value;
+                dateCreated[i] = ToUtcDateTime(r.DateCreated);
+                dateModified[i] = ToUtcDateTime(r.DateModified);
+                prefLang[i] = r.PreferredMetadataLanguage;
+                prefCountry[i] = r.PreferredMetadataCountryCode;
+                dateLastRefreshed[i] = ToDbValue(r.DateLastRefreshed);
+                dateLastSaved[i] = ToDbValue(r.DateLastSaved);
+                isInMixedFolder[i] = r.IsInMixedFolder;
+                lockedFields[i] = r.LockedFields;
+                inheritedParentalRating[i] = r.InheritedParentalRatingValue.HasValue ? (object)r.InheritedParentalRatingValue.Value : DBNull.Value;
+                criticRating[i] = r.CriticRating.HasValue ? (object)r.CriticRating.Value : DBNull.Value;
+                presentationUniqueKey[i] = r.PresentationUniqueKey;
+                originalTitle[i] = r.OriginalTitle;
+                seriesName[i] = r.SeriesName;
+                seriesGuid[i] = r.SeriesGuid;
+                tagline[i] = r.Tagline;
+                providerIds[i] = r.ProviderIds;
+                images[i] = r.Images;
+                productionLocations[i] = r.ProductionLocations;
+                totalBitrate[i] = r.TotalBitrate.HasValue ? (object)r.TotalBitrate.Value : DBNull.Value;
+                extraType[i] = r.ExtraType.HasValue ? (object)r.ExtraType.Value : DBNull.Value;
+                seriesPresentationUniqueKey[i] = r.SeriesPresentationUniqueKey;
+                externalId[i] = r.ExternalId;
+                width[i] = r.Width.HasValue ? (object)r.Width.Value : DBNull.Value;
+                height[i] = r.Height.HasValue ? (object)r.Height.Value : DBNull.Value;
+                size[i] = r.Size.HasValue ? (object)r.Size.Value : DBNull.Value;
+                container[i] = r.Container;
+                userDataKeyId[i] = !string.IsNullOrWhiteSpace(r.UserDataKey) && userDataKeyIdMap.TryGetValue(r.UserDataKey, out var kid)
+                    ? (object)kid
+                    : DBNull.Value;
+                isFolder[i] = r.IsFolder;
+                isVirtualItem[i] = r.IsVirtualItem;
+                mediaType[i] = r.MediaType;
+                channelId[i] = r.ChannelId;
+                topParentId[i] = r.TopParentId;
+                cleanName[i] = r.CleanName;
+                album[i] = r.Album;
+                extraIds[i] = r.ExtraIds;
+                unratedType[i] = r.UnratedType;
+                trailerTypes[i] = r.TrailerTypes;
+                externalSeriesId[i] = r.ExternalSeriesId;
+                ownerId[i] = r.OwnerId;
+                dateLastMediaAdded[i] = ToDbValue(r.DateLastMediaAdded);
             }
 
-            string data = null;
-
-            if (TypeRequiresDeserialization(type))
-            {
-                data = _jsonSerializer.SerializeToString(item);
-            }
-
-            using (var cmd = new NpgsqlCommand(
-                @"INSERT INTO media_items
-                    (guid, type, type_name, data, parent_id, path, start_date, end_date,
-                     is_movie, is_series, is_repeat, community_rating, custom_rating,
-                     index_number, is_locked, name, official_rating, overview,
-                     parent_index_number, premiere_date, production_year, sort_name,
-                     runtime_ticks, date_created, date_modified, preferred_metadata_language,
-                     preferred_metadata_country_code, date_last_refreshed, date_last_saved,
-                     is_in_mixed_folder, locked_fields, inherited_parental_rating_value,
-                     critic_rating, presentation_unique_key, original_title, series_name,
-                     series_id, album_id, tagline, provider_ids, images, production_locations,
-                     total_bitrate, extra_type, series_presentation_unique_key, external_id,
-                     width, height, size, container, user_data_key_id,
-                     is_folder, is_virtual_item, media_type, channel_id, top_parent_id,
-                     clean_name, album, extra_ids, unrated_type, trailer_types,
-                     external_series_id, owner_id, date_last_media_added)
-                  VALUES
-                    (@guid, @type, @type_name, CAST(@data AS jsonb), @parent_id, @path, @start_date, @end_date,
-                     @is_movie, @is_series, @is_repeat, @community_rating, @custom_rating,
-                     @index_number, @is_locked, @name, @official_rating, @overview,
-                     @parent_index_number, @premiere_date, @production_year, @sort_name,
-                     @runtime_ticks, @date_created, @date_modified, @preferred_metadata_language,
-                     @preferred_metadata_country_code, @date_last_refreshed, @date_last_saved,
-                     @is_in_mixed_folder, @locked_fields, @inherited_parental_rating_value,
-                     @critic_rating, @presentation_unique_key, @original_title, @series_name,
-                     @series_id, @album_id, @tagline, CAST(@provider_ids AS jsonb), CAST(@images AS jsonb), CAST(@production_locations AS jsonb),
-                     @total_bitrate, @extra_type, @series_presentation_unique_key, @external_id,
-                     @width, @height, @size, @container, @user_data_key_id,
-                     @is_folder, @is_virtual_item, @media_type, @channel_id, @top_parent_id,
-                     @clean_name, @album, @extra_ids, @unrated_type, @trailer_types,
-                     @external_series_id, @owner_id, @date_last_media_added)
-                  ON CONFLICT (guid, type) DO UPDATE SET
-                    type_name = EXCLUDED.type_name,
-                    data = EXCLUDED.data,
-                    parent_id = EXCLUDED.parent_id,
-                    path = EXCLUDED.path,
-                    start_date = EXCLUDED.start_date,
-                    end_date = EXCLUDED.end_date,
-                    is_movie = EXCLUDED.is_movie,
-                    is_series = EXCLUDED.is_series,
-                    is_repeat = EXCLUDED.is_repeat,
-                    community_rating = EXCLUDED.community_rating,
-                    custom_rating = EXCLUDED.custom_rating,
-                    index_number = EXCLUDED.index_number,
-                    is_locked = EXCLUDED.is_locked,
-                    name = EXCLUDED.name,
-                    official_rating = EXCLUDED.official_rating,
-                    overview = EXCLUDED.overview,
+            // 单条语句：UNNEST 展开全部列 → INSERT ... SELECT → ON CONFLICT DO UPDATE，RETURNING id
+            var sql = @"
+                INSERT INTO media_items (" + MediaItemsBatchColumns + @")
+                SELECT
+                    u.guid, u.type, u.type_name, u.data, u.parent_id, u.path, u.start_date, u.end_date,
+                    u.is_movie, u.is_series, u.is_repeat, u.community_rating, u.custom_rating,
+                    u.index_number, u.is_locked, u.name, u.official_rating, u.overview,
+                    u.parent_index_number, u.premiere_date, u.production_year, u.sort_name,
+                    u.runtime_ticks, u.date_created, u.date_modified, u.preferred_metadata_language,
+                    u.preferred_metadata_country_code, u.date_last_refreshed, u.date_last_saved,
+                    u.is_in_mixed_folder, u.locked_fields, u.inherited_parental_rating_value,
+                    u.critic_rating, u.presentation_unique_key, u.original_title, u.series_name,
+                    u.series_id, u.album_id, u.tagline, u.provider_ids, u.images, u.production_locations,
+                    u.total_bitrate, u.extra_type, u.series_presentation_unique_key, u.external_id,
+                    u.width, u.height, u.size, u.container, u.user_data_key_id,
+                    u.is_folder, u.is_virtual_item, u.media_type, u.channel_id, u.top_parent_id,
+                    u.clean_name, u.album, u.extra_ids, u.unrated_type, u.trailer_types,
+                    u.external_series_id, u.owner_id, u.date_last_media_added
+                FROM UNNEST(
+                    @guid, @type, @type_name, @data, @parent_id, @path, @start_date, @end_date,
+                    @is_movie, @is_series, @is_repeat, @community_rating, @custom_rating,
+                    @index_number, @is_locked, @name, @official_rating, @overview,
+                    @parent_index_number, @premiere_date, @production_year, @sort_name,
+                    @runtime_ticks, @date_created, @date_modified, @preferred_metadata_language,
+                    @preferred_metadata_country_code, @date_last_refreshed, @date_last_saved,
+                    @is_in_mixed_folder, @locked_fields, @inherited_parental_rating_value,
+                    @critic_rating, @presentation_unique_key, @original_title, @series_name,
+                    @series_id, @album_id, @tagline, @provider_ids, @images, @production_locations,
+                    @total_bitrate, @extra_type, @series_presentation_unique_key, @external_id,
+                    @width, @height, @size, @container, @user_data_key_id,
+                    @is_folder, @is_virtual_item, @media_type, @channel_id, @top_parent_id,
+                    @clean_name, @album, @extra_ids, @unrated_type, @trailer_types,
+                    @external_series_id, @owner_id, @date_last_media_added
+                ) AS u(
+                    guid, type, type_name, data, parent_id, path, start_date, end_date,
+                    is_movie, is_series, is_repeat, community_rating, custom_rating,
+                    index_number, is_locked, name, official_rating, overview,
+                    parent_index_number, premiere_date, production_year, sort_name,
+                    runtime_ticks, date_created, date_modified, preferred_metadata_language,
+                    preferred_metadata_country_code, date_last_refreshed, date_last_saved,
+                    is_in_mixed_folder, locked_fields, inherited_parental_rating_value,
+                    critic_rating, presentation_unique_key, original_title, series_name,
+                    series_id, album_id, tagline, provider_ids, images, production_locations,
+                    total_bitrate, extra_type, series_presentation_unique_key, external_id,
+                    width, height, size, container, user_data_key_id,
+                    is_folder, is_virtual_item, media_type, channel_id, top_parent_id,
+                    clean_name, album, extra_ids, unrated_type, trailer_types,
+                    external_series_id, owner_id, date_last_media_added
+                )
+                ON CONFLICT (guid, type) DO UPDATE SET
+                    type_name = EXCLUDED.type_name, data = EXCLUDED.data,
+                    parent_id = EXCLUDED.parent_id, path = EXCLUDED.path,
+                    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+                    is_movie = EXCLUDED.is_movie, is_series = EXCLUDED.is_series,
+                    is_repeat = EXCLUDED.is_repeat, community_rating = EXCLUDED.community_rating,
+                    custom_rating = EXCLUDED.custom_rating, index_number = EXCLUDED.index_number,
+                    is_locked = EXCLUDED.is_locked, name = EXCLUDED.name,
+                    official_rating = EXCLUDED.official_rating, overview = EXCLUDED.overview,
                     parent_index_number = EXCLUDED.parent_index_number,
-                    premiere_date = EXCLUDED.premiere_date,
-                    production_year = EXCLUDED.production_year,
-                    sort_name = EXCLUDED.sort_name,
-                    runtime_ticks = EXCLUDED.runtime_ticks,
-                    date_created = EXCLUDED.date_created,
-                    date_modified = EXCLUDED.date_modified,
+                    premiere_date = EXCLUDED.premiere_date, production_year = EXCLUDED.production_year,
+                    sort_name = EXCLUDED.sort_name, runtime_ticks = EXCLUDED.runtime_ticks,
+                    date_created = EXCLUDED.date_created, date_modified = EXCLUDED.date_modified,
                     preferred_metadata_language = EXCLUDED.preferred_metadata_language,
                     preferred_metadata_country_code = EXCLUDED.preferred_metadata_country_code,
                     date_last_refreshed = EXCLUDED.date_last_refreshed,
@@ -469,329 +810,298 @@ namespace Emby.Server.PgData
                     inherited_parental_rating_value = EXCLUDED.inherited_parental_rating_value,
                     critic_rating = EXCLUDED.critic_rating,
                     presentation_unique_key = EXCLUDED.presentation_unique_key,
-                    original_title = EXCLUDED.original_title,
-                    series_name = EXCLUDED.series_name,
-                    series_id = EXCLUDED.series_id,
-                    album_id = EXCLUDED.album_id,
-                    tagline = EXCLUDED.tagline,
-                    provider_ids = EXCLUDED.provider_ids,
-                    images = EXCLUDED.images,
-                    production_locations = EXCLUDED.production_locations,
-                    total_bitrate = EXCLUDED.total_bitrate,
-                    extra_type = EXCLUDED.extra_type,
+                    original_title = EXCLUDED.original_title, series_name = EXCLUDED.series_name,
+                    series_id = EXCLUDED.series_id, album_id = EXCLUDED.album_id,
+                    tagline = EXCLUDED.tagline, provider_ids = EXCLUDED.provider_ids,
+                    images = EXCLUDED.images, production_locations = EXCLUDED.production_locations,
+                    total_bitrate = EXCLUDED.total_bitrate, extra_type = EXCLUDED.extra_type,
                     series_presentation_unique_key = EXCLUDED.series_presentation_unique_key,
-                    external_id = EXCLUDED.external_id,
-                    width = EXCLUDED.width,
-                    height = EXCLUDED.height,
-                    size = EXCLUDED.size,
-                    container = EXCLUDED.container,
-                    user_data_key_id = EXCLUDED.user_data_key_id,
-                    is_folder = EXCLUDED.is_folder,
-                    is_virtual_item = EXCLUDED.is_virtual_item,
-                    media_type = EXCLUDED.media_type,
-                    channel_id = EXCLUDED.channel_id,
-                    top_parent_id = EXCLUDED.top_parent_id,
-                    clean_name = EXCLUDED.clean_name,
-                    album = EXCLUDED.album,
-                    extra_ids = EXCLUDED.extra_ids,
-                    unrated_type = EXCLUDED.unrated_type,
+                    external_id = EXCLUDED.external_id, width = EXCLUDED.width,
+                    height = EXCLUDED.height, size = EXCLUDED.size, container = EXCLUDED.container,
+                    user_data_key_id = EXCLUDED.user_data_key_id, is_folder = EXCLUDED.is_folder,
+                    is_virtual_item = EXCLUDED.is_virtual_item, media_type = EXCLUDED.media_type,
+                    channel_id = EXCLUDED.channel_id, top_parent_id = EXCLUDED.top_parent_id,
+                    clean_name = EXCLUDED.clean_name, album = EXCLUDED.album,
+                    extra_ids = EXCLUDED.extra_ids, unrated_type = EXCLUDED.unrated_type,
                     trailer_types = EXCLUDED.trailer_types,
                     external_series_id = EXCLUDED.external_series_id,
                     owner_id = EXCLUDED.owner_id,
                     date_last_media_added = EXCLUDED.date_last_media_added
-                  RETURNING id",
-                connection, transaction))
+                RETURNING id";
+
+            await using var cmd = new NpgsqlCommand(sql, connection, transaction);
+            cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guid });
+            cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = type });
+            cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = typeName });
+            cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = data });
+            cmd.Parameters.Add(new NpgsqlParameter("parent_id", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = parentGuid });
+            cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = path });
+            cmd.Parameters.Add(new NpgsqlParameter("start_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = startDate });
+            cmd.Parameters.Add(new NpgsqlParameter("end_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = endDate });
+            cmd.Parameters.Add(new NpgsqlParameter("is_movie", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isMovie });
+            cmd.Parameters.Add(new NpgsqlParameter("is_series", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isSeries });
+            cmd.Parameters.Add(new NpgsqlParameter("is_repeat", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isRepeat });
+            cmd.Parameters.Add(new NpgsqlParameter("community_rating", NpgsqlDbType.Array | NpgsqlDbType.Double) { Value = communityRating });
+            cmd.Parameters.Add(new NpgsqlParameter("custom_rating", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = customRating });
+            cmd.Parameters.Add(new NpgsqlParameter("index_number", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = indexNumber });
+            cmd.Parameters.Add(new NpgsqlParameter("is_locked", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isLocked });
+            cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = name });
+            cmd.Parameters.Add(new NpgsqlParameter("official_rating", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = officialRating });
+            cmd.Parameters.Add(new NpgsqlParameter("overview", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = overview });
+            cmd.Parameters.Add(new NpgsqlParameter("parent_index_number", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = parentIndexNumber });
+            cmd.Parameters.Add(new NpgsqlParameter("premiere_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = premiereDate });
+            cmd.Parameters.Add(new NpgsqlParameter("production_year", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = productionYear });
+            cmd.Parameters.Add(new NpgsqlParameter("sort_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = sortName });
+            cmd.Parameters.Add(new NpgsqlParameter("runtime_ticks", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = runtimeTicks });
+            cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateCreated });
+            cmd.Parameters.Add(new NpgsqlParameter("date_modified", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateModified });
+            cmd.Parameters.Add(new NpgsqlParameter("preferred_metadata_language", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = prefLang });
+            cmd.Parameters.Add(new NpgsqlParameter("preferred_metadata_country_code", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = prefCountry });
+            cmd.Parameters.Add(new NpgsqlParameter("date_last_refreshed", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateLastRefreshed });
+            cmd.Parameters.Add(new NpgsqlParameter("date_last_saved", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateLastSaved });
+            cmd.Parameters.Add(new NpgsqlParameter("is_in_mixed_folder", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isInMixedFolder });
+            cmd.Parameters.Add(new NpgsqlParameter("locked_fields", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = lockedFields });
+            cmd.Parameters.Add(new NpgsqlParameter("inherited_parental_rating_value", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = inheritedParentalRating });
+            cmd.Parameters.Add(new NpgsqlParameter("critic_rating", NpgsqlDbType.Array | NpgsqlDbType.Double) { Value = criticRating });
+            cmd.Parameters.Add(new NpgsqlParameter("presentation_unique_key", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = presentationUniqueKey });
+            cmd.Parameters.Add(new NpgsqlParameter("original_title", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = originalTitle });
+            cmd.Parameters.Add(new NpgsqlParameter("series_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = seriesName });
+            // series_id / album_id 为 BIGINT 外键：本批次先写 NULL，由 BackfillReferencesAsync 统一解析回填
+            cmd.Parameters.Add(new NpgsqlParameter("series_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
             {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
-                cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Integer) { Value = typeCode });
-                cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Text) { Value = (object)type.FullName ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Text) { Value = (object)data ?? DBNull.Value });
+                Value = new long?[count]
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("album_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+            {
+                Value = new long?[count]
+            });
+            cmd.Parameters.Add(new NpgsqlParameter("tagline", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = tagline });
+            cmd.Parameters.Add(new NpgsqlParameter("provider_ids", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = providerIds });
+            cmd.Parameters.Add(new NpgsqlParameter("images", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = images });
+            cmd.Parameters.Add(new NpgsqlParameter("production_locations", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = productionLocations });
+            cmd.Parameters.Add(new NpgsqlParameter("total_bitrate", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = totalBitrate });
+            cmd.Parameters.Add(new NpgsqlParameter("extra_type", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = extraType });
+            cmd.Parameters.Add(new NpgsqlParameter("series_presentation_unique_key", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = seriesPresentationUniqueKey });
+            cmd.Parameters.Add(new NpgsqlParameter("external_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = externalId });
+            cmd.Parameters.Add(new NpgsqlParameter("width", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = width });
+            cmd.Parameters.Add(new NpgsqlParameter("height", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = height });
+            cmd.Parameters.Add(new NpgsqlParameter("size", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = size });
+            cmd.Parameters.Add(new NpgsqlParameter("container", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = container });
+            cmd.Parameters.Add(new NpgsqlParameter("user_data_key_id", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = userDataKeyId });
+            cmd.Parameters.Add(new NpgsqlParameter("is_folder", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isFolder });
+            cmd.Parameters.Add(new NpgsqlParameter("is_virtual_item", NpgsqlDbType.Array | NpgsqlDbType.Boolean) { Value = isVirtualItem });
+            cmd.Parameters.Add(new NpgsqlParameter("media_type", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = mediaType });
+            cmd.Parameters.Add(new NpgsqlParameter("channel_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = channelId });
+            cmd.Parameters.Add(new NpgsqlParameter("top_parent_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = topParentId });
+            cmd.Parameters.Add(new NpgsqlParameter("clean_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = cleanName });
+            cmd.Parameters.Add(new NpgsqlParameter("album", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = album });
+            cmd.Parameters.Add(new NpgsqlParameter("extra_ids", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = extraIds });
+            cmd.Parameters.Add(new NpgsqlParameter("unrated_type", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = unratedType });
+            cmd.Parameters.Add(new NpgsqlParameter("trailer_types", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = trailerTypes });
+            cmd.Parameters.Add(new NpgsqlParameter("external_series_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = externalSeriesId });
+            cmd.Parameters.Add(new NpgsqlParameter("owner_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = ownerId });
+            cmd.Parameters.Add(new NpgsqlParameter("date_last_media_added", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateLastMediaAdded });
 
-                cmd.Parameters.Add(new NpgsqlParameter("parent_id", NpgsqlDbType.Bigint)
+            var ids = new List<long>(count);
+            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+            {
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    Value = (object)GetInternalId(connection, transaction, item.ParentId) ?? DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Text) { Value = (object)GetPathToSave(item.Path) ?? DBNull.Value });
-
-                var hasStartDate = item as IHasStartDate;
-                cmd.Parameters.Add(new NpgsqlParameter("start_date", NpgsqlDbType.TimestampTz)
-                {
-                    Value = hasStartDate != null ? (object)ToUtcDateTime(hasStartDate.StartDate) : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("end_date", NpgsqlDbType.TimestampTz)
-                {
-                    Value = item.EndDate.HasValue ? (object)ToUtcDateTime(item.EndDate.Value) : DBNull.Value
-                });
-
-                var hasProgramAttributes = item as IHasProgramAttributes;
-                cmd.Parameters.Add(new NpgsqlParameter("is_movie", NpgsqlDbType.Boolean)
-                {
-                    Value = hasProgramAttributes != null ? (object)hasProgramAttributes.IsMovie : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("is_series", NpgsqlDbType.Boolean)
-                {
-                    Value = hasProgramAttributes != null ? (object)hasProgramAttributes.IsSeries : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("is_repeat", NpgsqlDbType.Boolean)
-                {
-                    Value = hasProgramAttributes != null ? (object)hasProgramAttributes.IsRepeat : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("community_rating", NpgsqlDbType.Double)
-                {
-                    Value = item.CommunityRating.HasValue ? (object)(double)item.CommunityRating.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("custom_rating", NpgsqlDbType.Text) { Value = (object)item.CustomRating ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("index_number", NpgsqlDbType.Integer)
-                {
-                    Value = item.IndexNumber.HasValue ? (object)item.IndexNumber.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("is_locked", NpgsqlDbType.Boolean) { Value = item.IsLocked });
-                cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = (object)item.Name ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("official_rating", NpgsqlDbType.Text) { Value = (object)item.OfficialRating ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("overview", NpgsqlDbType.Text) { Value = (object)item.Overview ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("parent_index_number", NpgsqlDbType.Integer)
-                {
-                    Value = item.ParentIndexNumber.HasValue ? (object)item.ParentIndexNumber.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("premiere_date", NpgsqlDbType.TimestampTz)
-                {
-                    Value = item.PremiereDate.HasValue ? (object)ToUtcDateTime(item.PremiereDate.Value) : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("production_year", NpgsqlDbType.Integer)
-                {
-                    Value = item.ProductionYear.HasValue ? (object)item.ProductionYear.Value : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("sort_name", NpgsqlDbType.Text) { Value = (object)item.SortName ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("runtime_ticks", NpgsqlDbType.Bigint)
-                {
-                    Value = item.RunTimeTicks.HasValue ? (object)item.RunTimeTicks.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("date_created", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(item.DateCreated) });
-                cmd.Parameters.Add(new NpgsqlParameter("date_modified", NpgsqlDbType.TimestampTz) { Value = ToUtcDateTime(item.DateModified) });
-                cmd.Parameters.Add(new NpgsqlParameter("preferred_metadata_language", NpgsqlDbType.Text)
-                {
-                    Value = (object)item.PreferredMetadataLanguage ?? DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("preferred_metadata_country_code", NpgsqlDbType.Text)
-                {
-                    Value = (object)item.PreferredMetadataCountryCode ?? DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("date_last_refreshed", NpgsqlDbType.TimestampTz)
-                {
-                    Value = item.DateLastRefreshed != default(DateTime) ? (object)ToUtcDateTime(item.DateLastRefreshed) : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("date_last_saved", NpgsqlDbType.TimestampTz)
-                {
-                    Value = item.DateLastSaved != default(DateTime) ? (object)ToUtcDateTime(item.DateLastSaved) : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("is_in_mixed_folder", NpgsqlDbType.Boolean) { Value = item.IsInMixedFolder });
-
-                cmd.Parameters.Add(new NpgsqlParameter("locked_fields", NpgsqlDbType.Text)
-                {
-                    Value = item.LockedFields != null && item.LockedFields.Length > 0
-                        ? (object)string.Join("|", item.LockedFields.Select(i => i.ToString()).ToArray())
-                        : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("inherited_parental_rating_value", NpgsqlDbType.Integer)
-                {
-                    Value = item.InheritedParentalRatingValue > 0 ? (object)item.InheritedParentalRatingValue : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("critic_rating", NpgsqlDbType.Double)
-                {
-                    Value = item.CriticRating.HasValue ? (object)(double)item.CriticRating.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("presentation_unique_key", NpgsqlDbType.Text)
-                {
-                    Value = (object)item.PresentationUniqueKey ?? DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("original_title", NpgsqlDbType.Text) { Value = (object)item.OriginalTitle ?? DBNull.Value });
-
-                var hasSeriesName = item as IHasSeriesName;
-                cmd.Parameters.Add(new NpgsqlParameter("series_name", NpgsqlDbType.Text)
-                {
-                    Value = hasSeriesName != null && !string.IsNullOrEmpty(hasSeriesName.SeriesName) ? (object)hasSeriesName.SeriesName : DBNull.Value
-                });
-
-                var hasSeries = item as IHasSeries;
-                cmd.Parameters.Add(new NpgsqlParameter("series_id", NpgsqlDbType.Bigint)
-                {
-                    Value = hasSeries != null ? (object)GetInternalId(connection, transaction, hasSeries.SeriesId) ?? DBNull.Value : DBNull.Value
-                });
-                // album_id：旧语义靠 Album 名称列（album TEXT 补充列）过滤；整数外键列留空
-                cmd.Parameters.Add(new NpgsqlParameter("album_id", NpgsqlDbType.Bigint) { Value = DBNull.Value });
-
-                cmd.Parameters.Add(new NpgsqlParameter("tagline", NpgsqlDbType.Text) { Value = (object)item.Tagline ?? DBNull.Value });
-
-                var providerIds = SerializeProviderIds(item);
-                cmd.Parameters.Add(new NpgsqlParameter("provider_ids", NpgsqlDbType.Text) { Value = (object)providerIds ?? DBNull.Value });
-                var images = SerializeImages(item);
-                cmd.Parameters.Add(new NpgsqlParameter("images", NpgsqlDbType.Text) { Value = (object)images ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("production_locations", NpgsqlDbType.Text)
-                {
-                    Value = item.ProductionLocations != null && item.ProductionLocations.Length > 0
-                        ? (object)_jsonSerializer.SerializeToString(item.ProductionLocations)
-                        : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("total_bitrate", NpgsqlDbType.Integer)
-                {
-                    Value = item.TotalBitrate.HasValue ? (object)item.TotalBitrate.Value : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("extra_type", NpgsqlDbType.Integer)
-                {
-                    Value = item.ExtraType.HasValue ? (object)(int)item.ExtraType.Value : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("series_presentation_unique_key", NpgsqlDbType.Text)
-                {
-                    Value = hasSeries != null && !string.IsNullOrEmpty(hasSeries.SeriesPresentationUniqueKey)
-                        ? (object)hasSeries.SeriesPresentationUniqueKey
-                        : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("external_id", NpgsqlDbType.Text) { Value = (object)item.ExternalId ?? DBNull.Value });
-
-                cmd.Parameters.Add(new NpgsqlParameter("width", NpgsqlDbType.Integer)
-                {
-                    Value = item.Width > 0 ? (object)item.Width : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("height", NpgsqlDbType.Integer)
-                {
-                    Value = item.Height > 0 ? (object)item.Height : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("size", NpgsqlDbType.Bigint)
-                {
-                    Value = item.Size.HasValue ? (object)item.Size.Value : DBNull.Value
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("container", NpgsqlDbType.Text) { Value = (object)item.Container ?? DBNull.Value });
-
-                cmd.Parameters.Add(new NpgsqlParameter("user_data_key_id", NpgsqlDbType.Integer)
-                {
-                    Value = (object)userDataKeyId ?? DBNull.Value
-                });
-
-                // ===== 查询引擎补充列（旧 TypedBaseItems 的过滤列） =====
-
-                cmd.Parameters.Add(new NpgsqlParameter("is_folder", NpgsqlDbType.Boolean) { Value = item.IsFolder });
-                cmd.Parameters.Add(new NpgsqlParameter("is_virtual_item", NpgsqlDbType.Boolean) { Value = item.IsVirtualItem });
-                cmd.Parameters.Add(new NpgsqlParameter("media_type", NpgsqlDbType.Text) { Value = (object)item.MediaType ?? DBNull.Value });
-                cmd.Parameters.Add(new NpgsqlParameter("channel_id", NpgsqlDbType.Text)
-                {
-                    Value = item.ChannelId.Equals(Guid.Empty) ? (object)DBNull.Value : item.ChannelId.ToString("N")
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("top_parent_id", NpgsqlDbType.Text)
-                {
-                    Value = topParent != null ? (object)topParent.Id.ToString("N") : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("clean_name", NpgsqlDbType.Text)
-                {
-                    Value = string.IsNullOrWhiteSpace(item.Name) ? (object)DBNull.Value : GetCleanValue(item.Name)
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("album", NpgsqlDbType.Text) { Value = (object)item.Album ?? DBNull.Value });
-
-                cmd.Parameters.Add(new NpgsqlParameter("extra_ids", NpgsqlDbType.Text)
-                {
-                    Value = item.ExtraIds != null && item.ExtraIds.Length > 0
-                        ? (object)string.Join("|", item.ExtraIds.Select(i => i.ToString()).ToArray())
-                        : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("unrated_type", NpgsqlDbType.Text)
-                {
-                    Value = (object)item.GetBlockUnratedType().ToString()
-                });
-
-                var trailer = item as Trailer;
-                cmd.Parameters.Add(new NpgsqlParameter("trailer_types", NpgsqlDbType.Text)
-                {
-                    Value = trailer != null && trailer.TrailerTypes != null && trailer.TrailerTypes.Length > 0
-                        ? (object)string.Join("|", trailer.TrailerTypes.Select(i => i.ToString()).ToArray())
-                        : DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("external_series_id", NpgsqlDbType.Text)
-                {
-                    Value = (object)item.ExternalSeriesId ?? DBNull.Value
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("owner_id", NpgsqlDbType.Text)
-                {
-                    Value = item.OwnerId.Equals(Guid.Empty) ? (object)DBNull.Value : item.OwnerId.ToString("N")
-                });
-
-                var folder = item as Folder;
-                cmd.Parameters.Add(new NpgsqlParameter("date_last_media_added", NpgsqlDbType.TimestampTz)
-                {
-                    Value = folder != null && folder.DateLastMediaAdded.HasValue
-                        ? (object)ToUtcDateTime(folder.DateLastMediaAdded.Value)
-                        : DBNull.Value
-                });
-
-                var id = Convert.ToInt64(cmd.ExecuteScalar());
-                _guidToIdMap[item.Id] = id;
+                    ids.Add(reader.GetInt64(0));
+                }
             }
+
+            // RETURNING 顺序不保证与输入一致 → 再按 guid 对齐
+            var map = new Dictionary<Guid, long>(ids.Count);
+            if (ids.Count == count)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    map[guid[i]] = ids[i];
+                }
+            }
+            else
+            {
+                await using var lookup = new NpgsqlCommand(
+                    "SELECT guid, id FROM media_items WHERE guid = ANY(@guids)",
+                    connection, transaction);
+                lookup.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guid });
+                await using var lr = await lookup.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                while (await lr.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    map[lr.GetGuid(0)] = lr.GetInt64(1);
+                }
+            }
+
+            var result = new long[count];
+            for (int i = 0; i < count; i++)
+            {
+                result[i] = map.TryGetValue(guid[i], out var v) ? v : 0L;
+            }
+
+            return result;
         }
 
         /// <summary>
-        /// 第二遍回填 parent_id/series_id（子查询解析，批量内拓扑顺序无关）。
+        /// 单条集合 UPDATE 回填 parent_id / series_id（子查询解析 GUID，块内拓扑顺序无关）。
         /// </summary>
-        private void UpdateItemReferences(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item)
+        private static Task BackfillReferencesAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            List<MediaItemBatchRow> rows,
+            CancellationToken cancellationToken)
         {
-            var hasSeries = item as IHasSeries;
+            var count = rows.Count;
+            var guids = rows.Select(r => r.Guid).ToArray();
+            var parentGuids = rows.Select(r => r.ParentGuid).ToArray();
+            var seriesGuids = rows.Select(r => r.SeriesGuid).ToArray();
 
-            using (var cmd = new NpgsqlCommand(
-                @"UPDATE media_items SET
-                    parent_id = (SELECT id FROM media_items WHERE guid = @parent_guid LIMIT 1),
-                    series_id = @series_id
-                  WHERE guid = @guid",
-                connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = item.Id });
-                cmd.Parameters.Add(new NpgsqlParameter("parent_guid", NpgsqlDbType.Uuid)
-                {
-                    Value = item.ParentId.Equals(Guid.Empty) ? (object)Guid.Empty : item.ParentId
-                });
-
-                cmd.Parameters.Add(new NpgsqlParameter("series_id", NpgsqlDbType.Bigint)
-                {
-                    Value = hasSeries != null
-                        ? (object)GetInternalId(connection, transaction, hasSeries.SeriesId) ?? DBNull.Value
-                        : DBNull.Value
-                });
-
-                cmd.ExecuteNonQuery();
-            }
+            return ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"UPDATE media_items m SET
+                      parent_id = CASE WHEN u.pg = '00000000-0000-0000-0000-000000000000'::uuid
+                                       THEN NULL
+                                       ELSE (SELECT p.id FROM media_items p WHERE p.guid = u.pg LIMIT 1) END,
+                      series_id = CASE WHEN u.sg = '00000000-0000-0000-0000-000000000000'::uuid
+                                       THEN NULL
+                                       ELSE (SELECT s.id FROM media_items s WHERE s.guid = u.sg LIMIT 1) END
+                  FROM UNNEST(@guids, @parent_guids, @series_guids) AS u(g, pg, sg)
+                  WHERE m.guid = u.g",
+                cancellationToken,
+                new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guids },
+                new NpgsqlParameter("parent_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = parentGuids },
+                new NpgsqlParameter("series_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = seriesGuids });
         }
 
         /// <summary>
-        /// userDataKey → user_data_keys.id（upsert）。
+        /// 祖先闭包表批量写入（单条 UNNEST：先按 item 集合删除，再集合插入）。
         /// </summary>
-        internal static int GetOrInsertUserDataKey(NpgsqlConnection connection, NpgsqlTransaction transaction, string key)
+        private static async Task WriteAncestorsBatchAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            List<(Guid Item, List<Guid> Ancestors)> ancestorRows,
+            CancellationToken cancellationToken)
         {
-            using (var cmd = new NpgsqlCommand(
-                @"INSERT INTO user_data_keys (user_data_key)
-                  VALUES (@user_data_key)
-                  ON CONFLICT (user_data_key) DO UPDATE SET user_data_key = EXCLUDED.user_data_key
-                  RETURNING id",
-                connection, transaction))
+            if (ancestorRows.Count == 0)
             {
-                cmd.Parameters.Add(new NpgsqlParameter("user_data_key", NpgsqlDbType.Text) { Value = key });
-                return Convert.ToInt32(cmd.ExecuteScalar());
+                return;
             }
+
+            var itemGuids = ancestorRows.Select(r => r.Item).ToArray();
+
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"DELETE FROM ancestor_ids a
+                  USING media_items m
+                  WHERE a.item_id = m.id AND m.guid = ANY(@item_guids)",
+                cancellationToken,
+                new NpgsqlParameter("item_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = itemGuids }).ConfigureAwait(false);
+
+            var childGuids = new List<Guid>();
+            var ancestorGuids = new List<Guid>();
+            foreach (var row in ancestorRows)
+            {
+                foreach (var anc in row.Ancestors)
+                {
+                    if (anc.Equals(Guid.Empty))
+                    {
+                        continue;
+                    }
+
+                    childGuids.Add(row.Item);
+                    ancestorGuids.Add(anc);
+                }
+            }
+
+            if (childGuids.Count == 0)
+            {
+                return;
+            }
+
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
+                  SELECT c.id, p.id, 0
+                  FROM UNNEST(@child_guids, @ancestor_guids) AS u(cg, ag)
+                  JOIN media_items c ON c.guid = u.cg
+                  JOIN media_items p ON p.guid = u.ag
+                  ON CONFLICT (item_id, ancestor_id) DO NOTHING",
+                cancellationToken,
+                new NpgsqlParameter("child_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = childGuids.ToArray() },
+                new NpgsqlParameter("ancestor_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ancestorGuids.ToArray() }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// extradata 批量写入（单条 UNNEST：先按 item 集合删除，再集合插入）。
+        /// </summary>
+        private static async Task WriteExtraDataBatchAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            List<(Guid Item, List<Tuple<int, string>> Values)> extraRows,
+            CancellationToken cancellationToken)
+        {
+            if (extraRows.Count == 0)
+            {
+                return;
+            }
+
+            var itemGuids = extraRows.Select(r => r.Item).ToArray();
+
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"DELETE FROM item_extradata e
+                  USING media_items m
+                  WHERE e.item_id = m.id AND m.guid = ANY(@item_guids)",
+                cancellationToken,
+                new NpgsqlParameter("item_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = itemGuids }).ConfigureAwait(false);
+
+            var childGuids = new List<Guid>();
+            var typeIds = new List<int>();
+            var values = new List<string>();
+            var cleanValues = new List<string>();
+
+            foreach (var row in extraRows)
+            {
+                foreach (var v in row.Values.Where(v => !string.IsNullOrWhiteSpace(v.Item2))
+                                            .OrderBy(v => v.Item1)
+                                            .ThenBy(v => v.Item2, StringComparer.Ordinal))
+                {
+                    childGuids.Add(row.Item);
+                    typeIds.Add(v.Item1);
+                    values.Add(v.Item2);
+                    cleanValues.Add(GetCleanValue(v.Item2));
+                }
+            }
+
+            if (childGuids.Count == 0)
+            {
+                return;
+            }
+
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"INSERT INTO item_extradata (item_id, extradata_type_id, value, clean_value)
+                  SELECT m.id, u.type_id, u.val, u.clean_val
+                  FROM UNNEST(@child_guids, @type_ids, @vals, @clean_vals) AS u(cg, type_id, val, clean_val)
+                  JOIN media_items m ON m.guid = u.cg
+                  ON CONFLICT (item_id, extradata_type_id, value) DO NOTHING",
+                cancellationToken,
+                new NpgsqlParameter("child_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = childGuids.ToArray() },
+                new NpgsqlParameter("type_ids", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = typeIds.ToArray() },
+                new NpgsqlParameter("vals", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = values.ToArray() },
+                new NpgsqlParameter("clean_vals", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = cleanValues.ToArray() }).ConfigureAwait(false);
         }
 
         /// <summary>
         /// 删除媒体项（旧 DeleteItem：显式删除 People/Chapters/MediaStreams/AncestorIds/ItemValues/TypedBaseItems）。
         /// 新 schema 无外键级联（非法单列外键已在 SQL 文件内移除，完整性由应用层维护），同样显式删除子行。
         /// </summary>
-        public void DeleteItem(Guid id, CancellationToken cancellationToken)
+        public Task DeleteItemAsync(Guid id, CancellationToken cancellationToken)
         {
             if (id.Equals(Guid.Empty))
             {
@@ -800,46 +1110,42 @@ namespace Emby.Server.PgData
 
             CheckDisposed();
 
-            RunInTransaction((connection, transaction) =>
+            return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                long? internalId = null;
+                var result = await ExecuteScalarAsync(
+                    connection,
+                    transaction,
+                    "SELECT id FROM media_items WHERE guid = @guid LIMIT 1",
+                    ct,
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id }).ConfigureAwait(false);
 
-                using (var cmd = new NpgsqlCommand("SELECT id FROM media_items WHERE guid = @guid LIMIT 1", connection, transaction))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id });
-                    var result = cmd.ExecuteScalar();
-                    if (result != null && result != DBNull.Value)
-                    {
-                        internalId = Convert.ToInt64(result);
-                    }
-                }
-
-                if (internalId == null)
+                if (result == null || result == DBNull.Value)
                 {
                     return;
                 }
 
-                var itemId = internalId.Value;
+                var itemId = Convert.ToInt64(result);
 
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM item_people WHERE item_id = @id", itemId);
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM chapters WHERE item_id = @id", itemId);
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM media_streams WHERE item_id = @id", itemId);
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM ancestor_ids WHERE item_id = @id", itemId);
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM item_extradata WHERE item_id = @id", itemId);
-                ExecuteWithSingleParam(connection, transaction, "DELETE FROM media_items WHERE id = @id", itemId);
+                // 子表清理（固定顺序，避免与其它事务交叉加锁）
+                foreach (var table in new[] { "item_people", "chapters", "media_streams", "ancestor_ids", "item_extradata" })
+                {
+                    await ExecuteNonQueryAsync(
+                        connection,
+                        transaction,
+                        "DELETE FROM " + table + " WHERE item_id = @id",
+                        ct,
+                        new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
+                }
 
-                long removed;
-                _guidToIdMap.TryRemove(id, out removed);
-            });
-        }
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    "DELETE FROM media_items WHERE id = @id",
+                    ct,
+                    new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
 
-        private static void ExecuteWithSingleParam(NpgsqlConnection connection, NpgsqlTransaction transaction, string query, long value)
-        {
-            using (var cmd = new NpgsqlCommand(query, connection, transaction))
-            {
-                cmd.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = value });
-                cmd.ExecuteNonQuery();
-            }
+                _guidToIdMap.TryRemove(id, out _);
+            }, cancellationToken);
         }
 
         // ===========================================================
@@ -849,34 +1155,29 @@ namespace Emby.Server.PgData
         /// <summary>
         /// 按 GUID 检索单个媒体项（旧 RetrieveItem）。
         /// </summary>
-        public BaseItem RetrieveItem(Guid id)
+        public async Task<BaseItem> RetrieveItemAsync(Guid id, CancellationToken cancellationToken = default)
         {
             if (id.Equals(Guid.Empty))
             {
-                throw new ArgumentNullException("id");
+                throw new ArgumentNullException(nameof(id));
             }
 
             CheckDisposed();
 
-            using (var connection = CreateConnection())
+            await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+            await using var cmd = new NpgsqlCommand(
+                BuildItemSelectText(null) + " FROM media_items A WHERE A.guid = @guid LIMIT 1",
+                connection);
+            cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id });
+
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                using (var cmd = new NpgsqlCommand(
-                    BuildItemSelectText(null) + " FROM media_items A WHERE A.guid = @guid LIMIT 1",
-                    connection))
-                {
-                    cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id });
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            return GetItem(reader, connection);
-                        }
-                    }
-                }
-
-                return null;
+                return GetItem(reader, connection);
             }
+
+            return null;
         }
 
         /// <summary>
