@@ -33,6 +33,19 @@ If you're a new user looking to install Emby Server, please head over to [emby.m
 [How to Build a Server Plugin](https://github.com/MediaBrowser/MediaBrowser/wiki/How-to-build-a-Server-Plugin "How to build a server plugin")
 
 
+## 前端（Web / Serata） ##
+
+Web 客户端在 [`web/`](web/README.md)，Vue 3 + Vite，独立于后端开发，通过 Emby 兼容的 REST API（默认 `/emby`）通信。
+
+```sh
+cd web && pnpm install && pnpm dev   # http://localhost:5173（默认走 MSW 假数据，demo/demo 即可登录）
+```
+
+设计契约与决策：[`web/src/styles/serata/README.md`](web/src/styles/serata/README.md)、
+[`docs/spec/web.md`](docs/spec/web.md)、[`docs/adr/`](docs/adr/)（0011–0013 为 Web 相关）。
+环境变量、目录结构、浏览器验收工具与已知坑见 [`web/README.md`](web/README.md)。
+
+
 ## Visit our community: ##
 
 http://emby.media/community
