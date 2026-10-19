@@ -9,7 +9,7 @@ import { ref, computed, onMounted, nextTick, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto, BaseItemPerson } from '@/api/types'
-import { getItem, getSeasons, getEpisodes, getSimilarItems, markPlayed, markFavorite, imageUrl, updateItem, uploadItemImage, deleteItemImage } from '@/api/endpoints'
+import { getItem, getSeasons, getEpisodes, getSimilarItems, markPlayed, markFavorite, imageUrl, backdropUrl, updateItem, uploadItemImage, deleteItemImage } from '@/api/endpoints'
 import { showToast } from '@/api/toast'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
@@ -99,9 +99,10 @@ onMounted(() => void load())
 const posterSrc = computed(() =>
   item.value ? imageUrl(item.value.Id, 'Primary', item.value.ImageTags?.Primary, { maxWidth: 375, maxHeight: 563, quality: 90 }) : '',
 )
-const backdropSrc = computed(() =>
-  item.value ? imageUrl(item.value.Id, 'Backdrop', item.value.BackdropImageTags?.[0], { maxWidth: 1600 }) : '',
-)
+// 背景大图不一定属于条目自己：剧集/季的 backdrop 挂在父级系列上
+// （真实 Emby：BackdropImageTags 为空数组，另有 ParentBackdropItemId/ParentBackdropImageTags）。
+// backdropUrl 内部已处理这条回退链，没有大图时返回空串。
+const backdropSrc = computed(() => backdropUrl(item.value, { maxWidth: 1600 }))
 
 /** 全局 backdrop 层(真实站详情页顶部暗背景由 body 级 backdropContainer 提供) */
 watchEffect(() => {
@@ -652,7 +653,9 @@ function libIcon(): string {
                         </div>
                       </div>
                       <div class="cardText text-align-start cardText-first cardText-first-padded">
-                        <button type="button" :title="ep.Name" class="cardMediaInfoItem itemAction textActionButton cardTextActionButton emby-button button-link">{{ ep.EpisodeNumber }}. {{ ep.Name ?? '' }}</button>
+                        <!-- 集号用真实字段 IndexNumber（EpisodeNumber 在真实 Emby 的 BaseItemDto 上不存在）；
+                             缺失时只显示标题，不要渲染出一个 "undefined. 第 13 集" -->
+                        <button type="button" :title="ep.Name" class="cardMediaInfoItem itemAction textActionButton cardTextActionButton emby-button button-link">{{ ep.IndexNumber != null ? `${ep.IndexNumber}. ` : '' }}{{ ep.Name ?? '' }}</button>
                       </div>
                       <div class="cardText cardText-secondary cardText text-align-start mediaInfoItems cardText-mediaInfo">
                         <div v-if="ep.PremiereDate" class="mediaInfoItem">{{ fmtDate(ep.PremiereDate) }}</div>

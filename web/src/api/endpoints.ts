@@ -198,6 +198,39 @@ export function imageUrl(
 export function userImageUrl(userId: string, tag?: string): string {
   return apiUrl(`/Users/${userId}/Images/Primary`, { tag })
 }
+
+/**
+ * 背景大图的真实归属。
+ *
+ * ⚠️ 真实 Emby 里**剧集/季往往没有自己的 backdrop**：`BackdropImageTags` 是空数组 `[]`，
+ * 大图挂在父级系列上，字段是 `ParentBackdropItemId` / `ParentBackdropImageTags`。
+ * 实测一台真实服务器的 `继续观看`：
+ *   `第 13 集` → `BackdropImageTags: []`、`ParentBackdropItemId: "1332203"`、
+ *                `ParentBackdropImageTags: ["46af0034…"]`
+ *   `情书`（Movie）→ `BackdropImageTags: ["68377be4…"]`（自己就有）
+ *
+ * 而 mock 给每个条目都塞了 `BackdropImageTags: [b-id]`，
+ * 所以「条目自己就有大图」这个假设在本地永远成立 —— 一接真机，首页 hero 抽到剧集就没有背景了。
+ *
+ * 返回 `null` 表示真的没有大图，调用方走品牌渐变兜底。
+ */
+export function backdropOf(item: BaseItemDto | null | undefined): { id: string; tag?: string } | null {
+  if (!item) return null
+  const own = item.BackdropImageTags?.[0] ?? item.ImageTags?.Backdrop
+  if (own) return { id: item.Id, tag: own }
+  const parentTag = item.ParentBackdropImageTags?.[0]
+  if (parentTag && item.ParentBackdropItemId) return { id: item.ParentBackdropItemId, tag: parentTag }
+  return null
+}
+
+/** 背景大图 URL；没有大图时返回空串（调用方据此走渐变兜底，不要请求一个必然 404 的地址） */
+export function backdropUrl(
+  item: BaseItemDto | null | undefined,
+  opts: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+): string {
+  const b = backdropOf(item)
+  return b ? imageUrl(b.id, 'Backdrop', b.tag, opts) : ''
+}
 // ---------- 管理后台(SPEC/api 管理面) ----------
 
 export interface AdminTask {

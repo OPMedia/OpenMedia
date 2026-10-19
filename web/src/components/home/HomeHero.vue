@@ -20,7 +20,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { imageUrl } from '@/api/endpoints'
+import { backdropOf, backdropUrl, imageUrl } from '@/api/endpoints'
 import { useTheme } from '@/composables/useTheme'
 import markWhite from '@/assets/brand/mark-white.svg'
 import { useReducedMotionSafe } from '@/lib/motion'
@@ -63,9 +63,9 @@ const IMAGE_TYPE: Record<Exclude<ShotKind, 'brand'>, string> = {
 
 /** 该条目是否真的有这类图（tags 为准；tags 撒谎时还有 @error 兜底） */
 function hasImage(item: BaseItemDto, type: 'Primary' | 'Logo' | 'Thumb' | 'Backdrop'): boolean {
-  if (type === 'Backdrop') {
-    return (item.BackdropImageTags?.length ?? 0) > 0 || !!item.ImageTags?.Backdrop
-  }
+  // 剧集/季自己通常没有 backdrop（`BackdropImageTags: []`），大图在父级系列上。
+  // 必须走 backdropOf 才判断得对，见 endpoints.ts 里的说明。
+  if (type === 'Backdrop') return !!backdropOf(item)
   return !!item.ImageTags?.[type]
 }
 
@@ -81,12 +81,16 @@ function imageKindChain(item: BaseItemDto): ShotKind[] {
 
 function shotOf(item: BaseItemDto, kind: ShotKind): Shot {
   if (kind === 'brand') return { itemId: item.Id, kind, src: '' }
+  // backdrop 的 itemId 不一定是条目自己的 Id —— 剧集的大图挂在父级系列上，
+  // 所以这里整条 URL 交给 backdropUrl 生成，不能用 item.Id 拼。
+  if (kind === 'backdrop') {
+    const src = backdropUrl(item, { maxWidth: 1280, quality: 90 })
+    return { itemId: item.Id, kind, src }
+  }
   const type = IMAGE_TYPE[kind]
-  const tag = kind === 'backdrop'
-    ? item.BackdropImageTags?.[0] ?? item.ImageTags?.Backdrop
-    : item.ImageTags?.[type]
-  // 背景图走 1280 宽，竖版海报走 720，避免首屏拖大图
-  const src = imageUrl(item.Id, type, tag, { maxWidth: kind === 'backdrop' ? 1280 : 720, quality: 90 })
+  const tag = item.ImageTags?.[type]
+  // 竖版海报走 720，避免首屏拖大图
+  const src = imageUrl(item.Id, type, tag, { maxWidth: 720, quality: 90 })
   return { itemId: item.Id, kind, src }
 }
 
@@ -114,10 +118,38 @@ const metaLine = computed(() => {
   if (!item) return ''
   const labelKey = TYPE_LABEL_KEY[item.Type]
   const parts: string[] = [labelKey ? t(labelKey) : item.Type]
-  if (item.ProductionYear) parts.push(String(item.ProductionYear))
+  // 剧集补上「剧名 · S4:E13」的定位信息。
+  // 真实数据里 hero 抽到剧集时，标题可能就是「第 13 集」这种没有剧名上下文的名字，
+  // 眉标原来也只有「分集 · 2016 · 24 分钟」——完全认不出是哪部剧。
+  if (item.Type === 'Episode') {
+    const code = episodeCode(item)
+    if (item.SeriesName) parts.push(code ? `${item.SeriesName} ${code}` : item.SeriesName)
+  }
+  // 脏数据兜底：真实站有 ProductionYear=1（见 EmbyCard 同名处理）
+  if (item.ProductionYear && item.ProductionYear >= 1900) parts.push(String(item.ProductionYear))
   if (item.RunTimeTicks) parts.push(t('item.runtime', { minutes: Math.round(item.RunTimeTicks / TICKS_PER_MINUTE) }))
   if (item.OfficialRating) parts.push(item.OfficialRating)
   return parts.join(' · ')
+})
+
+/** `S4:E13`；季/集号缺任一就返回空串，绝不拼出 undefined（真实字段是 ParentIndexNumber/IndexNumber） */
+function episodeCode(item: BaseItemDto): string {
+  const s = item.ParentIndexNumber
+  const e = item.IndexNumber
+  return s != null && e != null ? `S${s}:E${String(e).padStart(2, '0')}` : ''
+}
+
+/**
+ * hero 大标题。
+ * 剧集优先显示**剧名**：流媒体首页的 hero 位是「这部作品」的门面，
+ * 显示「第 13 集」等于没有信息（而且真实站里确实有剧集的名字就叫「第 13 集」）。
+ * 拿不到 SeriesName 时退回条目自己的名字。
+ */
+const heroTitle = computed(() => {
+  const item = current.value
+  if (!item) return ''
+  if (item.Type === 'Episode' && item.SeriesName) return item.SeriesName
+  return item.Name ?? ''
 })
 
 const logoUrl = computed(() => {
@@ -262,14 +294,14 @@ const peekSrc = computed(() => {
   if (total < 2 || isPortrait.value) return ''
   const next = props.items[(active.value + 1) % total]
   if (!next || !hasImage(next, 'Backdrop')) return ''
-  return imageUrl(next.Id, 'Backdrop', next.BackdropImageTags?.[0], { maxWidth: 640, quality: 80 })
+  return backdropUrl(next, { maxWidth: 640, quality: 80 })
 })
 
 // 环境光晕：当前条目的极小图（32px，几百字节）+ 暮紫铺底
 const glowUrl = computed(() => {
   const item = current.value
   if (!item || !hasImage(item, 'Backdrop')) return ''
-  return imageUrl(item.Id, 'Backdrop', item.BackdropImageTags?.[0], { maxWidth: 32 })
+  return backdropUrl(item, { maxWidth: 32 })
 })
 
 // ---------------------------------------------------------------- 轮转 / 暂停
@@ -534,9 +566,10 @@ onBeforeUnmount(() => {
               <p class="hero-eyebrow" :style="{ '--s-i': 0 }">{{ metaLine }}</p>
 
               <h1 class="hero-title" :style="{ '--s-i': 1 }">
-                <button type="button" class="hero-title-btn" :title="current.Name" @click="openItem">
-                  <img v-if="logoUrl" class="hero-logo" :src="logoUrl" :alt="current.Name" draggable="false" />
-                  <span v-else class="hero-title-text">{{ current.Name }}</span>
+                <!-- title/alt 用 heroTitle（剧集显示剧名），见脚本里的说明 -->
+                <button type="button" class="hero-title-btn" :title="heroTitle" @click="openItem">
+                  <img v-if="logoUrl" class="hero-logo" :src="logoUrl" :alt="heroTitle" draggable="false" />
+                  <span v-else class="hero-title-text">{{ heroTitle }}</span>
                 </button>
               </h1>
 

@@ -156,6 +156,11 @@ html.theme-dark {
   --s-scrim-soft: rgba(6, 7, 14, 0.4);
   /* 模态遮罩（弹层/抽屉背后的压暗层）：两种主题都必须"压暗"，不能像 --s-scrim 那样在浅色下变成提亮 */
   --s-scrim-modal: rgba(6, 7, 14, 0.6);
+  /* 卡片角标（未看集数）：它永远压在**海报/剧照**上，不压主题底色，
+     所以两种主题必须取同一个值，不能跟着主题翻转 —— 故这里与浅色块的值逐字相同。 */
+  --s-badge-bg: rgba(10, 12, 24, 0.62);
+  --s-badge-ink: #fff8f1;
+  --s-badge-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   --s-shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.55);
   --s-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
   --s-glow: radial-gradient(60% 55% at 70% 40%, rgba(122, 74, 135, 0.18) 0%, rgba(10, 12, 24, 0) 70%);
@@ -205,6 +210,10 @@ html.theme-light {
   --s-scrim: rgba(247, 245, 242, 0.78);
   --s-scrim-soft: rgba(247, 245, 242, 0.45);
   --s-scrim-modal: rgba(23, 26, 46, 0.32);
+  /* 角标压在美术图上而非主题底色上 → 与深色块取同值（见深色块注释），不随主题翻转 */
+  --s-badge-bg: rgba(10, 12, 24, 0.62);
+  --s-badge-ink: #fff8f1;
+  --s-badge-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   --s-shadow-sheet: 0 24px 64px rgba(23, 26, 46, 0.18);
   --s-shadow-card: 0 8px 24px rgba(23, 26, 46, 0.1);
   --s-glow: radial-gradient(60% 55% at 70% 40%, rgba(122, 74, 135, 0.12) 0%, rgba(247, 245, 242, 0) 70%);

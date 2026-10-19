@@ -394,7 +394,12 @@ for (const s of seriesSeeds) {
       items.push({
         Name: e.title, Id: e.id, Type: 'Episode', ParentId: season.id, LocationType: 'FileSystem',
         SeriesId: s.id, SeriesName: s.title, SeasonId: season.id,
-        SeasonName: season.name, SeasonNumber: season.number, EpisodeNumber: i + 1,
+        // 季/集号必须用真实 API 的字段名：ParentIndexNumber / IndexNumber。
+        // 原来这里造的是 SeasonNumber / EpisodeNumber —— 真实 Emby 4.9.5 从不返回这两个字段
+        // （实测 0 次），于是 mock 与真机是两套契约，组件按 mock 写就必然在真机上崩。
+        SeasonName: season.name,
+        ParentIndexNumber: season.number,
+        IndexNumber: i + 1,
         SortName: `S${season.number}E${String(i + 1).padStart(2, '0')}`,
         Overview: e.overview, ProductionYear: s.year,
         PremiereDate: `${s.year}-0${((i % 9) + 1)}-0${((i % 9) + 1)}T00:00:00Z`,

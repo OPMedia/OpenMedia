@@ -160,7 +160,11 @@ const rows = computed<HomeRow[]>(() => {
     } else if (slot === 'latest') {
       for (const { lib, items } of latestRows.value) {
         if (!items.length) continue
-        out.push({ key: `latest-${lib.Id}`, title: t('home.latestPrefix') + lib.Name, shape: 'portrait', size: 'md', items, libId: lib.Id })
+        // 原来是 t('home.latestPrefix') + lib.Name，即「最新」+ 库名直接拼接 →
+        // 「最新2026十月番」「最新国产剧」。真实服务器有 22 个库，这一串读起来是病句，
+        // 而且「最新2026十月番」会把年份粘在中文里造成歧义。
+        // 库名才是行的主语，「最新」是限定语 → 后置，用 · 分隔：「2026十月番 · 最新」。
+        out.push({ key: `latest-${lib.Id}`, title: `${lib.Name} · ${t('home.latestPrefix').trim()}`, shape: 'portrait', size: 'md', items, libId: lib.Id })
       }
     } else if (slot === 'mymedia' || slot === 'mymediasmall') {
       if (views.value.length) {

@@ -26,6 +26,14 @@ const HERO_FIELDS = [
   'RunTimeTicks',
   'ImageTags',
   'BackdropImageTags',
+  // 剧集/季自己不带 backdrop（BackdropImageTags 为空数组），大图在父级系列上。
+  // 不显式要这两个字段，hero 抽到剧集时就没有背景图。
+  'ParentBackdropItemId',
+  'ParentBackdropImageTags',
+  // 剧集显示剧名 + S/E 定位要用
+  'SeriesName',
+  'ParentIndexNumber',
+  'IndexNumber',
   'PrimaryImageAspectRatio',
   'DateCreated',
 ].join(',')

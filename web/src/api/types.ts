@@ -92,8 +92,20 @@ export interface BaseItemDto {
   SeriesName?: string
   SeasonId?: string
   SeasonName?: string
-  SeasonNumber?: number
-  EpisodeNumber?: number
+  /**
+   * 季号 / 集号。
+   *
+   * ⚠️ 真实 Emby 4.9.5 的 `BaseItemDto` 用的是 `ParentIndexNumber` / `IndexNumber`，
+   * **不是** `SeasonNumber` / `EpisodeNumber`。对一台真实服务器全量扫描返回 JSON 的结果：
+   * `IndexNumber` 2 次、`ParentIndexNumber` 2 次、`SeasonNumber` **0 次**、`EpisodeNumber` **0 次**
+   * （实证某集：`IndexNumber=51` / `ParentIndexNumber=1`）。
+   *
+   * 这里原先声明的是 SeasonNumber/EpisodeNumber —— 那是照着 mock 抄的，而 mock 恰好也在造这两个字段，
+   * 于是本地永远自洽，一接真实服务器就渲染出字面的 `Sundefined:Eundefined`。
+   * mock 已同步改为真实字段名（见 `mocks/db.ts`），不再有第二套契约。
+   */
+  ParentIndexNumber?: number
+  IndexNumber?: number
   SortName?: string
   Overview?: string
   Genres?: string[]
@@ -118,6 +130,15 @@ export interface BaseItemDto {
   /** 首图宽高比(PrimaryImageAspectRatio Fields) */
   PrimaryImageAspectRatio?: number
   BackdropImageTags?: string[]
+  /**
+   * 父级背景大图（剧集/季自己没有 backdrop 时用）。
+   *
+   * 真实 Emby 4.9.5 的剧集返回 `BackdropImageTags: []`，
+   * 大图在系列上：`ParentBackdropItemId` + `ParentBackdropImageTags`。
+   * 取值请统一走 `endpoints.ts` 的 `backdropOf()` / `backdropUrl()`，不要直接读这里。
+   */
+  ParentBackdropItemId?: string
+  ParentBackdropImageTags?: string[]
   MediaSources?: MediaSourceInfo[]
   /** 版本数(真实站 MediaSourceCount) */
   MediaSourceCount?: number

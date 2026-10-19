@@ -589,7 +589,19 @@ onBeforeUnmount(() => {
   <template v-else>
     <!-- body 级背景层（详情页会把 backdrop 图写到这里，z-index:-1，保留不动） -->
     <div class="backdropContainer"></div>
-    <div class="backgroundContainer" :class="{ 'backgroundContainer-withdockeddrawer': isDocked }"></div>
+    <!-- 背景大图为什么以前看不见：
+         `.backdropContainer` 是 `z-index:-1`，而 `.backgroundContainer` 吃的是
+         `html,.backgroundContainer{background-color:hsl(var(--background-*))}` 这条**不透明**底色，
+         于是背景图被整片盖死。原版 Emby 的开关是 `.backgroundContainer.withBackdrop`
+         （浅色 rgba(255,255,255,.8) / 深色 rgba(0,0,0,.8)）—— 规则一直在 CSS 里，
+         只是我们的壳子从来没加过这个类。
+         `s-backdrop-dark` 再补一刀：详情页根节点是 `darkContentContainer-item`（白字），
+         浅色主题那条 80% 白色 scrim 会让白字继续白压白，所以这两页在**两种主题下都必须暗**。
+         注：这不是自创配色，是把原版「详情页 = 白字压暗色 fanart」的设计意图恢复回来。 -->
+    <div
+      class="backgroundContainer"
+      :class="{ 'backgroundContainer-withdockeddrawer': isDocked, withBackdrop: isItem, 's-backdrop-dark': isItem }"
+    ></div>
 
     <!-- 覆盖式抽屉遮罩（docked 语境在 ≥60em 由 CSS 隐藏）；
          进出场走 motion.css 的 s-scrim 类族（进场 --s-dur-base，退场 --s-dur-exit 更快） -->

@@ -44,7 +44,14 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="backgroundContainer backgroundContainer-withBackdrop"></div>
+  <!-- 原来这里是 class="backgroundContainer backgroundContainer-withBackdrop"，
+       但原版 CSS 的规则是 `.backgroundContainer.withBackdrop`（**两个类**，点号写法），
+       连字符写法匹配不到任何规则 → 这个类从来没生效过。
+       而且本页也从未往 body 级 .backdropContainer 写过背景图，所以即使改成正确类名，
+       得到的也只是「80% 白 scrim 压在空图上」，没有意义。
+       故这里只留真正的 .backgroundContainer（与 App.vue 的壳保持一致）；
+       「登录页显示随机 fanart 背景」作为独立需求另做，不要靠一个错的类名假装已实现。 -->
+  <div class="backgroundContainer"></div>
   <header class="skinHeader focuscontainer-x focuscontainer-up headroom flex align-items-center flex-grow headerTop">
     <div class="headerLeft headerSection focuscontainer-x navout-x">
       <button type="button" is="paper-icon-button-light" class="headerBackButton headerButton headerSectionItem paper-icon-button-light emby-button-focusscale" @click="router.back()">

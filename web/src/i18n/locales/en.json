@@ -175,7 +175,8 @@
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
     "more": "More",
-    "multiSelect": "Select"
+    "multiSelect": "Select",
+    "unwatchedEpisodes": "{n} episodes unwatched"
   },
   "menu": {
     "addToPlaylist": "Add to playlist",

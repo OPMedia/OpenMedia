@@ -10,7 +10,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { getItem, imageUrl } from '@/api/endpoints'
+import { getItem, backdropUrl } from '@/api/endpoints'
 import type { BaseItemDto } from '@/api/types'
 
 const auth = useAuthStore()
@@ -19,6 +19,8 @@ const router = useRouter()
 const { t } = useI18n()
 
 const item = ref<BaseItemDto | null>(null)
+/** 画面占位用的 backdrop 静帧（已处理"剧集的大图在父级系列上"这条回退链） */
+const osdBackdrop = computed(() => backdropUrl(item.value, { maxWidth: 1600, quality: 80 }))
 const playing = ref(true)
 const positionSec = ref(0)
 const durationSec = ref(0)
@@ -97,10 +99,11 @@ onUnmounted(() => {
     <div class="videoOsdBottom flex">
       <div class="videoOsdBottom-maincontrols focuscontainer-down">
         <div class="osdPosterContainer flex flex-direction-column">
-          <!-- 视频画面占位(真实站=video 元素;零播放语境用条目 backdrop 静帧) -->
+          <!-- 视频画面占位(真实站=video 元素;零播放语境用条目 backdrop 静帧)。
+               backdrop 可能挂在父级系列上(剧集自己通常是空数组)，统一走 backdropUrl。 -->
           <img
-            v-if="item?.Id && item.BackdropImageTags?.length" class="osdVideoPlaceholder" alt=""
-            :src="imageUrl(item.Id, 'Backdrop', item.BackdropImageTags[0], { maxWidth: 1600, quality: 80 })"
+            v-if="item?.Id && osdBackdrop" class="osdVideoPlaceholder" alt=""
+            :src="osdBackdrop"
           />
         </div>
 

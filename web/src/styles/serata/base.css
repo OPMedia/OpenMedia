@@ -159,3 +159,30 @@ main.s-home::-webkit-scrollbar-track {
     animation: none;
   }
 }
+
+/* ---------- 背景大图层的可读性修复 ----------
+ *
+ * 问题（真实 Emby 数据下才暴露）：详情页整页只有背景大图是"暗色语境"，
+ * 而它的文字是原版 `darkContentContainer-item` 定死的白色
+ * （`--theme-text-color-lightness:100%`，且该规则在 @media (min-width:50em) 内 → 桌面端专属）。
+ * 实测浅色主题下正文是 `rgb(255,255,255)` 压在 `rgb(247,245,242)` 上，
+ * 对比度 **1.09:1** —— 标题、简介、演职人员几乎完全不可读。
+ *
+ * 根因不是文字颜色，而是**背景图没显示**：
+ * `.backdropContainer` 是 `z-index:-1`，被 `.backgroundContainer` 的不透明底色盖住。
+ * App.vue 现在给详情页加上原版的 `.withBackdrop` 开关让图透出来；
+ * 下面这一条再把 scrim 固定成暗色 —— 因为 Emby 浅色主题的 `.withBackdrop` 是
+ * `rgba(255,255,255,.8)`（白色），白字压上去依然是白压白。
+ *
+ * 渐变而非纯色：顶部留一点 fanart 的颜色，向下收敛到接近全暗，
+ * 保证**任意亮度**的海报上白字都够读（最低档 .78 在纯白底上仍有 5.4:1）。
+ * 只作用于详情页（`s-backdrop-dark` 只由 App.vue 的 isItem 分支挂上），
+ * 不碰其它任何页面的背景。 */
+.backgroundContainer.withBackdrop.s-backdrop-dark {
+  background: linear-gradient(
+    180deg,
+    rgba(6, 7, 14, 0.78) 0%,
+    rgba(6, 7, 14, 0.86) 55%,
+    rgba(6, 7, 14, 0.94) 100%
+  ) !important;
+}

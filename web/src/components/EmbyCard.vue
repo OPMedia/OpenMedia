@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth'
 import ItemMenuSheet from '@/components/ItemMenuSheet.vue'
 import { showToast } from '@/api/toast'
 import { isMultiSelected, multiSelectActive, toggleMultiSelected } from '@/stores/multiselect'
+import markWhite from '@/assets/brand/mark-white.svg'
 
 const props = withDefaults(defineProps<{ item: BaseItemDto; shape?: 'portrait' | 'backdrop' | 'portrait-horiz' }>(), { shape: 'portrait' })
 const router = useRouter()
@@ -46,9 +47,25 @@ const imgSrc = computed(() => {
  */
 const imgLoaded = ref(false)
 const imgEl = ref<HTMLImageElement | null>(null)
+/**
+ * 加载失败标记。
+ *
+ * 原来 `@error` 里写的是 `imgLoaded = true` —— 这会把那张图**显示出来**，
+ * 浏览器于是就地画一个「碎图」图标，看起来像页面坏了。
+ * 真实服务器上确实有缺海报的条目（22 个库里实测有），所以这条路径必须好看：
+ * 失败时让 img 保持不可见，露出下面的品牌渐变兜底层。
+ */
+const imgFailed = ref(false)
+function onImgError() {
+  imgFailed.value = true
+}
 onMounted(() => {
   // 命中缓存时 load 可能早于监听触发，补一次判定，避免卡片永久停在模糊态
-  if (imgEl.value?.complete) imgLoaded.value = true
+  if (imgEl.value?.complete) {
+    // complete 但自然宽为 0 = 解码失败（这种情况下浏览器不会补发 error 事件）
+    if (imgEl.value.naturalWidth > 0) imgLoaded.value = true
+    else imgFailed.value = true
+  }
 })
 
 const progressPct = computed(() => {
@@ -57,10 +74,40 @@ const progressPct = computed(() => {
   return Math.min(100, (ud.PlaybackPositionTicks / props.item.RunTimeTicks) * 100)
 })
 const count = computed(() => props.item.UserData?.UnplayedItemCount)
+/**
+ * 制作年份：真实 Emby 里存在 `ProductionYear: 1` 这类脏数据
+ * （实测「绝代风华苏东坡」「宝宝巴士之神奇简笔画」都是 1），
+ * 直接渲染会在卡片副标题上留一个孤零零的「1」，看着像渲染坏了。1900 以前一律视为无效。
+ */
+const year = computed(() => {
+  const y = props.item.ProductionYear
+  return typeof y === 'number' && y >= 1900 ? y : null
+})
+/**
+ * 副标题。
+ *
+ * 剧集分支原先读 `SeasonNumber` / `EpisodeNumber` —— **`BaseItemDto` 上根本没有这两个字段**。
+ * 真实 Emby 返回的是 `ParentIndexNumber` / `IndexNumber`（实测：药屋少女的呢喃那集就是
+ * `IndexNumber=51` / `ParentIndexNumber=1`，而 SeasonNumber / EpisodeNumber 全是 undefined）。
+ * mock 数据恰好把这两个字段名喂成了合法值，于是这个字段名错误在本地永远测不出来，
+ * 一接真实服务器就渲染出字面的 `Sundefined:Eundefined - 如果没有面包`。
+ *
+ * 现在按真实字段名取，并且**任一缺失就不拼 S/E 前缀**——绝不让 undefined 落到 UI。
+ * 剧集优先「剧名 · S1:E51」：继续观看里原来只有「第 13 集」，完全没有剧名上下文，认不出是哪部剧。
+ */
 const subtitle = computed(() => {
   const i = props.item
-  if (i.Type === 'Episode') return `S${i.SeasonNumber}:E${i.EpisodeNumber} - ${i.Name}`
-  return i.ProductionYear ? String(i.ProductionYear) : ''
+  if (i.Type === 'Episode') {
+    const s = i.ParentIndexNumber
+    const e = i.IndexNumber
+    const ep = s != null && e != null ? `S${s}:E${String(e).padStart(2, '0')}` : null
+    const series = i.SeriesName
+    if (series && ep) return `${series} · ${ep}`
+    if (series) return series
+    if (ep) return ep
+    return year.value ? String(year.value) : ''
+  }
+  return year.value ? String(year.value) : ''
 })
 const isLibrary = computed(() => props.item.Type === 'CollectionFolder')
 
@@ -185,13 +232,23 @@ function onTouchEnd() {
       <button type="button" data-action="link" tabindex="-1"
               class="itemAction cardContent-button cardContent cardImageContainer cardContent-background cardContent-bxsborder-fv coveredImage coveredImage-noScale"
               :class="padderCls" @click="open">
-        <img ref="imgEl" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale s-img s-card-img" :class="{ 'is-loaded': imgLoaded }" :src="imgSrc" loading="lazy" decoding="async" @load="imgLoaded = true" @error="imgLoaded = true" />
+        <img ref="imgEl" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale s-img s-card-img" :class="{ 'is-loaded': imgLoaded, 'is-failed': imgFailed }" :src="imgSrc" loading="lazy" decoding="async" @load="imgLoaded = true" @error="onImgError" />
+        <!-- 缺图兜底：品牌渐变 + 居中水印。盖在 .s-img 的占位底色之上、交互层之下。
+             有图时完全不存在（v-if），所以正常卡片零开销、零视觉变化。 -->
+        <div v-if="imgFailed" class="s-card-fallback" aria-hidden="true">
+          <img class="s-card-fallback-mark" :src="markWhite" alt="" draggable="false" />
+        </div>
         <div v-if="progressPct > 0" class="innerCardFooter">
           <div class="itemProgressBar cardProgressBarContainer">
             <div class="itemProgressBarForeground" :style="{ width: progressPct + '%' }"></div>
           </div>
         </div>
-        <div v-if="count" class="cardIndicator cardCountIndicator CountIndicator countIndicator">{{ count }}</div>
+        <!-- 未看集数角标：裸数字本身没有语义（真实数据里会出现 201 / 196 / 163 这种三位数），
+             补 role="img" + aria-label 说明它是什么，否则读屏只会念出一个孤零零的数字。
+             配色改走中性玻璃令牌（见下方 .s-count-badge），不再吃主题 accent。 -->
+        <div v-if="count" class="cardIndicator cardCountIndicator CountIndicator countIndicator s-count-badge"
+             role="img" :title="t('card.unwatchedEpisodes', { n: count })"
+             :aria-label="t('card.unwatchedEpisodes', { n: count })">{{ count }}</div>
       </button>
       <!-- 悬浮层:1:1 对齐真实 4.9.5 cardbuilder.js 的 getHtml 输出
            顺序 = 多选 label → 居中大播放(cardOverlayFab-primary) → .cardOverlayButton-br.buttonItems(已播/收藏/更多) -->
@@ -274,6 +331,29 @@ function onTouchEnd() {
   filter: blur(0);
 }
 
+/* 碎图不能露出来：失败时把 <img> 彻底藏掉，只留下面的品牌渐变兜底层。
+   （不能用 display:none —— 那会让 .s-img 的占位底色一起消失，卡片变成一个空洞。） */
+.s-card-img.is-failed {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* 缺图兜底：与 hero 的 .hero-brand 同一套语言（同一个 --s-gradient-dusk 令牌 + 白标） */
+.s-card-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--s-gradient-dusk);
+  pointer-events: none;
+}
+.s-card-fallback-mark {
+  width: 34%;
+  max-width: 88px;
+  opacity: 0.34;
+}
+
 /* 悬停位移挂在 .cardBox 上；按下回弹走 motion.css 的 .s-press（挂在根节点）。
    ItemMenuSheet 已 Teleport 到 body，根节点带 transform 不会变成它的包含块。 */
 .s-card-box {
@@ -288,6 +368,21 @@ function onTouchEnd() {
 /* 角标（未看计数）与悬浮按钮：悬停微反馈 */
 .s-card .cardCountIndicator {
   transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+
+/* 未看集数角标改走中性玻璃。
+   原版 .countIndicator 的底色是 hsl(var(--theme-primary-color-*)) —— 而 emby-bridge 把
+   --theme-primary-color 映射成了珊瑚（hue 10）。mock 数据只有 2 个库，看不出问题；
+   接上真实服务器后是 22 个库 × 12 张卡，几乎每个剧集卡都带未看集数，
+   一屏几十个珊瑚圆点直接把海报压过去了。
+   角标是「元数据」不是「告警」，所以中性化。
+   **只覆盖角标自己的 background/color，绝不动 --theme-primary-color**：
+   进度条 .itemProgressBarForeground 用的是同一个变量，那是真·进度，必须保留 accent。 */
+.s-card .s-count-badge {
+  background: var(--s-badge-bg);
+  color: var(--s-badge-ink);
+  box-shadow: var(--s-badge-shadow);
+  backdrop-filter: blur(6px);
 }
 .s-card .cardOverlayButton-fab {
   transition: transform var(--s-dur-fast) var(--s-ease-std);
