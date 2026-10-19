@@ -32,6 +32,8 @@ If you're a new user looking to install Emby Server, please head over to [emby.m
 
 [How to Build a Server Plugin](https://github.com/MediaBrowser/MediaBrowser/wiki/How-to-build-a-Server-Plugin "How to build a server plugin")
 
+[术语表 / Glossary](docs/GLOSSARY.md "全项目术语权威：SPEC、代码、PR 讨论中出现这些词时，含义以此为准")
+
 
 ## 前端（Web / Serata） ##
 
