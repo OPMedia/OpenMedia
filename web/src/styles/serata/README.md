@@ -29,12 +29,14 @@
 `--s-night` `--s-violet` `--s-plum` `--s-coral` `--s-coral-deep` `--s-cream` `--s-ink` `--s-ivory`
 `--s-gradient-dusk`（纵向）`--s-gradient-dusk-h`（横向）
 
-**图画区（hero）—— 永远压在剧照上，两种主题同值，只放在 `:root`、不在主题块里覆盖**
-`--s-hero-ink` `--s-hero-ink-2` `--s-hero-cta-bg` `--s-hero-cta-fg` `--s-hero-cta-bg-hover`
-`--s-hero-cta2-bg` `--s-hero-cta2-bg-hover` `--s-hero-cta2-fg` `--s-hero-shade` `--s-hero-tile-veil`
-`--s-hero-tile-ring` `--s-hero-tile-dim` `--s-hero-hairline`
-> 和 `--s-badge-*` 同一条理由：这一层压在**美术图**上而不是主题底色上。浅色主题的 `--s-text-1`/`--s-cta-bg` 都是深墨，直接拿来压深色剧照会糊成一团（实测正文对比度掉到 ~1.1:1）。
-> 剧照是 16:9 的 TMDB 大图，明暗不可控，所以压字的地方**必须自带压暗层**，不能指望图片"刚好够暗"。
+**图画区（hero）—— 「背景图居中、两侧过渡」，只放在 `:root`、不在主题块里覆盖**
+`--s-hero-mask`（两侧渐隐蒙版）`--s-hero-scrim`（上/下/左三层 `--s-bg` 收口）
+`--s-hero-control-bg` `--s-hero-control-bg-hover` `--s-hero-control-fg` `--s-hero-control-ring`
+> 这一版把图画区从「固定压暗层 + 一套固定白字」改成「图溶进页面底色」，令牌因此只剩三条几何决策 + 一组控件色。
+> `--s-hero-mask` 让图自己两侧消失（用 mask 而不是盖底色 —— 盖底色会把底下的页面底色也改掉，接缝看得出来）；
+> `--s-hero-scrim` 用 `--s-bg` 收口，所以**文案可以直接用 `--s-text-*` / `--s-cta-*`**，
+> 不再需要 `--s-hero-ink` 那套"压在图上"的固定色（上一版正是被它拖累：浅色主题下文案区被迫是一块黑斑，与「浅色就用浅色」冲突）。
+> 唯一真的压在未渐隐剧照上的是暂停按钮，所以只有它有一组不随主题翻转的 `--s-hero-control-*`。
 
 **字体** `--s-font` `--s-font-mono` `--s-fs-hero/display/h1/h2/h3/body/sm/xs` `--s-lh-tight/snug/body` `--s-fw-regular/medium/semibold` `--s-tracking-tight/hero`
 
@@ -45,9 +47,9 @@
 **动效** `--s-dur-instant/fast/base/slow/xslow/sheet/exit`（80/140/220/320/480/280/180ms）、`--s-ease-std/exit/spring`、`--s-transition`、`--s-stagger-step`(45ms)、`--s-stagger-max`(8)
 
 **布局** `--s-header-h`(64) `--s-header-h-sm`(56) `--s-drawer-w`(248) `--s-hero-min-h`(460) `--s-content-max` `--s-bottom-nav-h`
-> hero 高度**不再有令牌**：旧的 `--s-hero-h: min(75vh, 860px)` 已删除。首页 banner 的高度由
-> **16:9 主图的宽度反推**（`HomeHero.vue` 的 `.hero-stage { aspect-ratio: 16/9 }`），
-> 这样窄屏不会把图压扁、宽屏不会让画框撑破首屏，也不会有留白空洞。
+> hero 高度**没有令牌**：旧的 `--s-hero-h: min(75vh, 860px)` 已删除。
+> 桌面由 `HomeHero.vue` 的 `.hero-stage { height: clamp(400px, 58vh, 620px) }` 给（横幅比 16:9 宽，图 `cover` 居中裁切）；
+> 窄屏（≤900px）改回 `aspect-ratio: 16/9` 让剧照不被裁构图，文案落到图下方。
 
 **层级** `--s-z-backdrop`(40) `--s-z-drawer`(60) `--s-z-header`(70) `--s-z-nav`(80) `--s-z-sheet`(1000) `--s-z-toast`(1200)
 > 弹层带（1000/1200）与壳层（≤80）之间留空档，避免 header/drawer 和弹层抢层级。旧实现里各写各的硬编码 999/1000，已收敛。
@@ -155,7 +157,7 @@ import { S_DUR, S_EASE, S_EASE_CSS, SPRING, useReducedMotionSafe, riseVariants,
 - `ui.dialog/close/dismiss/notifications/more` —— **弹层基元专用，locale JSON 由 Lead 独占维护**
 - `shell.nav/openNav/closeNav/expand/collapse/back/menu/libraries/myMedia/playlists/collections/me/searchPlaceholder/userMenu/theme/themeDark/themeLight/themeSystem/themeToggle/brandHome/accountSettings`
 - `home.hero/viewAll/scrollBack/scrollForward/remaining/loading/error/empty/emptyHint/emptyAction/continueWatching/nextUp/latest/latestPrefix`
-- `hero.label/slide/prev/next/pause/resume/goTo/play/resumePlay/details/empty/loading`
+- `hero.label/slide/prev/next/pause/resume/goTo/play/resumePlay/details/empty/loading/navLabel/dot`
 - `settings.theme/themeMode/themeDark/themeLight/themeSystem/themeDesc/accentFixed`
 - 复用旧键：`app.home/search/favorites/settings/dashboard/manageServer`、`common.loading/retry/error`
 

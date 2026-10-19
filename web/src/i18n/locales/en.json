@@ -70,9 +70,8 @@
     "details": "Details",
     "empty": "Nothing to feature yet",
     "loading": "Picking something for you…",
-    "upNext": "Up next",
-    "railLabel": "Rotation list",
-    "tile": "Item {n}: {name}"
+    "navLabel": "Carousel navigation",
+    "dot": "Item {n}: {name}"
   },
   "shell": {
     "nav": "Main navigation",

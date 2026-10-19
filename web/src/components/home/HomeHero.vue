@@ -2,42 +2,49 @@
 /**
  * HomeHero —— Serata 首页首屏 banner。
  *
- * 版式（用户决策：16:9 的 TMDB 大图做主图，旁边留白放"接下来要轮转的"缩略图）：
+ * 版式（用户决策：「背景图居中两边过渡」）：
  *
- *   ┌───────────────────────────────────────┬───────────────┐
- *   │                                       │ 接下来        │
- *   │        16:9 大图（左 63%）            │ ┌────┐┌────┐  │
- *   │                                       │ │ 2  ││ 3  │  │
- *   │  ┌ 压暗层 ┐                            │ └────┘└────┘  │
- *   │  │ 眉标 / 标题 / 两行简介              │ ┌────┐┌────┐  │
- *   │  │ 主次 CTA / 续播进度                 │ │ 4  ││ 5  │  │
- *   │  └────────┘                            │ └────┘└────┘  │
- *   │                                       │ ┌────┐┌────┐  │
- *   │                                       │ │ 6  ││ 1  │  │ ← 当前项描边+进度
- *   └───────────────────────────────────────┴───────────────┘
+ *   ┌───────────────────────────────────────────────────────────┐
+ *   │          ┌───────────────────────────────┐                │
+ *   │         ╱      居中 · 整幅出血的剧照        ╲               │  ← 两侧溶进页面底色
+ *   │        ╱                                     ╲              │
+ *   │  ┌ 眉标 ┐                                                     │
+ *   │  │ 标题 │   ← 文案压在"左 + 下"两片 --s-bg 渐变上            │
+ *   │  │ CTA  │                                    · · · ··        │ ← 轮转圆点（右下）
+ *   │  └──────┘                                                    │
+ *   └───────────────────────────────────────────────────────────┘
  *
- * 三条硬约束：
+ * 四条硬约束：
  *
- *  ① **高度由 16:9 反推，不由视口比例硬切**。旧版是 `height: min(75vh, 860px)` +
- *     `width: min(100%, h*1.7778)`，在窄屏/宽屏上要么图被压扁要么画框撑破首屏，
- *     而且"左栏一大片奶油色留白 + 右边一张小卡片"就是上一版最丑的地方。
- *     现在主图占满左 63% 的宽度、高度自己长出来，右侧 35% 交给缩略图栏，整条 banner 无空洞。
+ *  ① **剧照整幅铺开、居中、两侧渐隐**，不是"一张 16:9 的卡片浮在留白里"。
+ *     上一版的失败点在"框"：圆角卡片 + 右侧缩略图栏 + 硬直的矩形边缘，看起来像贴图。
+ *     现在图片 `object-fit: cover; object-position: center` 铺满整条 banner，
+ *     左/右两侧用 mask 溶掉（`--s-hero-mask`），上/下用 `--s-bg` 渐变收口，
+ *     四周没有一条硬边。带宽仍与下面的行严格对齐（同一套 `--s-gutter` / `--s-content-max`）。
  *
- *  ② **主图只用横版大图**（`wideArtUrl`：自己的 Backdrop → 父级 Backdrop → 宽高比 ≈16:9 的 Primary）。
- *     旧版"不是 Backdrop 就当竖版"的分支已删除 —— 实测媒体库（CollectionFolder）的 Primary
- *     `PrimaryImageAspectRatio` 是 1.7778，是横图，被旧逻辑当成竖版渲染成了 2:3 的怪卡片。
- *     入池时 `useHomeHero` 已经筛过一遍，这里再筛一次是防御（拿不到就退品牌渐变，绝不拉伸）。
+ *  ② **压字层用 `--s-bg` 而不是固定深色**。这是这一版最大的结构简化：
+ *     文案坐在"图片溶进页面底色"的那一片上，那片底色**就是页面底色**，
+ *     所以文字色可以直接跟随主题（`--s-text-*` / `--s-cta-*`），
+ *     不需要再维护 `--s-hero-ink` 那一整套"压在图上"的固定色。
+ *     上一版正是被那套固定色拖累：浅色主题下文案区被迫是一块黑斑，与"浅色就用浅色"直接冲突。
  *
- *  ③ **轮转缩略图栏 = 指示器**。6 张缩略图铺满右侧，当前项加描边 + 8s 进度条，
- *     所以旧的底部小圆点/前后翻页按钮整组删掉了 —— 一套导航，不摆两套。
+ *  ③ **层叠顺序写死**：图片 1 < 压字层 2 < 文案 3 < 控件 4。
+ *     上一版踩过：压字层 z-index 3 高于文案 z-index 2，且画框没建层叠上下文，
+ *     于是压字层把文案糊了（实测白字只剩 2.3:1）。现在 `.hero-stage` 带 `isolation: isolate`，
+ *     且文案是 `.hero-stage` 的**兄弟**（同一网格单元），压字层物理上盖不到它。
  *
- * 轮转：8000ms 自动（驻留时长，不是 --s-dur-* 令牌，理由见 ROTATE_MS）；hover / 画框内 focus /
+ *  ④ **主图只用横版大图**（`wideArtUrl`：自己的 Backdrop → 父级 Backdrop → 宽高比 ≈16:9 的 Primary）。
+ *     实测媒体库（CollectionFolder）的 `PrimaryImageAspectRatio` 是 1.7778，是横图；
+ *     旧逻辑"不是 Backdrop 就当竖版"会把它渲染成 2:3 的怪卡片，该分支已删除。
+ *     拿不到就退品牌渐变（`--s-gradient-dusk`），绝不拉伸。
+ *
+ * 轮转：8000ms 自动（驻留时长，不是 --s-dur-* 令牌，理由见 ROTATE_MS）；hover / 区域内 focus /
  *       标签页隐藏都停；prefers-reduced-motion 下**初始暂停**（铁律 4），用户显式点播放才动。
  *
  * 换片编排：容器走 motion.css 的 s-scrim 类族（旧内容先淡出 → 新内容淡入），子元素走
- *           .s-stagger + --s-i 依次上浮（45ms 步长）。组件内只剩两个进度条关键帧。
+ *           .s-stagger + --s-i 依次上浮（45ms 步长）。组件内只剩圆点进度条一个关键帧。
  * 手势：桌面悬停内容轻上浮 + 背景图轻推近；横向拖拽跟手位移、松手 spring 回弹；← → 与滑动切换。
- * 键盘：上一张 / 下一张 / 暂停 / 播放 / 缩略图全部 Tab 可到、有 aria-label、Enter/Space 触发。
+ * 键盘：暂停 / 上一张 / 下一张 / 圆点全部 Tab 可到、有 aria-label、Enter/Space 触发。
  *
  * 只消费 styles/serata 的 --s-* 令牌，无裸色值、无 emby-* 类名。
  */
@@ -52,17 +59,15 @@ import { useReducedMotionSafe } from '@/lib/motion'
 /**
  * 自动轮转驻留时长。**故意不走 --s-dur-***：令牌的语义是"转场时长"（最长 480ms），
  * 这是"停留时长"（让人读完一屏信息），不是一个类；WCAG 2.2.2 也要求自动轮转 ≥5s。
- * 它同时是 JS 计时器与两条进度条 CSS 动画的**唯一真源**（模板里下发 --hero-rotate）。
+ * 它同时是 JS 计时器与圆点进度条 CSS 动画的**唯一真源**（模板里下发 --hero-rotate）。
  */
 const ROTATE_MS = 8000
 const SWIPE_MIN_PX = 40
-/** 拖拽跟手上限（px）：再远也不跟了，避免"把画框拖出去"的错觉 */
+/** 拖拽跟手上限（px）：再远也不跟了，避免"把整条 banner 拖出去"的错觉 */
 const DRAG_LIMIT_PX = 72
 /** 入画兜底：图片既不 load 也不 error 时也要换（避免卡在旧帧） */
 const REVEAL_FALLBACK_MS = 1500
 const TICKS_PER_MINUTE = 600_000_000
-/** 缩略图栏每行放几张（决定行数：6 项 → 2 列 × 3 行） */
-const TILES_PER_ROW = 2
 
 const props = withDefaults(defineProps<{ items: BaseItemDto[]; loading?: boolean }>(), { loading: false })
 
@@ -79,27 +84,17 @@ interface Shot {
   src: string
 }
 
-/** 该条目能不能当主图（有 ≈16:9 大图） */
-function hasWide(item: BaseItemDto): boolean {
-  return !!wideArtUrl(item)
-}
-
 /**
  * 主图 shot。`art` 拿不到横版大图时**就地降级 brand**（品牌渐变 + 白标），
  * 所以调用方永远不需要再判空。
  */
 function shotOf(item: BaseItemDto): Shot {
-  const src = wideArtUrl(item, { maxWidth: 1280, quality: 90 })
+  const src = wideArtUrl(item, { maxWidth: 1920, quality: 90 })
   return src ? { itemId: item.Id, kind: 'art', src } : { itemId: item.Id, kind: 'brand', src: '' }
 }
 
-/** 缩略图：同一张图的小尺寸，质量降到 82（一屏 6 张，别拖大图） */
-function tileSrc(item: BaseItemDto): string {
-  return wideArtUrl(item, { maxWidth: 480, quality: 82 })
-}
-
-/** 缩略图/无障碍用的短标题：剧集显示剧名（和 heroTitle 同一套语义） */
-function tileLabel(item: BaseItemDto): string {
+/** 圆点的无障碍短标题：剧集显示剧名（和 heroTitle 同一套语义） */
+function dotLabel(item: BaseItemDto): string {
   if (item.Type === 'Episode' && item.SeriesName) return item.SeriesName
   return item.Name ?? ''
 }
@@ -109,11 +104,8 @@ function tileLabel(item: BaseItemDto): string {
 const active = ref(0)
 const current = computed<BaseItemDto | undefined>(() => props.items[active.value])
 
-/** 只有 1 项时轮转栏没有意义（自己指向自己），整栏收掉、主图占满 */
-const hasRail = computed(() => props.items.length >= 2)
-
-/** 缩略图栏行数：写进 CSS 变量，行高才能用 1fr 均分主图高度 */
-const tileRows = computed(() => Math.max(1, Math.ceil(props.items.length / TILES_PER_ROW)))
+/** 只有 1 项时圆点没有意义（自己指向自己），整组收掉 */
+const hasMultiple = computed(() => props.items.length >= 2)
 
 watch(
   () => props.items.length,
@@ -161,8 +153,8 @@ function episodeCode(item: BaseItemDto): string {
  * 拿不到 SeriesName 时退回条目自己的名字。
  *
  * **不用 Emby 的 Logo 图**（`ImageTags.Logo`）：Logo 是透明 PNG，颜色由片方决定，
- * 实测「梦幻西游」的 Logo 是深青色，压在深色压暗层上直接消失；换成别的片子又会反过来。
- * 标题一律用 `--s-hero-ink` 渲染纯文字，颜色可控、可量、永远读得出来，
+ * 实测「梦幻西游」的 Logo 是深青色，压在图上直接消失；换成别的片子又会反过来。
+ * 标题一律纯文字，颜色走主题令牌，颜色可控、可量、永远读得出来，
  * 也省掉一次图片请求和一个布局抖动源。
  */
 const heroTitle = computed(() => {
@@ -306,7 +298,7 @@ const toggleEl = ref<HTMLButtonElement | null>(null)
 
 const canRotate = computed(() => !props.loading && props.items.length > 1)
 /**
- * 暂停条件：hover / 画框内 focus / 标签页隐藏 / 显式暂停。
+ * 暂停条件：hover / 区域内 focus / 标签页隐藏 / 显式暂停。
  * `prefers-reduced-motion` 不是闸门而是**初始暂停位**（见 onMounted）：系统开启减少动效时
  * 不自动轮转，但用户显式点「继续轮播」即可开启——WCAG 2.2.2 管的是"自动"播放，
  * 用户主动触发的不算自动。
@@ -420,7 +412,7 @@ function onPointerLeave(event: PointerEvent): void {
   hovering.value = false
 }
 function onRootFocusIn(event: FocusEvent): void {
-  // 暂停按钮自己的 focus 不算「画框内 focus」，否则点了继续播放永远起不来
+  // 暂停按钮自己的 focus 不算「区域内 focus」，否则点了继续播放永远起不来
   focusInside.value = event.target !== toggleEl.value
 }
 function onRootFocusOut(event: FocusEvent): void {
@@ -464,7 +456,7 @@ function onPointerUp(event: PointerEvent): void {
   const dy = event.clientY - swipeStartY
   resetDrag()
   if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return
-  // 滑动手势不该顺带触发画框点击跳详情
+  // 滑动手势不该顺带触发 banner 点击跳详情
   suppressClickUntil = performance.now() + 400
   step(dx < 0 ? 1 : -1)
 }
@@ -515,10 +507,10 @@ onBeforeUnmount(() => {
     @pointerleave="onPointerLeave"
   >
     <div class="hero-inner">
-      <!-- 骨架：尺寸与真实版式一致（同一个 .hero-band 网格），CLS≈0 -->
+      <!-- 骨架：与真实版式同一个网格（图片格子 + 文案格子），CLS≈0 -->
       <div v-if="loading" class="hero-band" aria-busy="true">
         <div class="hero-stage">
-          <div class="s-skeleton hero-stage-sk"></div>
+          <div class="s-skeleton hero-sk-art"></div>
         </div>
         <div class="hero-copy hero-copy--sk">
           <div class="s-skeleton hero-sk hero-sk--eyebrow"></div>
@@ -526,18 +518,14 @@ onBeforeUnmount(() => {
           <div class="s-skeleton hero-sk hero-sk--line"></div>
           <div class="s-skeleton hero-sk hero-sk--cta"></div>
         </div>
-        <div class="hero-rail hero-rail--sk">
-          <p class="hero-rail-title" aria-hidden="true">{{ t('hero.upNext') }}</p>
-          <div v-for="n in 6" :key="n" class="s-skeleton hero-tile-sk"></div>
-        </div>
         <span class="s-sr">{{ t('hero.loading') }}</span>
       </div>
 
       <!-- 空态：极简占位，不报错 -->
       <p v-else-if="!current" class="hero-empty">{{ t('hero.empty') }}</p>
 
-      <div v-else class="hero-band" :class="{ 'hero-band--solo': !hasRail }">
-        <!-- 16:9 主图（左 63%） -->
+      <div v-else class="hero-band">
+        <!-- 剧照区：整幅铺开、居中、两侧渐隐。自成层叠上下文（见脚本头注释 ③） -->
         <div
           class="hero-stage"
           @pointerdown="onPointerDown"
@@ -553,26 +541,28 @@ onBeforeUnmount(() => {
             :aria-label="t('hero.details')"
             @click="openItem"
           >
-            <template v-for="s in slots" :key="s.slot">
-              <img
-                v-if="s.shot && s.shot.kind === 'art'"
-                class="hero-shot"
-                :class="{ 'is-front': front === s.slot, 'is-loaded': s.loaded }"
-                :src="s.shot.src"
-                alt=""
-                draggable="false"
-                decoding="async"
-                @load="onShotLoad(s.slot)"
-                @error="onShotError(s.slot)"
-              />
-              <div v-else-if="s.shot" class="hero-brand" :class="{ 'is-front': front === s.slot }">
-                <img class="hero-brand-mark" :src="markWhite" alt="" draggable="false" />
-              </div>
-            </template>
+            <!-- 渐隐蒙版挂在这一层：mask 不跟着图片的 1.03→1 微缩一起缩放，边缘才不会抖 -->
+            <span class="hero-art" aria-hidden="true">
+              <template v-for="s in slots" :key="s.slot">
+                <img
+                  v-if="s.shot && s.shot.kind === 'art'"
+                  class="hero-shot"
+                  :class="{ 'is-front': front === s.slot, 'is-loaded': s.loaded }"
+                  :src="s.shot.src"
+                  alt=""
+                  draggable="false"
+                  decoding="async"
+                  @load="onShotLoad(s.slot)"
+                  @error="onShotError(s.slot)"
+                />
+                <span v-else-if="s.shot" class="hero-brand" :class="{ 'is-front': front === s.slot }">
+                  <img class="hero-brand-mark" :src="markWhite" alt="" draggable="false" />
+                </span>
+              </template>
+            </span>
           </button>
 
-          <!-- 文案层压暗：剧照明暗不可控，压字的地方必须自带暗底 -->
-          <div class="hero-shade" aria-hidden="true"></div>
+          <div class="hero-scrim" aria-hidden="true"></div>
 
           <button
             ref="toggleEl"
@@ -590,9 +580,36 @@ onBeforeUnmount(() => {
               <rect x="13.6" y="5" width="3.4" height="14" rx="1" fill="currentColor" />
             </svg>
           </button>
+
+          <!-- 轮转圆点：当前项拉长成 8s 进度条（与 JS 计时器同源） -->
+          <div
+            v-if="hasMultiple"
+            class="hero-dots"
+            role="group"
+            :aria-label="t('hero.navLabel')"
+            :style="{ '--hero-rotate': `${ROTATE_MS}ms` }"
+          >
+            <button
+              v-for="(item, i) in items"
+              :key="item.Id"
+              type="button"
+              class="hero-dot"
+              :class="{ 'is-active': i === active }"
+              :aria-label="t('hero.dot', { n: i + 1, name: dotLabel(item) })"
+              :aria-current="i === active ? 'true' : undefined"
+              @click="goTo(i)"
+            >
+              <span
+                v-if="i === active"
+                :key="active"
+                class="hero-dot-fill"
+                :style="{ animationPlayState: running ? 'running' : 'paused' }"
+              ></span>
+            </button>
+          </div>
         </div>
 
-        <!-- 文案：桌面叠在主图左下（同一个网格单元），窄屏落到主图下方 -->
+        <!-- 文案：桌面压在剧照左下（同网格单元、更高层），窄屏落到剧照下方 -->
         <div ref="copyEl" class="hero-copy">
           <!-- 换片编排：容器走 motion.css 的 s-scrim 类族（旧内容先淡出 → 新内容淡入），
                子元素走 .s-stagger + --s-i 依次上浮，步长来自 --s-stagger-step（45ms）。 -->
@@ -630,47 +647,6 @@ onBeforeUnmount(() => {
             </div>
           </Transition>
         </div>
-
-        <!-- 轮转缩略图栏（右 35%）：既是"接下来要轮转的"，也是指示器本身 -->
-        <div
-          v-if="hasRail"
-          class="hero-rail"
-          role="group"
-          :aria-label="t('hero.railLabel')"
-          :style="{ '--hero-tile-rows': tileRows }"
-        >
-          <p class="hero-rail-title" aria-hidden="true">{{ t('hero.upNext') }}</p>
-          <button
-            v-for="(item, i) in items"
-            :key="item.Id"
-            type="button"
-            class="hero-tile"
-            :class="{ 'is-active': i === active }"
-            :aria-label="t('hero.tile', { n: i + 1, name: tileLabel(item) })"
-            :aria-current="i === active ? 'true' : undefined"
-            @click="goTo(i)"
-          >
-            <img
-              v-if="hasWide(item)"
-              class="hero-tile-img"
-              :src="tileSrc(item)"
-              alt=""
-              draggable="false"
-              loading="lazy"
-              decoding="async"
-            />
-            <span v-else class="hero-tile-brand" aria-hidden="true"></span>
-            <span class="hero-tile-veil" aria-hidden="true"></span>
-            <span class="hero-tile-label">{{ tileLabel(item) }}</span>
-            <span v-if="i === active" class="hero-tile-rail" aria-hidden="true">
-              <span
-                :key="active"
-                class="hero-tile-fill"
-                :style="{ '--hero-rotate': `${ROTATE_MS}ms`, animationPlayState: running ? 'running' : 'paused' }"
-              ></span>
-            </span>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -681,63 +657,50 @@ onBeforeUnmount(() => {
 <style scoped>
 .hero {
   position: relative;
-  /* 高度**由 16:9 主图反推**（见 .hero-stage）：不写死视口比例，就不会出现
-     "图被 max-height 压扁"或"画框撑破首屏"这两种上一版翻过的车。
-     --s-hero-min-h 只兜短视口下别塌成一条。 */
-  min-height: var(--s-hero-min-h);
-  box-sizing: border-box;
-  /* 顶栏 fixed 且不透明：上内边距至少让开一个顶栏高度（短视口/横屏不会压住内容） */
-  padding: max(var(--s-header-h), var(--s-sp-9)) var(--s-gutter) var(--s-sp-9);
+  /* 顶栏 fixed 且不透明：上内边距至少让开一个顶栏高度，短视口/横屏不会压住内容 */
+  padding: max(var(--s-header-h), var(--s-sp-6)) 0 var(--s-sp-9);
   background: var(--s-bg);
   isolation: isolate;
 }
 .hero-inner {
   max-width: var(--s-content-max);
   margin: 0 auto;
+  padding: 0 var(--s-gutter);
 }
 
-/* ---------- 版式：左 63% 主图 + 右 35% 缩略图栏 ---------- */
+/* ---------- 版式：一个网格单元，图片与文案叠在一起 ----------
+   这样文案是 `.hero-stage` 的**兄弟**而不是子节点：
+   `.hero-stage` 有自己的 `overflow: hidden` 与层叠上下文，
+   文案放外面就物理上不可能被压字层盖住（上一版正是在这里翻的车）。 */
 .hero-band {
+  position: relative;
   display: grid;
-  grid-template-columns: 63fr 35fr;
-  gap: var(--s-sp-6);
-  align-items: stretch;
-}
-/* 只有一项：缩略图栏收掉，主图占满（并给个上限，别在超宽屏上变成一堵墙） */
-.hero-band--solo {
   grid-template-columns: minmax(0, 1fr);
 }
-.hero-band--solo .hero-stage {
-  max-width: 1024px;
-}
-
 .hero-stage {
+  grid-area: 1 / 1;
   position: relative;
-  grid-column: 1;
-  grid-row: 1;
   width: 100%;
-  /* 16:9 是硬约束：宽定高、永不变形。整条 banner 的高度由此反推。 */
-  aspect-ratio: 16 / 9;
-  border-radius: var(--s-r-xl);
+  /* 高度给一个舒适的带宽：太矮会变成一条横幅，太高会把下面的行挤出首屏 */
+  height: clamp(400px, 58vh, 620px);
   overflow: hidden;
   background: var(--s-img-placeholder);
-  box-shadow: var(--s-shadow-card);
   /* 横向滑动自己处理，纵向滚动留给页面 */
   touch-action: pan-y;
-  /* **必须**：画框自成一个层叠上下文。
-     否则里面的 .hero-shade（z-index 3）会跑到 .hero-band 的层叠上下文里，
-     盖住 z-index 2 的 .hero-copy —— 文案被自己的压暗层糊掉（实测对比度掉到 ~2.3:1）。 */
+  /* **必须**：层叠上下文。否则里面的 .hero-scrim（z-index 2）会跑到
+     .hero-band 的上下文里，与 .hero-copy 的 z-index 直接比大小。 */
   isolation: isolate;
 }
-.hero-stage-sk {
-  width: 100%;
-  height: 100%;
+.hero-sk-art {
+  position: absolute;
+  inset: 0;
   border-radius: 0;
 }
 
 .hero-hit {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
@@ -751,13 +714,24 @@ onBeforeUnmount(() => {
 .hero-hit.is-dragging {
   transition: none;
 }
+
+/* ---------- 剧照 + 两侧渐隐 ----------
+   蒙版挂在这一层而不是 <img> 上：<img> 每次换片会做 1.03→1 的微缩，
+   蒙版跟着缩放会让两边的渐隐在换片时"呼吸"一下。 */
+.hero-art {
+  position: absolute;
+  inset: 0;
+  display: block;
+  mask-image: var(--s-hero-mask);
+}
 .hero-shot {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  /* 大图永远是 ≈16:9，cover 只做亚像素级裁切，绝不会把构图裁坏 */
+  /* 居中铺满。横幅比 16:9 宽，cover 会裁掉上下，构图重心留在中间 */
   object-fit: cover;
+  object-position: center;
   opacity: 0;
   transform: scale(1.03);
   transition:
@@ -799,18 +773,20 @@ onBeforeUnmount(() => {
   height: 72px;
 }
 
-.hero-shade {
+/* 压字层：上 + 下 + 左三层 --s-bg 渐变。文案的底色因此就是页面底色，
+   文字色可以直接跟随主题，不需要另一套"压在图上"的固定色。 */
+.hero-scrim {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 2;
   pointer-events: none;
-  background: var(--s-hero-shade);
+  background: var(--s-hero-scrim);
 }
 
 .hero-toggle {
   position: absolute;
-  top: var(--s-sp-4);
-  right: var(--s-sp-4);
+  top: var(--s-sp-5);
+  right: var(--s-sp-5);
   z-index: 4;
   display: inline-flex;
   align-items: center;
@@ -818,29 +794,79 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--s-hero-hairline);
+  border: 1px solid var(--s-hero-control-ring);
   border-radius: var(--s-r-pill);
-  /* 控件压在剧照上：底色必须走"图画区"令牌（两种主题同值），
-     否则浅色主题的 cta2-bg 只有 6% 深色，深图标压在深剧照上直接看不见 */
-  background: var(--s-hero-cta2-bg);
-  color: var(--s-hero-ink);
+  /* 按钮压在剧照上（那块没有 --s-bg 兜底），所以走"在图上"专用的控件令牌 */
+  background: var(--s-hero-control-bg);
+  color: var(--s-hero-control-fg);
   cursor: pointer;
   transition:
     background-color var(--s-transition),
     transform var(--s-transition);
 }
 .hero-toggle:hover {
-  background: var(--s-hero-cta2-bg-hover);
+  background: var(--s-hero-control-bg-hover);
 }
 .hero-toggle:active {
   transform: scale(0.94);
 }
 
-/* ---------- 文案（叠在主图左下） ---------- */
+/* ---------- 轮转圆点（右下） ---------- */
+.hero-dots {
+  position: absolute;
+  right: var(--s-sp-8);
+  bottom: var(--s-sp-8);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--s-sp-2);
+}
+.hero-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--s-r-pill);
+  background: color-mix(in srgb, var(--s-text-3) 45%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    width var(--s-dur-base) var(--s-ease-spring),
+    background-color var(--s-transition);
+}
+.hero-dot:hover {
+  background: color-mix(in srgb, var(--s-text-3) 75%, transparent);
+}
+/* 当前项拉长成一小段进度条；轨道底色留白，让渐变填充看得清 */
+.hero-dot.is-active {
+  width: 40px;
+  background: color-mix(in srgb, var(--s-text-3) 26%, transparent);
+}
+.hero-dot-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--s-gradient-dusk-h);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: hero-dot-fill var(--hero-rotate, var(--s-dur-xslow)) linear forwards;
+}
+@keyframes hero-dot-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- 文案 ----------
+   文案坐在 `.hero-stage` 的同一网格单元里、`align-self: end` 贴底，
+   它的底色是 `--s-hero-scrim` 收口出来的页面底色，所以文字/按钮全部用主题令牌。 */
 .hero-copy {
-  grid-column: 1;
-  grid-row: 1;
-  z-index: 2;
+  grid-area: 1 / 1;
+  z-index: 3;
   align-self: end;
   padding: var(--s-sp-8);
   pointer-events: none;
@@ -851,9 +877,8 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: var(--s-sp-3);
   width: 100%;
-  /* 文案列收在左半区：压暗层最浓的一段在左边，文字越往外越依赖剧照本身，
-     所以宁可窄一点也不要让标题横穿到亮部去（实测过的翻车点）。 */
-  max-width: 520px;
+  /* 文案列收在左半区：左侧渐隐最浓，越往外越依赖剧照本身 */
+  max-width: 560px;
   /* 悬停上浮只动 transform（铁律 3）；时长/缓动走令牌。
      pointer-events 收回：外层是为了让 padding 区不吃点击，内容自己要能点。 */
   pointer-events: auto;
@@ -868,7 +893,7 @@ onBeforeUnmount(() => {
 .hero-eyebrow {
   margin: 0;
   font-size: var(--s-fs-sm);
-  color: var(--s-hero-ink-2);
+  color: var(--s-text-3);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -895,7 +920,7 @@ onBeforeUnmount(() => {
   font-size: var(--s-fs-hero);
   font-weight: var(--s-fw-semibold);
   letter-spacing: var(--s-tracking-hero);
-  color: var(--s-hero-ink);
+  color: var(--s-text-1);
 }
 
 .hero-desc {
@@ -903,7 +928,7 @@ onBeforeUnmount(() => {
   max-width: 46ch;
   font-size: var(--s-fs-body);
   line-height: var(--s-lh-snug);
-  color: var(--s-hero-ink-2);
+  color: var(--s-text-2);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -933,21 +958,19 @@ onBeforeUnmount(() => {
     transform var(--s-transition);
 }
 .hero-cta--primary {
-  background: var(--s-hero-cta-bg);
-  color: var(--s-hero-cta-fg);
+  background: var(--s-cta-bg);
+  color: var(--s-cta-fg);
 }
 .hero-cta--primary:hover {
-  background: var(--s-hero-cta-bg-hover);
+  background: var(--s-cta-bg-hover);
   transform: translateY(-1px);
 }
 .hero-cta--secondary {
-  background: var(--s-hero-cta2-bg);
-  color: var(--s-hero-cta2-fg);
-  /* 深色填充压在深色压暗层上会"没有边"，靠 1px 浅描边把按钮画出来 */
-  border: 1px solid var(--s-hero-hairline);
+  background: var(--s-cta2-bg);
+  color: var(--s-cta2-fg);
 }
 .hero-cta--secondary:hover {
-  background: var(--s-hero-cta2-bg-hover);
+  background: var(--s-cta2-bg-hover);
   transform: translateY(-1px);
 }
 .hero-cta:active {
@@ -970,7 +993,7 @@ onBeforeUnmount(() => {
   flex: 1;
   height: 3px;
   border-radius: var(--s-r-pill);
-  background: var(--s-hero-track);
+  background: var(--s-line);
   overflow: hidden;
 }
 .hero-progress-fill {
@@ -981,129 +1004,13 @@ onBeforeUnmount(() => {
 .hero-progress-left {
   flex: none;
   font-size: var(--s-fs-xs);
-  color: var(--s-hero-ink-2);
-}
-
-/* ---------- 轮转缩略图栏（右 35%） ---------- */
-.hero-rail {
-  grid-column: 2;
-  grid-row: 1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  /* 第一行给标题，其余行按条目数均分主图高度（行数由 --hero-tile-rows 下发） */
-  grid-template-rows: auto repeat(var(--hero-tile-rows, 3), minmax(0, 1fr));
-  gap: var(--s-sp-4);
-  min-width: 0;
-}
-.hero-rail-title {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: var(--s-fs-xs);
-  font-weight: var(--s-fw-medium);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--s-text-3);
-}
-.hero-tile-sk {
-  border-radius: var(--s-r-lg);
-}
-
-.hero-tile {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--s-r-lg);
-  overflow: hidden;
-  background: var(--s-img-placeholder);
-  cursor: pointer;
-  transition:
-    transform var(--s-dur-base) var(--s-ease-spring),
-    box-shadow var(--s-transition);
-}
-.hero-tile:hover {
-  transform: translateY(-2px);
-}
-.hero-tile.is-active {
-  /* 当前项：白描边。不用珊瑚 —— 珊瑚是强调色，缩略图栏里已经有 6 张彩色剧照了 */
-  box-shadow:
-    0 0 0 2px var(--s-hero-tile-ring),
-    var(--s-shadow-card);
-}
-.hero-tile-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: var(--s-hero-tile-dim);
-  transition:
-    opacity var(--s-dur-base) var(--s-ease-std),
-    transform var(--s-dur-slow) var(--s-ease-std);
-}
-.hero-tile.is-active .hero-tile-img,
-.hero-tile:hover .hero-tile-img {
-  opacity: 1;
-}
-.hero-tile:hover .hero-tile-img {
-  transform: scale(1.05);
-}
-.hero-tile-brand {
-  position: absolute;
-  inset: 0;
-  background: var(--s-gradient-dusk);
-}
-.hero-tile-veil {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: var(--s-hero-tile-veil);
-}
-.hero-tile-label {
-  position: absolute;
-  inset: auto var(--s-sp-3) var(--s-sp-2) var(--s-sp-3);
-  font-size: var(--s-fs-xs);
-  font-weight: var(--s-fw-medium);
-  text-align: left;
-  color: var(--s-hero-ink);
-  /* 12px 小字压在剧照上：光靠压暗层不够稳，再补一层 1px 投影（复用徽标投影令牌，
-     不新增裸色值），这样无论缩略图多亮都能读 */
-  text-shadow: var(--s-badge-shadow);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* 当前项的 8s 进度条：与 JS 计时器同源（--hero-rotate 由模板下发） */
-.hero-tile-rail {
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 3px;
-  background: var(--s-hero-track);
-  pointer-events: none;
-}
-.hero-tile-fill {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--s-gradient-dusk-h);
-  transform-origin: left center;
-  transform: scaleX(0);
-  animation: hero-tile-fill var(--hero-rotate, var(--s-dur-xslow)) linear forwards;
-}
-@keyframes hero-tile-fill {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
 }
 
 /* ---------- 空态 ---------- */
 .hero-empty {
   margin: 0;
-  min-height: calc(var(--s-hero-min-h) - var(--s-header-h) - var(--s-sp-9));
+  min-height: var(--s-hero-min-h);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1141,82 +1048,52 @@ onBeforeUnmount(() => {
   border-radius: var(--s-r-pill);
 }
 
-/* ---------- 窄屏：主图在上，文案落到图下方，缩略图栏变 3 列 ---------- */
+/* ---------- 窄屏：剧照 16:9 站上面，文案落到它下方 ---------- */
 @media (max-width: 900px) {
   .hero {
-    max-height: none;
-    padding: max(var(--s-header-h-sm), var(--s-sp-6)) var(--s-gutter-sm) var(--s-sp-6);
+    padding: max(var(--s-header-h-sm), var(--s-sp-5)) 0 var(--s-sp-7);
+  }
+  .hero-inner {
+    padding: 0 var(--s-gutter-sm);
   }
   .hero-band {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
-    gap: var(--s-sp-5);
+    grid-template-rows: auto auto;
   }
   .hero-stage {
-    grid-column: 1;
-    grid-row: 1;
-    max-width: none;
+    grid-area: 1 / 1;
+    /* 窄屏上不要裁掉构图：直接按 16:9 让图自己长高 */
+    height: auto;
+    aspect-ratio: 16 / 9;
   }
-  /* 文案离开剧照 → 文字色必须回到主题色（--s-hero-* 是"压在图上"专用） */
+  /* 文案离开剧照 → 落到第二行，横向对齐剧照左边缘 */
   .hero-copy {
-    grid-column: 1;
-    grid-row: 2;
+    grid-area: 2 / 1;
     align-self: start;
-    padding: 0;
+    padding: var(--s-sp-5) 0 0;
     pointer-events: auto;
   }
-  .hero-eyebrow {
-    color: var(--s-text-3);
+  .hero-copy-body {
+    max-width: none;
   }
   .hero-title-text {
     max-width: 18ch;
-    color: var(--s-text-1);
   }
-  .hero-desc {
-    color: var(--s-text-2);
+  /* 文案不在图上，压字层只负责让右下角圆点读得出来 */
+  .hero-scrim {
+    background: linear-gradient(
+      0deg,
+      var(--s-bg) 0%,
+      color-mix(in srgb, var(--s-bg) 62%, transparent) 24%,
+      transparent 46%
+    );
   }
-  .hero-cta--primary {
-    background: var(--s-cta-bg);
-    color: var(--s-cta-fg);
-  }
-  .hero-cta--primary:hover {
-    background: var(--s-cta-bg-hover);
-  }
-  .hero-cta--secondary {
-    background: var(--s-cta2-bg);
-    color: var(--s-cta2-fg);
-    /* 离开剧照回到主题底色：主题的 cta2 自带层次，不需要"在图上"用的浅描边 */
-    border: 0;
-  }
-  .hero-cta--secondary:hover {
-    background: var(--s-cta2-bg-hover);
-  }
-  .hero-progress-track {
-    background: var(--s-line);
-  }
-  .hero-progress-left {
-    color: var(--s-text-3);
-  }
-  /* 主图上方不再压字，压暗层整块撤掉，让剧照完整露出来 */
-  .hero-shade {
-    display: none;
+  .hero-dots {
+    right: var(--s-sp-4);
+    bottom: var(--s-sp-3);
   }
   .hero-toggle {
-    background: var(--s-hero-cta2-bg);
-  }
-  .hero-rail {
-    grid-column: 1;
-    grid-row: 3;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: auto;
-    grid-auto-rows: auto;
-    gap: var(--s-sp-3);
-  }
-  .hero-tile {
-    aspect-ratio: 16 / 9;
-  }
-  .hero-tile-label {
-    font-size: 10px;
+    top: var(--s-sp-3);
+    right: var(--s-sp-3);
   }
 }
 
@@ -1224,8 +1101,7 @@ onBeforeUnmount(() => {
   /* 铁律 16 的 CSS 侧兜底：motion.css 已切掉 animation，这里再收掉悬停位移与背景图放大 */
   .hero:hover .hero-copy-body,
   .hero:hover .hero-shot.is-front.is-loaded,
-  .hero-tile:hover,
-  .hero-tile:hover .hero-tile-img {
+  .hero-dot {
     transform: none;
   }
 }
