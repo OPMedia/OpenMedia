@@ -3,15 +3,31 @@
  * 管理后台 —— 媒体库(/librarysetup;真实站 dump:
  * .itemsViewSettingsContainer(共 N 个媒体库 + 新增媒体库 + 刷新/扫描)+ 媒体库 listItem)
  */
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { getUserViews, refreshLibrary, createLibrary } from '@/api/endpoints'
 import type { BaseItemDto } from '@/api/types'
 import { showToast } from '@/api/toast'
+import SSheet from '@/components/ui/SSheet.vue'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
+import { flipConfig, useReducedMotionSafe } from '@/lib/motion'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+
+/** 媒体库列表 FLIP(新增后重排)：JS 动画先问 reduced-motion（铁律 16） */
+const reducedMotion = useReducedMotionSafe()
+const listFlip = computed(() => flipConfig(reducedMotion.value))
+
+/**
+ * 面板级几何只能走 content-style：SSheet 的模板根是 fragment(scrim + panel)，
+ * 父视图的 scoped data-v 落不到面板上；center 变体是 inset:0 + margin:auto，
+ * width/height:auto 会拉伸成 92vw×84vh，故必须显式 fit-content 回到内容尺寸。
+ * min-width:24em 是原 scoped 规则里的值（实测面板宽 348px ≈ 24em），必须保留，
+ * 否则会退回 emby495 .formDialog 的 clamp(20%,60ch,50%)=509px。
+ */
+const LIBRARY_PANEL_STYLE = { width: 'fit-content', height: 'fit-content', minWidth: '24em' }
 
 const loading = ref(true)
 const libs = ref<BaseItemDto[]>([])
@@ -48,7 +64,7 @@ onMounted(async () => {
       <div class="scrollSlider flex-grow padded-top-page padded-left padded-left-page padded-right scrollSliderY focuscontainer-y">
         <div class="flex align-items-center focuscontainer-x itemsViewSettingsContainer padded-bottom focusable">
           <div class="listTotalRecordCount">{{ t('admin.libCount', { count: libs.length }) }}</div>
-          <button type="button" class="itemsViewSettingsContainer-button raised raised-mini btnNewLibrary submit emby-button emby-button-focusscale" title="新增媒体库" @click="addOpen = true">
+          <button type="button" class="itemsViewSettingsContainer-button raised raised-mini s-press btnNewLibrary submit emby-button emby-button-focusscale" title="新增媒体库" @click="addOpen = true">
             <i class="md-icon button-icon button-icon-left">&#xE03B;</i>
             <span class="emby-button-text">{{ t('admin.addLibrary') }}</span>
           </button>
@@ -59,8 +75,8 @@ onMounted(async () => {
         </div>
 
         <div v-if="loading" class="page-loading">{{ t('common.loading') }}</div>
-        <div v-else class="itemsContainer vertical-list padded-bottom-page focusable focuscontainer-x">
-          <div v-for="l in libs" :key="l.Id" class="listItem listItem-autoactive listItem-hoverable">
+        <div v-else v-auto-animate="listFlip" class="itemsContainer vertical-list padded-bottom-page focusable focuscontainer-x">
+          <div v-for="l in libs" :key="l.Id" class="listItem s-lift listItem-autoactive listItem-hoverable">
             <div class="listItem-content listItem-content-bg listItemContent-touchzoom listItem-border listItem-border-offset listItem-border-offset-square">
               <div class="listItemImageContainer itemAction listItemImageContainer-square listItemImageContainer-round">
                 <i class="listItemIcon md-icon autortl">{{ l.CollectionType === 'tvshows' ? '\uE333' : '\uE02C' }}</i>
@@ -77,11 +93,17 @@ onMounted(async () => {
         </div>
       </div>
     </div>
-    <Teleport to="body">
-      <div v-if="addOpen" class="dialogScrim" @click.self="addOpen = false">
-        <div class="dialog dialog-animated formDialog opened" @click.stop>
+    <!-- 新增媒体库(formDialog;行为交给 SSheet,可见标题留在插槽里) -->
+    <SSheet
+      :open="addOpen"
+      variant="center"
+      :title="t('admin.addLibrary')"
+      panel-class="dialog formDialog"
+      :content-style="LIBRARY_PANEL_STYLE"
+      @close="addOpen = false"
+    >
           <div class="formDialogHeader">
-            <button type="button" class="dialogCloseButton hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" title="关闭" @click="addOpen = false">
+            <button type="button" class="dialogCloseButton s-press hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" title="关闭" @click="addOpen = false">
               <i class="md-icon">&#xE5CD;</i>
             </button>
             <h3 class="formDialogHeaderTitle">{{ t('admin.addLibrary') }}</h3>
@@ -107,15 +129,12 @@ onMounted(async () => {
             </div>
           </div>
           <div class="formDialogFooter">
-            <button type="button" class="raised button-cancel formDialogFooterItem emby-button emby-button-focusscale" @click="addOpen = false">{{ t('ButtonCancel') }}</button>
-            <button type="button" class="raised button-submit formDialogFooterItem btnCreateLibrary emby-button emby-button-focusscale" @click="addLibrary">{{ t('admin.addLibrary') }}</button>
+            <button type="button" class="raised button-cancel s-press formDialogFooterItem emby-button emby-button-focusscale" @click="addOpen = false">{{ t('ButtonCancel') }}</button>
+            <button type="button" class="raised button-submit s-press formDialogFooterItem btnCreateLibrary emby-button emby-button-focusscale" @click="addLibrary">{{ t('admin.addLibrary') }}</button>
           </div>
-        </div>
-      </div>
-    </Teleport>
+    </SSheet>
   </main>
 </template>
 <style scoped>
-.dialogScrim { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, .5); display: flex; align-items: center; justify-content: center; }
-.dialogScrim .dialog.formDialog { background: rgb(40, 40, 43); color: rgba(255, 255, 255, .87); border-radius: .9em; min-width: 24em; }
+/* 弹层遮罩/底色/圆角/动效已交给 SSheet；面板几何走 :content-style（见 LIBRARY_PANEL_STYLE 说明） */
 </style>

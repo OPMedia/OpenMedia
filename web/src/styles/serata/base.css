@@ -147,24 +147,14 @@ main.s-home::-webkit-scrollbar-track {
   border: 0;
 }
 
-/* ---------- 页面转场（View Transitions；不支持的浏览器自动忽略） ---------- */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: var(--s-dur-base);
-  animation-timing-function: var(--s-ease-std);
-}
-/* 共享元素（首页卡片 → 详情页主图） */
-::view-transition-group(s-poster) {
-  animation-duration: var(--s-dur-slow);
-  animation-timing-function: var(--s-ease-std);
-}
+/* ---------- 页面转场 ----------
+   这里原来有一套 ::view-transition-* 规则，但全库 grep `startViewTransition` 是 **0 命中**
+   —— 从来没被触发过，是死代码，已删。
+   现在的分工：
+     · 路由转场 → Vue <Transition name="s-page">（App.vue 里，类族在 motion.css）
+     · 主题切换 → View Transitions（useTheme.ts 里真正调用 startViewTransition，规则在 motion.css） */
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root),
-  ::view-transition-group(*) {
-    animation-duration: 1ms !important;
-  }
   .s-skeleton::after {
     animation: none;
   }

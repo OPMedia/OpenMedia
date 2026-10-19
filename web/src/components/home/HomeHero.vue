@@ -6,21 +6,34 @@
  * 右栏：16:9 轮转画框（无 Backdrop 时降级 2:3 竖版，绝不拉伸），右侧探出下一张，
  *       双槽 <img> 叠放做 480ms 交叉淡入 + 1.02 → 1 缩放缓动。
  *
- * 轮转：8000ms 自动；hover / 画框内 focus / 标签页隐藏 / prefers-reduced-motion
- *       四种情况都停；右上角显式暂停按钮（WCAG 2.2.2）；← → 切换；指针滑动 >40px 切换。
+ * 轮转：8000ms 自动（驻留时长，不是 --s-dur-* 令牌，理由见 ROTATE_MS）；hover / 画框内 focus /
+ *       标签页隐藏都停；prefers-reduced-motion 下**初始暂停**（铁律 4），用户显式点播放才动。
+ *
+ * 换片编排：容器走 motion.css 的 s-scrim 类族（旧内容先淡出 → 新内容淡入），子元素走
+ *           .s-stagger + --s-i 依次上浮（45ms 步长）。组件内只剩 hero-dot-fill 一个关键帧。
+ * 手势：桌面悬停内容轻上浮 + 背景图轻推近；横向拖拽跟手位移、松手 spring 回弹；← → 与滑动切换。
+ * 键盘：上一张 / 下一张 / 暂停 / 播放 / 指示器全部 Tab 可到、有 aria-label、Enter/Space 触发。
  *
  * 只消费 styles/serata 的 --s-* 令牌，无裸色值、无 emby-* 类名。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
 import { imageUrl } from '@/api/endpoints'
 import { useTheme } from '@/composables/useTheme'
 import markWhite from '@/assets/brand/mark-white.svg'
+import { useReducedMotionSafe } from '@/lib/motion'
 
+/**
+ * 自动轮转驻留时长。**故意不走 --s-dur-***：令牌的语义是"转场时长"（最长 480ms），
+ * 这是"停留时长"（让人读完一屏信息），不是一个类；WCAG 2.2.2 也要求自动轮转 ≥5s。
+ * 它同时是 JS 计时器与指示条 CSS 动画的**唯一真源**（模板里下发 --hero-rotate）。
+ */
 const ROTATE_MS = 8000
 const SWIPE_MIN_PX = 40
+/** 拖拽跟手上限（px）：再远也不跟了，避免"把画框拖出去"的错觉 */
+const DRAG_LIMIT_PX = 72
 /** 入画兜底：图片既不 load 也不 error 时也要换（避免卡在旧帧） */
 const REVEAL_FALLBACK_MS = 1500
 const TICKS_PER_MINUTE = 600_000_000
@@ -265,6 +278,8 @@ const hovering = ref(false)
 const focusInside = ref(false)
 const tabHidden = ref(false)
 const userPaused = ref(false)
+/** 铁律 16：任何 JS 位移（拖拽跟手）动手前先问它；reduce 时位移必须完全消失 */
+const reduced = useReducedMotionSafe()
 const rootEl = ref<HTMLElement | null>(null)
 const toggleEl = ref<HTMLButtonElement | null>(null)
 
@@ -336,13 +351,30 @@ function togglePause(): void {
   userPaused.value = !userPaused.value
 }
 
-// 文字错峰入场：先摘掉 is-entering 让四行归零，下一帧再加回 → 动画重播（不重建节点，焦点不丢）
-const entering = ref(true)
-watch(active, async () => {
-  entering.value = false
-  await nextTick()
-  entering.value = true
-})
+// 换片编排交给 motion.css：容器走 s-scrim 类族（旧内容先淡出 → 新内容淡入），
+// 子元素走 .s-stagger + --s-i 依次上浮（45ms 步长）。组件内不再自建关键帧（铁律 14）。
+// 代价是文案节点按 current.Id 重建：换片前焦点若在文案里，@enter 时立刻还给同位置元素，
+// 否则键盘用户会被丢到 body（铁律 4）。
+const copyEl = ref<HTMLElement | null>(null)
+const FOCUSABLE = 'button, a[href], [tabindex]:not([tabindex="-1"])'
+let copyFocusIndex = -1
+
+function captureCopyFocus(): void {
+  const el = document.activeElement
+  if (!(el instanceof HTMLElement) || !copyEl.value?.contains(el)) {
+    copyFocusIndex = -1
+    return
+  }
+  copyFocusIndex = [...copyEl.value.querySelectorAll<HTMLElement>(FOCUSABLE)].indexOf(el)
+}
+function restoreCopyFocus(): void {
+  const idx = copyFocusIndex
+  copyFocusIndex = -1
+  if (idx < 0) return
+  copyEl.value?.querySelectorAll<HTMLElement>(FOCUSABLE)[idx]?.focus({ preventScroll: true })
+}
+// flush 默认 'pre'：DOM 换掉之前抓，抓到的还是旧节点
+watch(active, () => captureCopyFocus())
 
 // ---------------------------------------------------------------- 交互
 
@@ -380,18 +412,36 @@ let swipeStartX = 0
 let swipeStartY = 0
 let swipeTracking = false
 let suppressClickUntil = 0
+/** 拖拽跟手位移（px）：只写 transform，松手回弹 */
+const dragDx = ref(0)
+const dragging = ref(false)
 
+function resetDrag(): void {
+  dragging.value = false
+  dragDx.value = 0
+}
 function onPointerDown(event: PointerEvent): void {
   if (event.pointerType === 'mouse' && event.button !== 0) return
   swipeTracking = true
   swipeStartX = event.clientX
   swipeStartY = event.clientY
 }
+function onPointerMove(event: PointerEvent): void {
+  // reduce 下完全不给位移（铁律 16：不是"快一点"，是不动）
+  if (!swipeTracking || reduced.value) return
+  const dx = event.clientX - swipeStartX
+  const dy = event.clientY - swipeStartY
+  // 纵向意图（页面滚动）不抢：横向位移不够大就不跟手
+  if (Math.abs(dx) < 6 || Math.abs(dx) <= Math.abs(dy)) return
+  dragging.value = true
+  dragDx.value = Math.max(-DRAG_LIMIT_PX, Math.min(DRAG_LIMIT_PX, dx * 0.5))
+}
 function onPointerUp(event: PointerEvent): void {
   if (!swipeTracking) return
   swipeTracking = false
   const dx = event.clientX - swipeStartX
   const dy = event.clientY - swipeStartY
+  resetDrag()
   if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return
   // 滑动手势不该顺带触发画框点击跳详情
   suppressClickUntil = performance.now() + 400
@@ -399,6 +449,7 @@ function onPointerUp(event: PointerEvent): void {
 }
 function onPointerCancel(): void {
   swipeTracking = false
+  resetDrag()
 }
 
 function onVisibilityChange(): void {
@@ -409,17 +460,14 @@ const announcement = computed(() =>
   current.value ? t('hero.slide', { n: active.value + 1, total: props.items.length }) : '',
 )
 
-let reduceQuery: MediaQueryList | undefined
-function onReduceChange(event: MediaQueryListEvent): void {
-  // 系统偏好变化时落到暂停位：开启减少动效→停下；关闭→不强行恢复（由用户自己点）
-  if (event.matches) userPaused.value = true
-}
+watch(reduced, (on) => {
+  // 系统偏好切到减少动效 → 落到暂停位；切回来不强行恢复（由用户自己点）
+  if (on) userPaused.value = true
+})
 
 onMounted(() => {
-  reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-  // reduced-motion 下不自动播放：初始即暂停，但保留用户显式开启的能力
-  userPaused.value = reduceQuery.matches
-  reduceQuery.addEventListener('change', onReduceChange)
+  // 铁律 4：reduce 下**初始暂停**（不自动播放），但保留用户显式点播放的能力
+  userPaused.value = reduced.value
   tabHidden.value = document.hidden
   document.addEventListener('visibilitychange', onVisibilityChange)
 })
@@ -427,7 +475,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopTimer()
   clearPendingTimer()
-  reduceQuery?.removeEventListener('change', onReduceChange)
   document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 </script>
@@ -479,37 +526,43 @@ onBeforeUnmount(() => {
 
     <div v-else class="hero-inner">
       <div class="hero-grid">
-        <div class="hero-copy" :class="{ 'is-entering': entering }">
-          <p class="hero-line hero-eyebrow" :style="{ '--i': 0 }">{{ metaLine }}</p>
+        <div ref="copyEl" class="hero-copy">
+          <!-- 换片编排：容器走 motion.css 的 s-scrim 类族（旧内容先淡出 → 新内容淡入），
+               子元素走 .s-stagger + --s-i 依次上浮，步长来自 --s-stagger-step（45ms）。 -->
+          <Transition name="s-scrim" mode="out-in" @enter="restoreCopyFocus">
+            <div :key="current.Id" class="hero-copy-body s-stagger">
+              <p class="hero-eyebrow" :style="{ '--s-i': 0 }">{{ metaLine }}</p>
 
-          <h1 class="hero-line hero-title" :style="{ '--i': 1 }">
-            <button type="button" class="hero-title-btn" :title="current.Name" @click="openItem">
-              <img v-if="logoUrl" class="hero-logo" :src="logoUrl" :alt="current.Name" draggable="false" />
-              <span v-else class="hero-title-text">{{ current.Name }}</span>
-            </button>
-          </h1>
+              <h1 class="hero-title" :style="{ '--s-i': 1 }">
+                <button type="button" class="hero-title-btn" :title="current.Name" @click="openItem">
+                  <img v-if="logoUrl" class="hero-logo" :src="logoUrl" :alt="current.Name" draggable="false" />
+                  <span v-else class="hero-title-text">{{ current.Name }}</span>
+                </button>
+              </h1>
 
-          <p v-if="blurb" class="hero-line hero-desc" :style="{ '--i': 2 }">{{ blurb }}</p>
+              <p v-if="blurb" class="hero-desc" :style="{ '--s-i': 2 }">{{ blurb }}</p>
 
-          <div class="hero-line hero-actions" :style="{ '--i': 3 }">
-            <button type="button" class="hero-cta hero-cta--primary" @click="playItem">
-              <svg class="hero-cta-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-                <path d="M8 5.2v13.6L19 12z" fill="currentColor" />
-              </svg>
-              <span>{{ hasProgress ? t('hero.resumePlay') : t('hero.play') }}</span>
-            </button>
-            <button type="button" class="hero-cta hero-cta--secondary" @click="openItem">
-              <span>{{ t('hero.details') }}</span>
-            </button>
-          </div>
+              <div class="hero-actions" :style="{ '--s-i': 3 }">
+                <button type="button" class="hero-cta hero-cta--primary" @click="playItem">
+                  <svg class="hero-cta-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                    <path d="M8 5.2v13.6L19 12z" fill="currentColor" />
+                  </svg>
+                  <span>{{ hasProgress ? t('hero.resumePlay') : t('hero.play') }}</span>
+                </button>
+                <button type="button" class="hero-cta hero-cta--secondary" @click="openItem">
+                  <span>{{ t('hero.details') }}</span>
+                </button>
+              </div>
 
-          <!-- 无播放进度时只占位不显示：文案列高度恒定，换张不抖动 -->
-          <div class="hero-progress" :class="{ 'is-off': !hasProgress }">
-            <div class="hero-progress-track">
-              <div class="hero-progress-fill" :style="{ width: `${progressPct}%` }"></div>
+              <!-- 无播放进度时只占位不显示：文案列高度恒定，换张不抖动 -->
+              <div class="hero-progress" :class="{ 'is-off': !hasProgress }" :style="{ '--s-i': 4 }">
+                <div class="hero-progress-track">
+                  <div class="hero-progress-fill" :style="{ width: `${progressPct}%` }"></div>
+                </div>
+                <span class="hero-progress-left">{{ t('home.remaining', { minutes: remainingMinutes }) }}</span>
+              </div>
             </div>
-            <span class="hero-progress-left">{{ t('home.remaining', { minutes: remainingMinutes }) }}</span>
-          </div>
+          </Transition>
         </div>
 
         <div class="hero-visual">
@@ -518,10 +571,18 @@ onBeforeUnmount(() => {
               class="hero-frame"
               :class="{ 'is-portrait': isPortrait }"
               @pointerdown="onPointerDown"
+              @pointermove="onPointerMove"
               @pointerup="onPointerUp"
               @pointercancel="onPointerCancel"
             >
-              <button type="button" class="hero-hit" :aria-label="t('hero.details')" @click="openItem">
+              <button
+                type="button"
+                class="hero-hit"
+                :class="{ 'is-dragging': dragging }"
+                :style="dragDx ? { transform: `translateX(${dragDx}px)` } : undefined"
+                :aria-label="t('hero.details')"
+                @click="openItem"
+              >
                 <template v-for="s in slots" :key="s.slot">
                   <img
                     v-if="s.shot && s.shot.kind !== 'brand'"
@@ -570,7 +631,7 @@ onBeforeUnmount(() => {
 
     <div class="hero-fade" aria-hidden="true"></div>
 
-    <!-- 底部指示器：当前段用 8s 线性动画表现剩余时间，跟随暂停态 -->
+    <!-- 底部指示器：当前段用 ROTATE_MS 线性动画表现剩余时间（时长由 JS 下发 --hero-rotate，不写裸 8s），跟随暂停态 -->
     <div v-if="!loading && items.length" class="hero-footer">
       <div class="hero-dots">
         <button
@@ -587,9 +648,37 @@ onBeforeUnmount(() => {
               v-if="i === active"
               :key="active"
               class="hero-dot-fill"
-              :style="{ animationPlayState: running ? 'running' : 'paused' }"
+              :style="{ '--hero-rotate': `${ROTATE_MS}ms`, animationPlayState: running ? 'running' : 'paused' }"
             ></span>
           </span>
+        </button>
+      </div>
+
+      <!-- 上一张 / 下一张：Tab 可到、aria-label 齐全、Enter/Space 原生触发 -->
+      <div class="hero-nav">
+        <button type="button" class="hero-nav-btn" :aria-label="t('hero.prev')" @click="step(-1)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M14.6 5.6 8.2 12l6.4 6.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button type="button" class="hero-nav-btn" :aria-label="t('hero.next')" @click="step(1)">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+            <path
+              d="M9.4 5.6 15.8 12l-6.4 6.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </button>
       </div>
     </div>
@@ -648,28 +737,23 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- 左栏 ---------- */
-.hero-copy {
+/* 骨架分支直接用 .hero-copy；换片分支是 .hero-copy > .hero-copy-body（Transition 需要一层子节点） */
+.hero-copy,
+.hero-copy-body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--s-sp-4);
   min-width: 0;
 }
-.hero-line {
-  opacity: 0;
+.hero-copy-body {
+  width: 100%;
+  /* 悬停上浮只动 transform（铁律 3）；时长/缓动走令牌 */
+  transition: transform var(--s-dur-base) var(--s-ease-spring);
 }
-.hero-copy.is-entering .hero-line {
-  animation: hero-rise var(--s-dur-base) var(--s-ease-std) both;
-  animation-delay: calc(var(--i, 0) * 60ms);
-}
-@keyframes hero-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+@media (hover: hover) {
+  .hero:hover .hero-copy-body {
+    transform: translateY(-4px);
   }
 }
 
@@ -844,6 +928,11 @@ onBeforeUnmount(() => {
   border: 0;
   background: none;
   cursor: pointer;
+  /* 拖拽跟手位移：松手回弹走 spring；跟手过程中关掉过渡，否则手感拖泥带水 */
+  transition: transform var(--s-dur-base) var(--s-ease-spring);
+}
+.hero-hit.is-dragging {
+  transition: none;
 }
 .hero-shot {
   position: absolute;
@@ -863,6 +952,12 @@ onBeforeUnmount(() => {
 .hero-shot.is-front.is-loaded {
   opacity: 1;
   transform: scale(1);
+}
+@media (hover: hover) {
+  /* 悬停时背景图轻推近：只动 transform，复用画框同一套 --s-dur-xslow 运动语言 */
+  .hero:hover .hero-shot.is-front.is-loaded {
+    transform: scale(1.045);
+  }
 }
 .hero-brand {
   position: absolute;
@@ -908,7 +1003,9 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 1px solid var(--s-line);
   border-radius: var(--s-r-pill);
-  background: var(--s-cta2-bg);
+  /* 控件压在剧照上：底色必须用 scrim（跟着主题翻）而不是页面 surface——
+     浅色主题的 cta2-bg 只有 6% 深色，深色剧照上深图标直接看不见（实测对比度 ~1.3:1） */
+  background: var(--s-scrim-soft);
   color: var(--s-text-1);
   cursor: pointer;
   transition:
@@ -916,7 +1013,7 @@ onBeforeUnmount(() => {
     transform var(--s-transition);
 }
 .hero-toggle:hover {
-  background: var(--s-cta2-bg-hover);
+  background: var(--s-scrim);
 }
 .hero-toggle:active {
   transform: scale(0.94);
@@ -955,14 +1052,46 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: auto 0 var(--s-sp-6) 0;
   z-index: 3;
-}
-.hero-dots {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: var(--s-sp-4);
   max-width: var(--s-content-max);
   margin: 0 auto;
   padding: 0 var(--s-gutter);
   box-sizing: border-box;
+}
+.hero-dots {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+.hero-nav {
+  display: flex;
+  flex: none;
+  gap: var(--s-sp-1);
+}
+.hero-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-r-pill);
+  background: var(--s-cta2-bg);
+  color: var(--s-text-1);
+  cursor: pointer;
+  transition:
+    background-color var(--s-transition),
+    transform var(--s-transition);
+}
+.hero-nav-btn:hover {
+  background: var(--s-cta2-bg-hover);
+}
+.hero-nav-btn:active {
+  transform: scale(0.94);
 }
 .hero-dot {
   flex: 1;
@@ -990,7 +1119,7 @@ onBeforeUnmount(() => {
   background: var(--s-accent);
   transform-origin: left center;
   transform: scaleX(0);
-  animation: hero-dot-fill 8s linear forwards;
+  animation: hero-dot-fill var(--hero-rotate, var(--s-dur-xslow)) linear forwards;
 }
 @keyframes hero-dot-fill {
   from {
@@ -1086,14 +1215,16 @@ onBeforeUnmount(() => {
   .hero-title-text {
     max-width: 18ch;
   }
-  .hero-dots {
+  .hero-footer {
     padding: 0 var(--s-gutter-sm);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-copy.is-entering .hero-line {
-    animation-delay: 0ms;
+  /* 铁律 16 的 CSS 侧兜底：motion.css 已切掉 animation，这里再收掉悬停位移与背景图放大 */
+  .hero:hover .hero-copy-body,
+  .hero:hover .hero-shot.is-front.is-loaded {
+    transform: none;
   }
 }
 </style>

@@ -4,7 +4,9 @@ OpenMedia 的 Web 前端，内部设计代号 **Serata**。独立于后端开发
 后端代码在仓库其他目录，**本目录与后端互不依赖**。
 
 - 技术栈：Vue 3.5 + Vite 8 + TypeScript + Pinia + vue-router + vue-i18n
-- 设计层：`src/styles/serata/`（深浅双主题令牌），契约见 [styles/serata/README.md](src/styles/serata/README.md)
+- 组件基座：[reka-ui](https://reka-ui.com/) 2.11（无样式可访问性原语，**shadcn-vue 就是它套了一层 Tailwind**）
+- 动效：`motion-v` 2.8（Framer Motion 的 Vue 移植）+ `@formkit/auto-animate` 0.10（列表 FLIP，2KB）+ `@vueuse/core` 15
+- 设计层：`src/styles/serata/`（令牌 + 基元 + 动效 + 换肤桥），契约见 [styles/serata/README.md](src/styles/serata/README.md)
 - 规格与决策：[docs/spec/web.md](../docs/spec/web.md)、[ADR-0011](../docs/adr/0011-web-ui-emby-parity.md)、
   [ADR-0012](../docs/adr/0012-web-home-hero.md)、[ADR-0013](../docs/adr/0013-settings-honesty.md)
 
@@ -31,6 +33,7 @@ pnpm dev          # http://localhost:5173
 | `pnpm type-check` | 仅 `vue-tsc --build` |
 | `pnpm build-only` | 仅 `vite build`（产物在 `dist/`） |
 | `pnpm preview` | 预览已打包产物 |
+| `node tools/probe-libs.mjs` | 动效/组件栈导出探针（依赖升级后先跑这个） |
 
 ## 环境变量（都可选，默认值即开发态）
 
@@ -46,11 +49,13 @@ pnpm dev          # http://localhost:5173
 | --- | --- |
 | `src/views/` | 页面（首页、媒体库、详情、搜索、用户设置、`admin/` 后台） |
 | `src/components/` | 组件（`home/HomeHero.vue` 首屏轮播、`EmbyCard.vue` 卡片等） |
+| `src/components/ui/` | **UI 基座**：`SSheet.vue`（弹层，reka-ui Dialog 驱动）、`SToastHost.vue` + `SToastList.vue`（全局 toast） |
 | `src/composables/` | `useTheme`（主题唯一事实来源）、`useHomeHero`（轮播状态机） |
-| `src/styles/serata/` | 设计层：`tokens.css` 令牌、`base.css` 基元、`emby-bridge.css` 老页面换肤桥 |
-| `src/api/`、`src/mocks/` | API 客户端与 MSW 假数据 |
-| `src/i18n/locales/` | `zh-CN.json` / `en.json`（两侧键必须对齐） |
-| `tools/` | 浏览器验收工具（见下） |
+| `src/lib/motion.ts` | **动效运行时**：令牌镜像、reduced-motion 判定、motion-v 弹簧预设、auto-animate 配置、滚动进场 |
+| `src/styles/serata/` | 设计层：`tokens.css` 令牌、`base.css` 基元、`motion.css` 动效原语、`emby-bridge.css` 老页面换肤桥 |
+| `src/api/`、`src/mocks/` | API 客户端（含 `api/toast.ts` 全局 toast）与 MSW 假数据 |
+| `src/i18n/locales/` | `zh-CN.json` / `en.json`（两侧键必须对齐，**由 Lead 独占维护**） |
+| `tools/` | 浏览器验收与依赖探针（见下） |
 | `../docs/adr/`、`../docs/spec/` | 架构决策与规格 |
 
 ## 写前端时的硬规矩
@@ -63,6 +68,14 @@ pnpm dev          # http://localhost:5173
 6. **焦点环要 `!important` + `box-shadow` 双保险**：老主题的 `outline:0!important` 会吃掉单层 outline。
 7. **`prefers-reduced-motion` 下自动轮转初始暂停**，但仍允许用户手动开启。
 8. **每个设置项必须有读取方**（见 ADR-0013）：只写进 localStorage 而没人读的开关等于骗人，不加。
+9. **弹层不许再手搓**：凡是要 Esc / 点外关闭 / 焦点陷阱 / 读屏隔离的浮层，一律用 `components/ui/SSheet.vue`。
+   手搓 `v-if` 遮罩必然丢掉焦点管理和滚动锁定——旧 `SheetMenu`/`ItemMenuSheet`/`EmbySelect` 三处就是这么丢的。
+10. **动效类名只从 `motion.css` 取**，组件里不许再写 `@keyframes`、裸 `ms`、裸 `cubic-bezier`；时长/缓动只认 `--s-dur-*` / `--s-ease-*`。
+11. **退出必须比进场快**：进场 `--s-ease-spring`，退出 `--s-ease-exit` + `--s-dur-exit`。
+12. **JS 动画（motion-v / auto-animate）动手前必须过 `useReducedMotionSafe()`**；`reduce` 时**完全不位移**（不是"快一点"）。
+13. **弹层底色不许硬编码**：旧实现写死 `rgb(40,40,43)`，浅色模式下就是一块黑方块。一律 `--s-raised` / `--s-text-1`。
+
+三层动效各司其职（详见契约第 5 节）：**CSS** 管弹层/toast 进出与悬停微状态，**motion-v** 管滚动进场与手势编排，**auto-animate** 管列表增删重排。
 
 ## 浏览器验收（`tools/`）
 
@@ -79,6 +92,47 @@ node tools/cdp.mjs tools/probe-after-move.mjs
 探针脚本默认导出 `async (cdp) => result`，可用 `cdp.send / eval / hover / click / screenshot / wait`。
 截图输出到 `tools/shots/`（同样不进仓库）。
 
+### 写探针的 9 个坑（都是真金白银踩出来的，别重复踩）
+
+1. **`cdp.eval` 会把源码包进 `(async () => { … })()`**，所以脚本里**必须写 `return`**，
+   最后一句表达式不会自动成为返回值。
+2. **不要 `await import('/src/router/index.ts')` 来做导航**：Vite 的 HMR query 会让它变成
+   **另一个 router 实例**，`push()` 只改 URL、App 不跳转（现象是"URL 变了但页面没动"，很容易误判成 bug）。
+   要点真实的 tab / 链接。
+3. **在 `about:blank` 上碰 `localStorage` 或相对 import 会抛 `SecurityError`**，必须先
+   `Page.navigate` 到 `http://localhost:5173` 再操作。
+4. **后台标签页会节流定时器**，导致 `awaitPromise` 一路卡到 45s 超时。开头先 `Page.bringToFront`。
+5. **PowerShell 的 `>` 重定向产出的是 UTF-16**，Node 解析不了。要落盘就
+   `Get-Content -Raw | Set-Content -Encoding utf8`，或者直接用 `write` 工具。
+6. **验 `prefers-reduced-motion` 要用 CDP 域、并且必须 reload**：
+   ```js
+   await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+   await cdp.send('Page.reload')
+   ```
+   验完用 `value: ''` 清掉，否则后续断言全在 reduce 模式下跑。
+7. **多人并行验收必须分端口 + 分 profile**：`cdp.mjs` 认 `process.env.CDP_PORT`（默认 9222），
+   每次运行用 `/json/new` 开独立标签页，**页面状态互不干扰**；
+   但**同一个 `--user-data-dir` 的 localStorage 是跨标签页共享的**（主题、登录态、`serata.homescreenSettings`），
+   共用 profile 会互相翻主题、互相踢登录态。约定：`CDP_PORT=922x` 配 `scratch/cdp/prof-<name>`。
+8. **永远不要 `Get-Process msedge | Stop-Process -Force`**：那会把**所有人**的浏览器一起杀掉
+   （已经发生过一次，4 个人的验收被中断）。要清自己的只能按 profile 过滤。
+9. **不要用 `await import('/src/composables/xxx.ts')` 去驱动 UI 状态**：它会拿到**另一个模块实例**
+   （`setMode('light')` 会写进 localStorage 但 `<html>` 类名纹丝不动，看起来像"主题切换坏了"）。
+   这跟第 2 条同源。要切主题就点顶栏那个真实的「切换深浅模式」按钮。
+   ⚠️ 反例：`await import('/src/api/toast.ts')` 是**可以**的（单例 manager 会被 Provider 共享），
+   所以这条不是"禁止 import"，而是"驱动 UI 状态必须走真实控件，别猜哪个模块是单例"。
+
+### 工具脚本的落位规则
+
+Node 解析裸包名是**相对导入文件所在目录**的，所以任何 `import 'vue'` / `import 'motion-v'` 的脚本
+**必须放在 `web/` 之下**（例如 `web/tools/`）。放在仓库外的 `scratch/` 里会直接
+`ERR_MODULE_NOT_FOUND`——这不是依赖没装，是解析基准不对。
+
+`tools/audit-roots.mjs` 是静态审计：数每个 `.vue` 的**模板根节点数量**。
+`<RouterView>` 外面套 `<Transition>` 要求被包住的组件**运行时有且只有一个根元素**，
+多根会让 Vue 告警且**转场静默失效**（不报错、只是不生效，最容易误判成"改了没用"）。
+现状：28 个 `.vue` 里只有 `LoginView.vue` 是 4 根，所以 App.vue 的裸分支（login/play）不套转场。
+
 ## 已知坑
 
 - **搬目录后依赖会废掉**：pnpm 在 Windows 上给 `node_modules` 建的是**绝对路径 junction**，
@@ -87,3 +141,15 @@ node tools/cdp.mjs tools/probe-after-move.mjs
 - **别把 `.cdp-profile/`、`tools/shots/`、`dist/` 放进 watcher 视野**：这些目录里有被锁定的文件，
   watcher 会持续报 EBUSY 把 dev server 拖崩（`vite.config.ts` 的 `server.watch.ignored` 已排除）。
 - **`web/` 之外是后端**：`src/`、`MediaBrowser.*`、`Emby.Server.Implementations/`、`tests/`、`deploy/` 不归前端改。
+- **reka-ui 的 `DialogContent` 必须配 `DialogTitle`**：Radix 血统要求 Dialog 有可访问标题，缺失会报警。
+  `SSheet.vue` 总是渲染一个 `VisuallyHidden` 的 `DialogTitle`（`title` prop 只做可访问名，**不渲染可见标题**），
+  所以不要绕过 SSheet 直接用 `DialogContent`。
+- **装了 `motion-v` 就等于给全仓原生元素加了一层 Motion prop 类型约束**。证据：
+  `node_modules/motion-v/dist/es/types/instance.d.ts:2-4` 里的
+  `declare module '@vue/runtime-dom' { interface HTMLAttributes extends Omit<Options, …> {} }`。
+  于是任何 `<div layout="vertical">` 这种**从真实站 DOM dump 抄下来的历史属性**都会被按 Motion 的
+  `layout?: boolean | 'position' | 'size' | 'preserve-aspect'` 检查而编译失败（`TS2322`）——与你改没改那行无关。
+  当前波及面已清零：全仓只有 `LibraryView.vue` 两处死 `layout=` 属性，已删，语义由 `data-virtualscrolllayout` 承载
+  （CSS 侧只认后者，`Select-String '\[layout'` 在 `assets/emby495/*.css` 零命中）。
+  以后往老页面抄 DOM 时，**不要抄 `layout` / `initial` / `animate` / `exit` / `variants` / `transition` /
+  `whileHover` / `whileTap` / `drag` 这类与 Motion 同名的裸属性**；需要保留语义就写成 `data-*`。

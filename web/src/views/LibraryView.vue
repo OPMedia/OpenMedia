@@ -13,11 +13,39 @@ import type { BaseItemDto } from '@/api/types'
 import { getItems, getGenres, getItem, imageUrl } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
+import SSheet from '@/components/ui/SSheet.vue'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
+import { flipConfig, useReducedMotionSafe } from '@/lib/motion'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { t } = useI18n()
+
+/** 列表 FLIP：JS 动画动手前必须先问 reduced-motion（铁律 16），reduce 时 duration=0 完全不位移 */
+const reducedMotion = useReducedMotionSafe()
+const listFlip = computed(() => flipConfig(reducedMotion.value))
+
+/**
+ * 面板级几何必须走 content-style，不能写在 <style scoped> 里：
+ * SSheet 的模板根是 fragment（scrim + panel），父视图的 scoped data-v **落不到面板上**
+ * （实测面板只有 SSheet 自己的 data-v-3843251c，没有视图的 data-v-7d745af8），
+ * 所以视图里的 `.dialog {...}` 是死代码；content-style 走 :style 内联，天然最高优先级。
+ *
+ * ① center 变体是 inset:0 + margin:auto：对 width/height:auto 的弹层会把它拉伸成 92vw×84vh
+ *    （实测 1327×758），给 fit-content 才是「按内容尺寸居中」（旧实现：筛选 877×535、视图设置 509×179）。
+ * ② 排序 actionSheet 旧实现是水平居中（1440 视口下 x=651、宽 137），而 pop 变体是右上角（x=1289）；
+ *    左右 inset 归零 + margin-inline:auto 拉回居中，纵向 top:58px 与旧 4em 等价、不动。
+ */
+const CENTER_PANEL_STYLE = { width: 'fit-content', height: 'fit-content' }
+const SORT_PANEL_STYLE = {
+  insetInlineStart: '0',
+  insetInlineEnd: '0',
+  marginInline: 'auto',
+  width: 'fit-content',
+  height: 'fit-content',
+  '--s-pop-origin': 'top center',
+}
 
 const PAGE_SIZE = 60
 
@@ -246,22 +274,23 @@ function filterQuery(): Record<string, string> {
         <!-- 工具行(真实站 itemsViewSettingsContainer) -->
         <div class="flex align-items-center focuscontainer-x itemsViewSettingsContainer padded-bottom">
           <div class="listTotalRecordCount">{{ t('library.total', { count: total }) }}</div>
-          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnSort raised raised-mini listTextButton-autohide emby-button emby-button-focusscale" title="排序" @click="sortMenuOpen = true">
+          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnSort s-press raised raised-mini listTextButton-autohide emby-button emby-button-focusscale" title="排序" @click="sortMenuOpen = true">
             <i class="md-icon button-icon button-icon-left autortl">{{ ICON_SORT }}</i>
             <span class="emby-button-text btnSortText">{{ SORT_LABELS[sortKey] ?? '标题' }}</span>
             <i class="md-icon btnSortIcon button-icon button-icon-right">{{ sortDesc ? SORT_ICON.desc : SORT_ICON.asc }}</i>
           </button>
-          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnFilter fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="过滤器" @click="filterOpen = true">
+          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnFilter s-press fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="过滤器" @click="filterOpen = true">
             <i class="md-icon button-icon">{{ ICON_FILTER }}</i>
           </button>
-          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnViewSettings fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="设置" @click="viewSettingsOpen = true">
+          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnViewSettings s-press fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="设置" @click="viewSettingsOpen = true">
             <i class="md-icon button-icon">{{ ICON_SETTINGS }}</i>
           </button>
         </div>
 
         <!-- 网格 / 列表(视图设置切换)
              注:真实站 itemsContainer 带 virtualItemsContainer/virtual-scroller 类,但那套布局由
-             其 JS 虚拟滚动引擎逐项写入 inline 尺寸;静态套用会塌成单列,故此处只保留基础容器类 -->
+             其 JS 虚拟滚动引擎逐项写入 inline 尺寸;静态套用会塌成单列,故此处只保留基础容器类
+             动效:增删/重排走 auto-animate FLIP(铁律 16:先问 reduced-motion,reduce 时 duration=0) -->
         <div v-if="loading" class="page-loading">{{ t('common.loading') }}</div>
 
         <!-- 类型 / 标签 / 播出平台 tab:chip 网格(真实站 /tv 页同款) -->
@@ -273,7 +302,7 @@ function filterQuery(): Record<string, string> {
           <div v-else class="filterChips padded-bottom-page">
             <button
               v-for="c in chipItems" :key="c.Id" type="button"
-              class="filterChip raised raised-mini emby-button emby-button-focusscale"
+              class="filterChip s-press raised raised-mini emby-button emby-button-focusscale"
               @click="chipTab.source === 'genres'
                 ? router.push({ name: 'library', params: { id: String(route.params.id) }, query: { genre: c.Name } })
                 : router.push({ name: 'library', params: { id: String(route.params.id) }, query: { studio: c.Name } })"
@@ -294,19 +323,21 @@ function filterQuery(): Record<string, string> {
         <div v-else-if="!items.length" class="page-loading">{{ t('library.empty') }}</div>
         <div
           v-else-if="viewMode === 'grid'"
+          v-auto-animate="listFlip"
           class="itemsContainer vertical-wrap padded-bottom-page focusable focuscontainer-x focuscontainer-y navout-up navout-x"
-          layout="vertical-grid" data-virtualscrolllayout="vertical-grid"
+          data-virtualscrolllayout="vertical-grid"
         >
           <EmbyCard v-for="item in items" :key="item.Id" :item="item" shape="portrait" />
         </div>
         <div
           v-else
+          v-auto-animate="listFlip"
           class="itemsContainer vertical-list padded-bottom-page focusable focuscontainer-x focuscontainer-y navout-up navout-x"
-          layout="vertical" data-virtualscrolllayout="vertical"
+          data-virtualscrolllayout="vertical"
         >
           <div
             v-for="item in items" :key="item.Id"
-            class="listItem listItem-autoactive itemAction listItemCursor listItem-hoverable"
+            class="listItem s-lift listItem-autoactive itemAction listItemCursor listItem-hoverable"
             @click="router.push({ name: 'item', params: { id: item.Id } })"
           >
             <div class="listItem-content listItem-content-margin listItem-content-bg listItemContent-touchzoom listItem-border listItem-border-offset listItem-border-offset-portrait">
@@ -327,17 +358,23 @@ function filterQuery(): Record<string, string> {
         </div>
 
         <div v-if="pageCount > 1 && !loading" class="pager">
-          <button :disabled="page <= 1" @click="page--">‹</button>
+          <button class="s-press" :disabled="page <= 1" @click="page--">‹</button>
           <span class="cur">{{ page }} / {{ pageCount }}</span>
-          <button :disabled="page >= pageCount" @click="page++">›</button>
+          <button class="s-press" :disabled="page >= pageCount" @click="page++">›</button>
         </div>
       </div>
     </div>
 
-    <!-- 排序(actionSheet;真实站标题"排序："+ 当前项勾选) -->
-    <Teleport to="body">
-      <div v-if="sortMenuOpen" class="dialogScrim" @click.self="sortMenuOpen = false">
-        <div class="dialog dialog-animated actionSheet opened sortSheet" @click.stop>
+    <!-- 排序(actionSheet;真实站标题"排序："+ 当前项勾选)
+         行为(焦点陷阱/Esc/点外关闭/滚动锁定/进出动效)全部由 SSheet 提供,这里只管长相 -->
+    <SSheet
+      :open="sortMenuOpen"
+      variant="pop"
+      :title="t('library.sortTitle')"
+      panel-class="dialog actionSheet sortSheet"
+      :content-style="SORT_PANEL_STYLE"
+      @close="sortMenuOpen = false"
+    >
           <p class="actionSheetTitle actionSheetTitle-hideNonFullscreen secondaryText actionSheetTitle-small">{{ t('library.sortTitle') }}</p>
           <div class="actionSheetScroller focuscontainer-x actionSheetScroller-withheader actionSheetScroller-padding-inline emby-scroller dialog-scrollY scrollY scrollY-mini scrollFrameY flex-direction-column">
             <div class="actionsheetScrollSlider scrollSlider flex flex-direction-column itemsContainer actionSheetScroller-padding-top actionSheetScroller-padding-bottom vertical-list scrollSliderY">
@@ -357,20 +394,23 @@ function filterQuery(): Record<string, string> {
               </button>
             </div>
           </div>
-        </div>
-      </div>
-    </Teleport>
+    </SSheet>
 
     <!-- 筛选(formDialog .filterMenuDialog;真实站分组:播放状态/收藏/类型/年份/工作室) -->
-    <Teleport to="body">
-      <div v-if="filterOpen" class="dialogScrim centered" @click.self="filterOpen = false">
-        <div class="dialog dialog-animated formDialog filterMenuDialog opened" @click.stop>
+    <SSheet
+      :open="filterOpen"
+      variant="center"
+      :title="t('library.filterTitle')"
+      panel-class="dialog formDialog filterMenuDialog"
+      :content-style="CENTER_PANEL_STYLE"
+      @close="filterOpen = false"
+    >
           <div class="formDialogHeader">
-            <button type="button" class="dialogCloseButton hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" tabindex="-1" title="关闭" @click="filterOpen = false">
+            <button type="button" class="dialogCloseButton s-press hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" tabindex="-1" title="关闭" @click="filterOpen = false">
               <i class="md-icon">&#xE5CD;</i>
             </button>
             <h3 class="formDialogHeaderTitle">{{ t('library.filterTitle') }}</h3>
-            <button v-if="hasFilter" type="button" class="button-link filterMenuClearButton emby-button emby-button-focusscale" @click="clearFilter">{{ t('library.clearFilter') }}</button>
+            <button v-if="hasFilter" type="button" class="button-link s-press filterMenuClearButton emby-button emby-button-focusscale" @click="clearFilter">{{ t('library.clearFilter') }}</button>
           </div>
           <div class="formDialogContent scrollY">
             <div class="filterGroup">
@@ -394,7 +434,7 @@ function filterQuery(): Record<string, string> {
               <div class="filterChips">
                 <button
                   v-for="g in genresList.slice(0, 24)" :key="g.Id" type="button"
-                  class="filterChip raised raised-mini emby-button emby-button-focusscale"
+                  class="filterChip s-press raised raised-mini emby-button emby-button-focusscale"
                   :class="{ 'filterChip-on': filterGenres.includes(g.Name) }"
                   @click="toggleIn(filterGenres, g.Name)"
                 >{{ g.Name }}</button>
@@ -405,7 +445,7 @@ function filterQuery(): Record<string, string> {
               <div class="filterChips">
                 <button
                   v-for="s in studiosList" :key="s" type="button"
-                  class="filterChip raised raised-mini emby-button emby-button-focusscale"
+                  class="filterChip s-press raised raised-mini emby-button emby-button-focusscale"
                   :class="{ 'filterChip-on': filterStudios.includes(s) }"
                   @click="toggleIn(filterStudios, s)"
                 >{{ s }}</button>
@@ -416,7 +456,7 @@ function filterQuery(): Record<string, string> {
               <div class="filterChips">
                 <button
                   v-for="y in yearsList" :key="y" type="button"
-                  class="filterChip raised raised-mini emby-button emby-button-focusscale"
+                  class="filterChip s-press raised raised-mini emby-button emby-button-focusscale"
                   :class="{ 'filterChip-on': filterYears.includes(y) }"
                   @click="toggleIn(filterYears, y)"
                 >{{ y }}</button>
@@ -424,18 +464,21 @@ function filterQuery(): Record<string, string> {
             </div>
           </div>
           <div class="formDialogFooter">
-            <button type="button" class="raised button-submit formDialogFooterItem emby-button emby-button-focusscale" @click="applyFilter">{{ t('library.done') }}</button>
+            <button type="button" class="raised button-submit s-press formDialogFooterItem emby-button emby-button-focusscale" @click="applyFilter">{{ t('library.done') }}</button>
           </div>
-        </div>
-      </div>
-    </Teleport>
+    </SSheet>
 
     <!-- 视图设置(dialog;真实站:视图 + 图像大小 + 完成) -->
-    <Teleport to="body">
-      <div v-if="viewSettingsOpen" class="dialogScrim centered" @click.self="viewSettingsOpen = false">
-        <div class="dialog dialog-animated formDialog opened" @click.stop>
+    <SSheet
+      :open="viewSettingsOpen"
+      variant="center"
+      :title="t('library.viewSettings')"
+      panel-class="dialog formDialog"
+      :content-style="CENTER_PANEL_STYLE"
+      @close="viewSettingsOpen = false"
+    >
           <div class="formDialogHeader">
-            <button type="button" class="dialogCloseButton hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" tabindex="-1" title="关闭" @click="viewSettingsOpen = false">
+            <button type="button" class="dialogCloseButton s-press hide-mouse-idle-tv dialogHeaderButton paper-icon-button-light emby-button-focusscale" tabindex="-1" title="关闭" @click="viewSettingsOpen = false">
               <i class="md-icon">&#xE5CD;</i>
             </button>
             <h3 class="formDialogHeaderTitle">{{ t('library.viewSettings') }}</h3>
@@ -459,46 +502,38 @@ function filterQuery(): Record<string, string> {
             </div>
           </div>
           <div class="formDialogFooter">
-            <button type="button" class="raised button-submit formDialogFooterItem emby-button emby-button-focusscale" @click="viewSettingsOpen = false">{{ t('library.done') }}</button>
+            <button type="button" class="raised button-submit s-press formDialogFooterItem emby-button emby-button-focusscale" @click="viewSettingsOpen = false">{{ t('library.done') }}</button>
           </div>
-        </div>
-      </div>
-    </Teleport>
+    </SSheet>
   </main>
 </template>
 
 <style scoped>
-/* 分页(虚拟滚动 v1 缺位,先以分页兜底;样式贴合 4.9.5 胶囊) */
+/* 分页(虚拟滚动 v1 缺位,先以分页兜底;胶囊版式贴合 4.9.5,取色改走 tokens——原 rgba(62,62,62,.7)
+   是 Emby 深色主题抄死的值,浅色下深灰块突兀、.cur 的白 60% 直接看不见) */
 .pager { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 1em 0 2em; }
 .pager button {
-  padding: .66em 2ch; background: rgba(62, 62, 62, .7); border: 0;
-  border-radius: 100em; color: rgba(255, 255, 255, .87); cursor: pointer; font-size: 110%;
+  padding: .66em 2ch; background: var(--s-raised); border: 1px solid var(--s-line);
+  border-radius: 100em; color: var(--s-text-1); cursor: pointer; font-size: 110%;
 }
 .pager button:disabled { opacity: .4; cursor: default; }
-.pager .cur { color: rgba(255, 255, 255, .6); font-size: 14px; }
+.pager .cur { color: var(--s-text-2); font-size: 14px; }
 
-/* 弹层遮罩 + 筛选/视图设置本地补充(本体样式走 4.9.5 dialoghelper/formdialog) */
-.dialogScrim {
-  position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0, 0, 0, .5);
-  display: flex; align-items: flex-start; justify-content: center;
-}
-.dialogScrim.centered { align-items: center; }
-.dialogScrim .dialog.actionSheet,
-.dialogScrim .dialog.formDialog {
-  background: rgb(40, 40, 43);
-  color: rgba(255, 255, 255, .87);
-  border-radius: .9em;
-  max-height: 84vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.dialogScrim .formDialogContent { padding: 0 1.5em 1em; overflow-y: auto; }
+/* 弹层的遮罩/底色/圆角/层级/进出动效已统一交给 SSheet(tokens + motion.css 取类名)，
+   本地只保留原 .dialogScrim 规则里属于「长相」的部分：formDialog 内容区的内距与滚动。
+   注意：面板本身（.dialog）的几何不能写在这里——它是 SSheet 渲染的 fragment 根，
+   拿不到本视图的 scoped data-v，面板级样式请走 :content-style（见 script 里的常量说明） */
+.dialog .formDialogContent { padding: 0 1.5em 1em; overflow-y: auto; }
+
+/* 排序 actionSheet 的横向居中：已改为 :content-style（见 script 里 SORT_PANEL_STYLE 的说明）——
+   面板拿不到本视图的 scoped data-v，写在这里是死代码 */
+
 .filterGroup { margin-bottom: 1.2em; }
 .filterRow { display: flex; align-items: center; gap: .6em; padding: .35em 0; }
 .filterChips { display: flex; flex-wrap: wrap; gap: .5em; }
-.filterChip { padding: .4em 1em; background: rgba(255, 255, 255, .12); border: 0; border-radius: 100em; color: inherit; cursor: pointer; font-size: 95%; }
-.filterChip-on { background: var(--theme-primary-color); color: #fff; }
-.sortSheet { margin-top: 4em; max-height: 70vh; }
+/* 未选中 = 抬升面 + 发丝边(原「白 12% 叠浅底」会与底色糊成一片,只剩文字飘着)；
+   选中 = 珊瑚底 + 墨字(5.42:1,达 WCAG AA；原珊瑚 + 白字只有 3.01:1 不达标) */
+.filterChip { padding: .4em 1em; background: var(--s-hover); border: 1px solid var(--s-line); border-radius: 100em; color: var(--s-text-1); cursor: pointer; font-size: 95%; }
+.filterChip-on { background: var(--s-accent); color: var(--s-accent-ink); border-color: transparent; }
+.filterChip-on:hover { background: var(--s-accent-hi); }
 </style>

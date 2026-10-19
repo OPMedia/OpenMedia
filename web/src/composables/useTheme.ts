@@ -6,9 +6,10 @@
  * 由 main.ts 在挂载前调用（index.html 里还有一段内联脚本兜住首次绘制前的闪白）。
  *
  * 三档：dark（默认，品牌是"夜晚"）/ light / system。
- * 切换时做两件事：
+ * 切换时做三件事：
  *   1. 给 <html> 挂 theme-dark / theme-light（新设计层 tokens 靠它取值）；
- *   2. 按需注入 emby495 的浅色主题 CSS（老页面靠它换肤，深色主题是静态加载的）。
+ *   2. 按需注入 emby495 的浅色主题 CSS（老页面靠它换肤，深色主题是静态加载的）；
+ *   3. 用 View Transition 包住这次 DOM 变更，整页几十个 HSL 变量不会硬闪（见 withViewTransition）。
  */
 import { computed, ref, watch } from 'vue'
 
@@ -77,9 +78,48 @@ function apply(): void {
   if (theme === 'light') ensureLegacyLightStyle()
   else removeLegacyLightStyle()
 
-  // 移动端浏览器地址栏跟随主题
+  // 移动端浏览器地址栏跟随主题。
+  // ⚠️ 这里**必须是字面量**：<meta name="theme-color"> 只接受具体颜色，不解析 var()。
+  //    两个值分别等于深色 --s-bg (#0A0C18) 与浅色画布 (#F7F5F2)。
+  //    这是全项目唯一被批准的裸色值（另一个是 index.html 里的首帧防闪内联脚本），
+  //    改 tokens 里的 --s-bg / 浅色画布时必须同步改这里 + index.html。
   ensureMetaThemeColor().content = theme === 'dark' ? '#0A0C18' : '#F7F5F2'
   root.dataset.serataTheme = theme
+}
+
+/** View Transitions 的最小类型（lib.dom 尚未覆盖到所有 TS 版本） */
+type ViewTransitionCapableDocument = Document & {
+  startViewTransition?: (callback: () => void) => { finished: Promise<void> }
+}
+
+/**
+ * 用 View Transition 包住一次 DOM 变更 —— 目前只给主题切换用。
+ *
+ * 为什么主题切换值得一次页面快照：整页几十个 HSL 变量同时翻转，硬切会"闪"；
+ * 而两套主题直接对叠又会糊成中间色，所以 motion.css 里让老快照保持不透明、新快照淡入。
+ *
+ * 三个前置条件不满足就**直接切**（不做快照，不做动画）：
+ *   ① 浏览器不支持 startViewTransition；② 用户要求减少动效；③ 已经有一个转场在跑（会抛异常）。
+ */
+function withViewTransition(mutate: () => void): void {
+  if (typeof document === 'undefined') return
+  const doc = document as ViewTransitionCapableDocument
+  const reduced =
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+
+  if (reduced || typeof doc.startViewTransition !== 'function') {
+    mutate()
+    return
+  }
+
+  try {
+    doc.startViewTransition(mutate)
+  } catch {
+    // 并发转场/快照失败：退化成硬切，绝不能因为动效把主题切换本身搞坏
+    mutate()
+  }
 }
 
 let mediaQuery: MediaQueryList | null = null
@@ -97,7 +137,9 @@ export function initTheme(): void {
     mediaQuery.addEventListener('change', mediaHandler)
   }
 
-  watch(resolved, apply, { immediate: false })
+  // 首帧那次 apply() 已在上面同步跑完（首屏绝不允许有转场）；
+  // 之后的切换（用户点主题按钮 / 系统主题变化）才用 View Transition 包一层。
+  watch(resolved, () => withViewTransition(apply), { immediate: false })
 }
 
 function setMode(next: ThemeMode): void {

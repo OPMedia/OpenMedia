@@ -396,5 +396,12 @@
     "loading": "Loading…",
     "retry": "Retry",
     "error": "Something went wrong"
+  },
+  "ui": {
+    "dialog": "Dialog",
+    "close": "Close",
+    "dismiss": "Dismiss notification",
+    "notifications": "Notifications",
+    "more": "More"
   }
 }

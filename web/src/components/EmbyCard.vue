@@ -170,7 +170,7 @@ function onTouchEnd() {
 
 <template>
   <div
-    class="card s-card"
+    class="card s-card s-press"
     :class="[
       isBackdrop ? 'backdropCard' : 'portraitCard',
       isHoriz ? 'card-horiz portraitCard-horiz' : '',
@@ -234,12 +234,12 @@ function onTouchEnd() {
                   @click.stop="menuOpen = true">&#xe5d3;</button>
         </div>
       </div>
-      <div class="cardText cardText-first cardText-first-padded">
+      <div class="cardText cardText-first cardText-first-padded s-card-info">
         <button type="button" :title="item.Name" class="cardMediaInfoItem itemAction textActionButton cardTextActionButton emby-button button-link" @click="open">
           {{ item.Name }}
         </button>
       </div>
-      <div v-if="subtitle" class="cardText cardText-secondary">
+      <div v-if="subtitle" class="cardText cardText-secondary s-card-info">
         <button type="button" class="cardMediaInfoItem itemAction textActionButton cardTextActionButton emby-button button-link" @click="open">
           {{ subtitle }}
         </button>
@@ -267,31 +267,61 @@ function onTouchEnd() {
   filter: blur(12px);
   transition:
     opacity var(--s-dur-slow) var(--s-ease-std),
-    filter var(--s-dur-slow) var(--s-ease-std);
+    filter var(--s-dur-slow) var(--s-ease-std),
+    transform var(--s-dur-slow) var(--s-ease-std);
 }
 .s-card-img.is-loaded {
   filter: blur(0);
 }
 
-/* 悬停/按下的位移挂在 .cardBox 上：.card 根节点里还挂着 ItemMenuSheet，
-   给根节点加 transform 会变成它的包含块，可能顶掉浮层的定位 */
+/* 悬停位移挂在 .cardBox 上；按下回弹走 motion.css 的 .s-press（挂在根节点）。
+   ItemMenuSheet 已 Teleport 到 body，根节点带 transform 不会变成它的包含块。 */
 .s-card-box {
   transition: transform var(--s-dur-base) var(--s-ease-std);
 }
 
-/* 按下回弹（触屏同样生效，替代原 .cardBox-touchzoom 的 600ms 放大） */
-.s-card:active > .s-card-box {
-  transform: scale(0.985);
-  transition-duration: var(--s-dur-instant);
+/* 信息层（片名 / 副标题）：悬停时轻微上浮，与海报放大拉出层次 */
+.s-card-info {
+  transition: transform var(--s-dur-base) var(--s-ease-spring);
 }
 
-/* 悬停只在真悬停设备上做：抬升 4px + 图片提亮 */
+/* 角标（未看计数）与悬浮按钮：悬停微反馈 */
+.s-card .cardCountIndicator {
+  transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+.s-card .cardOverlayButton-fab {
+  transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+
+/* 悬停编排（只在真悬停设备上做）：抬升 4px + 海报放大提亮 + 信息层上浮 + 角标/悬浮按钮微放大。
+   进度条（.itemProgressBar*）不动 —— 品牌渐变保持原样。 */
 @media (hover: hover) {
   .s-card:hover > .s-card-box {
     transform: translateY(-4px);
   }
   .s-card:hover .s-card-img {
     filter: brightness(1.08);
+    transform: scale(1.05);
+  }
+  .s-card:hover .s-card-info {
+    transform: translateY(-2px);
+  }
+  .s-card:hover .cardCountIndicator {
+    transform: scale(1.08);
+  }
+  .s-card .cardOverlayButton-fab:hover {
+    transform: scale(1.12);
+  }
+}
+
+/* 减少动效：位移一律归零（提亮这类非位移反馈保留，交互仍然可感知） */
+@media (prefers-reduced-motion: reduce) {
+  .s-card:hover > .s-card-box,
+  .s-card:hover .s-card-img,
+  .s-card:hover .s-card-info,
+  .s-card:hover .cardCountIndicator,
+  .s-card .cardOverlayButton-fab:hover {
+    transform: none;
   }
 }
 </style>

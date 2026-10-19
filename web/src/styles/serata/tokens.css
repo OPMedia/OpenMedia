@@ -69,10 +69,18 @@
   --s-dur-base: 220ms;
   --s-dur-slow: 320ms;
   --s-dur-xslow: 480ms;
+  /* 弹层/抽屉进场：位移比一般状态切换大，需要更长时间收敛 */
+  --s-dur-sheet: 280ms;
+  /* 退出统一更短更快 —— 离开不该让人等 */
+  --s-dur-exit: 180ms;
   --s-ease-std: cubic-bezier(0.2, 0, 0, 1);
   --s-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --s-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --s-transition: var(--s-dur-fast) var(--s-ease-std);
+  /* 交错进场：同容器内相邻子元素之间的延迟步长 */
+  --s-stagger-step: 45ms;
+  /* 交错序号封顶：长列表末尾不许等到天荒地老（消费方自行 clamp） */
+  --s-stagger-max: 8;
 
   /* ---------- 布局 ---------- */
   --s-header-h: 64px;
@@ -87,8 +95,10 @@
   --s-z-drawer: 60;
   --s-z-header: 70;
   --s-z-nav: 80;
-  --s-z-sheet: 90;
-  --s-z-toast: 100;
+  /* 弹层带：新层自己的模态栈，与壳层(≤80)隔开一档，避免和 header/drawer 抢层级。
+     旧实现(SheetMenu/ItemMenuSheet/EmbySelect)各写各的硬编码 999/1000，这里收敛成令牌。 */
+  --s-z-sheet: 1000;
+  --s-z-toast: 1200;
 
   /* ---------- 品牌常量（与深浅模式无关） ---------- */
   --s-night: #1b1f3b;
@@ -129,6 +139,10 @@ html.theme-dark {
   --s-accent-hi: #ec8a76;
   --s-accent-soft: rgba(224, 112, 90, 0.14);
   --s-accent-ink: #171a2e;
+
+  /* 语义状态色（toast / 表单校验）：只做状态指示条与图标，不做大面积填充 */
+  --s-ok: #6ccf65;
+  --s-danger: #f0736a;
 
   /* 主 CTA「纸与墨」 */
   --s-cta-bg: #fff8f1;
@@ -177,6 +191,10 @@ html.theme-light {
   --s-accent-soft: rgba(217, 96, 76, 0.12);
   --s-accent-ink: #171a2e;
 
+  /* 语义状态色：浅底上要压深一档才够对比度 */
+  --s-ok: #2f7d43;
+  --s-danger: #b5342a;
+
   --s-cta-bg: #171a2e;
   --s-cta-fg: #fff8f1;
   --s-cta-bg-hover: #232a45;
@@ -209,5 +227,9 @@ html.theme-dark {
     --s-dur-base: 1ms;
     --s-dur-slow: 1ms;
     --s-dur-xslow: 1ms;
+    --s-dur-sheet: 1ms;
+    --s-dur-exit: 1ms;
+    /* 交错延迟也必须归零，否则位移没了、元素还是一个一个蹦出来 */
+    --s-stagger-step: 0ms;
   }
 }

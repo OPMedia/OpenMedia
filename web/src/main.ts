@@ -12,9 +12,11 @@ import { i18n } from './i18n'
 import './assets/emby495'
 // 4.9.5 补充(logo 路径/搜索页容器/登录页 startup 形态)
 import './assets/login.css'
-// Serata 设计层(tokens → base → Emby 老页面换肤桥)。必须在所有 emby* CSS 之后加载
+// Serata 设计层(tokens → base → motion → Emby 老页面换肤桥)。必须在所有 emby* CSS 之后加载
 import './styles/serata/tokens.css'
 import './styles/serata/base.css'
+// 动效原语(关键帧 + reka data-state 动画 + Vue <Transition> 类族 + 交错进场)
+import './styles/serata/motion.css'
 import './styles/serata/emby-bridge.css'
 import { initTheme } from './composables/useTheme'
 

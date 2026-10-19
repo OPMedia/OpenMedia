@@ -13,7 +13,11 @@
  * - 抽屉：≥60em 且 docked 语境（库页 / 管理设置页）常驻；其余为覆盖式 translateX(-100% → 0)。
  *   关闭态用 visibility:hidden + inert 同时移出 tab 序列与无障碍树（靠 CSS 判断视口，不用 JS 探测宽度）。
  * - 选中竖条：单个绝对定位元素，只改 transform: translateY()（FLIP 思路），不做 top/left 动画。
- * - 折叠区：grid-template-rows 0fr → 1fr（高度动画只允许这一种写法）。
+ *   顶栏 tabs 的激活墨条同构（translate(x, y)），折叠区用 grid-template-rows 0fr → 1fr。
+ * - 页面转场：<RouterView v-slot> + <Transition name="s-page" mode="out-in">，
+ *   类族由 styles/serata/motion.css 提供（本文件不写 @keyframes / 裸 ms）。
+ * - 层级：抽屉 --s-z-drawer(60)、遮罩 --s-z-backdrop(40)、顶栏 --s-z-header(70)、
+ *   底栏 --s-z-nav(80)，弹层带 --s-z-sheet(1000) / toast --s-z-toast(1200) 在壳层之上。
  * - 顶栏：滚动 8px 后加玻璃底；向下滚隐藏、向上滚显现，只动 transform。
  */
 import { RouterView, useRoute, useRouter } from 'vue-router'
@@ -25,6 +29,9 @@ import type { BaseItemDto } from '@/api/types'
 import lockupDark from '@/assets/brand/lockup-on-dark.svg'
 import lockupLight from '@/assets/brand/lockup-on-light.svg'
 import SheetMenu from '@/components/SheetMenu.vue'
+import SToastHost from '@/components/ui/SToastHost.vue'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
+import { flipConfig, useReducedMotionSafe } from '@/lib/motion'
 import { useTheme } from '@/composables/useTheme'
 
 const auth = useAuthStore()
@@ -288,6 +295,15 @@ function toggleAllGroups(): void {
   userLibsOpen.value = !userLibsOpen.value
 }
 
+// ---------- 列表 FLIP（auto-animate）----------
+/**
+ * 侧栏库列表 / 管理分组 / 底部导航的增删重排走 FLIP。
+ * 铁律 16：JS 动画动手前必须先过 useReducedMotionSafe()——reduce 时 duration 直接压到 0，
+ * 不位移（auto-animate 自己也会忽略 reduced motion，这里是双保险）。
+ * 指令只在 mounted 读一次 options，所以这里取当次快照即可。
+ */
+const flipAnimOptions = flipConfig(useReducedMotionSafe().value)
+
 // ---------- 选中项竖条（FLIP：只动 transform） ----------
 const activeKey = computed(() => {
   const current = router.currentRoute.value
@@ -318,6 +334,8 @@ const indicatorStyle = computed<Record<string, string>>(() => ({
 async function syncIndicator(): Promise<void> {
   await nextTick()
   updateNavFades()
+  // 顶栏墨条与侧栏竖条在同一批时机（挂载/路由/视图列表/折叠/开抽屉/改窗口）重算
+  syncTabInk()
   const content = navContentEl.value
   if (!content) {
     indicatorVisible.value = false
@@ -340,6 +358,42 @@ async function syncIndicator(): Promise<void> {
     })
   }
 }
+
+// ---------- 顶栏 tabs 激活墨条（FLIP：只动 transform，横向滚动时跟着 tab 走） ----------
+const tabsEl = ref<HTMLElement | null>(null)
+const tabInkX = ref(0)
+const tabInkY = ref(0)
+const tabInkVisible = ref(false)
+/** 与旧 ::after 下划线同宽（16px） */
+const TAB_INK_W = 16
+
+/**
+ * 墨条与侧栏竖条同构：单个绝对定位元素，切换 tab 时只改 transform。
+ * 横向滚动条容器里用「视口差值 + scrollLeft」换算成内容坐标，滚动时墨条不会被落下。
+ */
+function syncTabInk(): void {
+  const nav = tabsEl.value
+  if (!nav) {
+    tabInkVisible.value = false
+    return
+  }
+  const navRect = nav.getBoundingClientRect()
+  const active = nav.querySelector<HTMLElement>('.s-tab.is-active')
+  // 移动端 tabs 是 display:none（量不到宽度），这里不写死视口判断，量不到就隐藏
+  if (!active || navRect.width === 0) {
+    tabInkVisible.value = false
+    return
+  }
+  const rect = active.getBoundingClientRect()
+  tabInkX.value = rect.left - navRect.left + nav.scrollLeft + rect.width / 2 - TAB_INK_W / 2
+  // 墨条底边离 tab 底边 3px（与旧 ::after 视觉一致）
+  tabInkY.value = rect.bottom - navRect.bottom - 5
+  tabInkVisible.value = true
+}
+
+const tabInkStyle = computed<Record<string, string>>(() => ({
+  transform: `translate(${tabInkX.value}px, ${tabInkY.value}px)`,
+}))
 
 // ---------- 抽屉长列表：只有真的还能滚，才显示那一侧的渐隐遮罩 ----------
 const navEl = ref<HTMLElement | null>(null)
@@ -523,7 +577,13 @@ onBeforeUnmount(() => {
 
 <template>
   <template v-if="isLoginRoute || isPlay">
-    <!-- 登录/播放页：全屏无壳（播放页 = body 直下 overlay） -->
+    <!--
+      登录/播放页：全屏无壳（播放页 = body 直下 overlay）。
+      刻意**不套** <Transition>：LoginView.vue 的模板是 4 个无条件根（div/header/main/div），
+      <Transition> 只接受单根子节点，套上去会告警 "expects exactly one child" 并静默失效。
+      播放页（VideoOsdView）虽然单根，但为它单独分一条分支不值得，登录页本来也不该有转场。
+      视图文件不在本任务写作用域内，所以在这里分流（完整根节点审计见交付说明）。
+    -->
     <RouterView />
   </template>
   <template v-else>
@@ -531,13 +591,17 @@ onBeforeUnmount(() => {
     <div class="backdropContainer"></div>
     <div class="backgroundContainer" :class="{ 'backgroundContainer-withdockeddrawer': isDocked }"></div>
 
-    <!-- 覆盖式抽屉遮罩（docked 语境在 ≥60em 由 CSS 隐藏） -->
-    <div
-      class="s-backdrop"
-      :class="{ 'is-open': overlayDrawerOpen, 'is-docked': isDocked }"
-      @click="closeDrawer"
-      aria-hidden="true"
-    ></div>
+    <!-- 覆盖式抽屉遮罩（docked 语境在 ≥60em 由 CSS 隐藏）；
+         进出场走 motion.css 的 s-scrim 类族（进场 --s-dur-base，退场 --s-dur-exit 更快） -->
+    <Transition name="s-scrim">
+      <div
+        v-if="overlayDrawerOpen"
+        class="s-backdrop"
+        :class="{ 'is-docked': isDocked }"
+        @click="closeDrawer"
+        aria-hidden="true"
+      ></div>
+    </Transition>
 
     <!-- 侧栏：库页/管理页 docked 常驻；其余覆盖式（<60em 一律覆盖式） -->
     <aside
@@ -638,7 +702,11 @@ onBeforeUnmount(() => {
                 </button>
                 <div id="s-group-userlibs" class="s-collapse" :class="{ 'is-open': userLibsOpen }">
                   <div class="s-collapse__inner">
-                    <div class="s-collapse__content" :inert="!userLibsOpen || undefined">
+                    <div
+                      class="s-collapse__content"
+                      :inert="!userLibsOpen || undefined"
+                      v-auto-animate="flipAnimOptions"
+                    >
                       <!-- 库行：只留文字，无图标（行高与对齐由 .s-nav__row 统一） -->
                       <button
                         v-for="lib in views"
@@ -683,7 +751,11 @@ onBeforeUnmount(() => {
                   :class="{ 'is-open': isAdminSectionOpen(section.title) }"
                 >
                   <div class="s-collapse__inner">
-                    <div class="s-collapse__content" :inert="!isAdminSectionOpen(section.title) || undefined">
+                    <div
+                      class="s-collapse__content"
+                      :inert="!isAdminSectionOpen(section.title) || undefined"
+                      v-auto-animate="flipAnimOptions"
+                    >
                       <button
                         v-for="item in section.items"
                         :key="item.label"
@@ -770,6 +842,7 @@ onBeforeUnmount(() => {
 
         <nav
           v-if="!isAdminContext && headerTabs.length"
+          ref="tabsEl"
           class="s-header__tabs s-scroll-x"
           :aria-label="t('shell.libraries')"
         >
@@ -782,6 +855,13 @@ onBeforeUnmount(() => {
             :aria-current="tab.active ? 'page' : undefined"
             @click="tab.route && router.push(tab.route)"
           >{{ tab.label }}</button>
+          <!-- 激活墨条：整条 tabs 共用一条，切换时只动 transform（不再每个 tab 各画一个 ::after） -->
+          <span
+            class="s-tabs__ink"
+            :class="{ 'is-visible': tabInkVisible }"
+            :style="tabInkStyle"
+            aria-hidden="true"
+          ></span>
         </nav>
 
         <div class="s-header__right">
@@ -834,76 +914,92 @@ onBeforeUnmount(() => {
       @pick="onUserMenuPick"
     />
 
-    <RouterView />
+    <!-- 路由转场：s-page 类族在 motion.css（进场淡入+上浮 --s-dur-slow，退场 --s-dur-fast 更快） -->
+    <RouterView v-slot="{ Component, route }">
+      <Transition name="s-page" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </Transition>
+    </RouterView>
 
-    <!-- 移动端底部导航（桌面端 CSS 隐藏，不用 JS 判断视口） -->
-    <nav class="s-bottom-nav" role="navigation" :aria-label="t('shell.nav')">
-      <button
-        type="button"
-        class="s-bottom-nav__item"
-        :class="{ 'is-active': bottomActive === 'home' }"
-        :aria-current="bottomActive === 'home' ? 'page' : undefined"
-        @click="router.push('/')"
+    <!-- 移动端底部导航（桌面端 CSS 隐藏，不用 JS 判断视口）；
+         进场走 motion.css 的 s-up 类族（底部弹层语义），列表 FLIP 走 auto-animate -->
+    <Transition name="s-up" appear>
+      <nav
+        class="s-bottom-nav"
+        role="navigation"
+        :aria-label="t('shell.nav')"
+        v-auto-animate="flipAnimOptions"
       >
-        <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 11.5 12 4l8 7.5" />
-          <path d="M6.5 10.8V20h11v-9.2" />
-        </svg>
-        <span class="s-bottom-nav__label">{{ t('app.home') }}</span>
-      </button>
-      <button
-        type="button"
-        class="s-bottom-nav__item"
-        :class="{ 'is-active': bottomActive === 'library' }"
-        :aria-current="bottomActive === 'library' ? 'page' : undefined"
-        @click="openDrawer"
-      >
-        <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3.5" y="4.5" width="7" height="15" rx="1.6" />
-          <rect x="13.5" y="4.5" width="7" height="15" rx="1.6" />
-        </svg>
-        <span class="s-bottom-nav__label">{{ t('shell.libraries') }}</span>
-      </button>
-      <button
-        type="button"
-        class="s-bottom-nav__item"
-        :class="{ 'is-active': bottomActive === 'search' }"
-        :aria-current="bottomActive === 'search' ? 'page' : undefined"
-        @click="router.push('/search')"
-      >
-        <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="11" cy="11" r="6.5" />
-          <path d="m16 16 4 4" />
-        </svg>
-        <span class="s-bottom-nav__label">{{ t('app.search') }}</span>
-      </button>
-      <button
-        type="button"
-        class="s-bottom-nav__item"
-        :class="{ 'is-active': bottomActive === 'favorites' }"
-        :aria-current="bottomActive === 'favorites' ? 'page' : undefined"
-        @click="router.push('/?tab=favorites')"
-      >
-        <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 20s-7.5-4.6-7.5-9.6A4.4 4.4 0 0 1 12 7.4a4.4 4.4 0 0 1 7.5 3c0 5-7.5 9.6-7.5 9.6Z" />
-        </svg>
-        <span class="s-bottom-nav__label">{{ t('app.favorites') }}</span>
-      </button>
-      <button
-        type="button"
-        class="s-bottom-nav__item"
-        :class="{ 'is-active': userMenuOpen }"
-        :aria-current="userMenuOpen ? 'page' : undefined"
-        @click="userMenuOpen = true"
-      >
-        <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="8.5" r="3.5" />
-          <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
-        </svg>
-        <span class="s-bottom-nav__label">{{ t('shell.me') }}</span>
-      </button>
-    </nav>
+        <button
+          type="button"
+          class="s-bottom-nav__item"
+          :class="{ 'is-active': bottomActive === 'home' }"
+          :aria-current="bottomActive === 'home' ? 'page' : undefined"
+          @click="router.push('/')"
+        >
+          <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 11.5 12 4l8 7.5" />
+            <path d="M6.5 10.8V20h11v-9.2" />
+          </svg>
+          <span class="s-bottom-nav__label">{{ t('app.home') }}</span>
+        </button>
+        <button
+          type="button"
+          class="s-bottom-nav__item"
+          :class="{ 'is-active': bottomActive === 'library' }"
+          :aria-current="bottomActive === 'library' ? 'page' : undefined"
+          @click="openDrawer"
+        >
+          <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="7" height="15" rx="1.6" />
+            <rect x="13.5" y="4.5" width="7" height="15" rx="1.6" />
+          </svg>
+          <span class="s-bottom-nav__label">{{ t('shell.libraries') }}</span>
+        </button>
+        <button
+          type="button"
+          class="s-bottom-nav__item"
+          :class="{ 'is-active': bottomActive === 'search' }"
+          :aria-current="bottomActive === 'search' ? 'page' : undefined"
+          @click="router.push('/search')"
+        >
+          <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+          <span class="s-bottom-nav__label">{{ t('app.search') }}</span>
+        </button>
+        <button
+          type="button"
+          class="s-bottom-nav__item"
+          :class="{ 'is-active': bottomActive === 'favorites' }"
+          :aria-current="bottomActive === 'favorites' ? 'page' : undefined"
+          @click="router.push('/?tab=favorites')"
+        >
+          <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 20s-7.5-4.6-7.5-9.6A4.4 4.4 0 0 1 12 7.4a4.4 4.4 0 0 1 7.5 3c0 5-7.5 9.6-7.5 9.6Z" />
+          </svg>
+          <span class="s-bottom-nav__label">{{ t('app.favorites') }}</span>
+        </button>
+        <button
+          type="button"
+          class="s-bottom-nav__item"
+          :class="{ 'is-active': userMenuOpen }"
+          :aria-current="userMenuOpen ? 'page' : undefined"
+          @click="userMenuOpen = true"
+        >
+          <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8.5" r="3.5" />
+            <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+          </svg>
+          <span class="s-bottom-nav__label">{{ t('shell.me') }}</span>
+        </button>
+      </nav>
+    </Transition>
   </template>
+
+  <!-- 全局 toast 宿主：挂在壳之外（第三个根节点），登录页/播放页也能弹 -->
+  <SToastHost />
 </template>
 
 <style scoped>
@@ -1080,6 +1176,7 @@ onBeforeUnmount(() => {
    顶栏 tabs（横向可滚，激活项珊瑚下划线）
    ============================================================ */
 .s-header__tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--s-sp-1);
@@ -1116,34 +1213,37 @@ onBeforeUnmount(() => {
   color: var(--s-text-1);
 }
 
-.s-tab.is-active::after {
-  content: '';
+/* 激活墨条：整条 tabs 共用一条，切换 tab 时用 transform 滑过去（与侧栏竖条同构 FLIP）。
+   只动 transform / opacity，不动 left/width。 */
+.s-tabs__ink {
   position: absolute;
-  left: 50%;
-  bottom: 3px;
+  left: 0;
+  bottom: 0;
   width: 16px;
   height: 2px;
   border-radius: var(--s-r-pill);
   background: var(--s-accent);
-  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--s-dur-base) var(--s-ease-std),
+    opacity var(--s-dur-fast) var(--s-ease-std);
+}
+
+.s-tabs__ink.is-visible {
+  opacity: 1;
 }
 
 /* ============================================================
    抽屉
    ============================================================ */
+/* 遮罩：只在抽屉真打开时由 <Transition name="s-scrim"> 挂载，
+   进出场全部走 motion.css 的 s-scrim 类族（进场 --s-dur-base / 退场 --s-dur-exit） */
 .s-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--s-z-nav);
+  z-index: var(--s-z-backdrop);
   background: var(--s-scrim-soft);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--s-dur-base) var(--s-ease-std);
-}
-
-.s-backdrop.is-open {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 /* docked 语境不需要遮罩（移动端仍需要，所以只在 ≥60em 关掉） */
@@ -1155,22 +1255,27 @@ onBeforeUnmount(() => {
 
 .s-drawer {
   position: fixed;
-  top: 0;
+  /* 覆盖式默认：抽屉层级(--s-z-drawer 60) 低于顶栏(--s-z-header 70)，
+     所以从顶栏下沿开始，不做"盖住顶栏"的假象；常驻侧栏在 ≥60em 由 .is-docked 回到 top:0 */
+  top: calc(var(--s-header-h) + env(safe-area-inset-top, 0px));
   bottom: 0;
   left: 0;
-  z-index: var(--s-z-sheet);
+  /* 壳层阶梯：遮罩 40 < 抽屉 60 < 顶栏 70 < 底栏 80；弹层带(1000)/toast(1200) 在壳层之上。
+     抽屉不能落在弹层带，否则用户菜单/toast 会被它盖住。 */
+  z-index: var(--s-z-drawer);
   display: flex;
   flex-direction: column;
   width: var(--s-drawer-w);
   box-sizing: border-box;
   background: var(--s-surface);
   border-inline-end: 1px solid var(--s-line);
-  /* 关闭态：位移出场 + visibility 兜底（后者把整棵子树移出 tab 序列与无障碍树） */
+  /* 关闭态：位移出场 + visibility 兜底（后者把整棵子树移出 tab 序列与无障碍树）。
+     退场必须比进场快（铁律 15）：进场 --s-dur-slow(320)，退场 --s-dur-exit(180)。 */
   transform: translateX(-100%);
   visibility: hidden;
   transition:
-    transform var(--s-dur-slow) var(--s-ease-std),
-    visibility 0s linear var(--s-dur-slow);
+    transform var(--s-dur-exit) var(--s-ease-exit),
+    visibility 0s linear var(--s-dur-exit);
   will-change: transform;
 }
 
@@ -1184,9 +1289,17 @@ onBeforeUnmount(() => {
 
 @media all and (min-width: 60em) {
   .s-drawer.is-docked {
+    top: 0;
     transform: translateX(0);
     visibility: visible;
     transition: none;
+  }
+}
+
+@media all and (max-width: 59.9375em) {
+  /* <60em 一律覆盖式（即使 JS 判成 docked，实际也是覆盖式），顶栏降为 sm 高度 */
+  .s-drawer {
+    top: calc(var(--s-header-h-sm) + env(safe-area-inset-top, 0px));
   }
 }
 
@@ -1195,9 +1308,27 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--s-sp-2);
   flex: none;
-  height: calc(var(--s-header-h) + env(safe-area-inset-top, 0px));
-  padding: env(safe-area-inset-top, 0px) var(--s-sp-4) 0;
+  /* 覆盖式默认：顶栏就在抽屉上方，头部只留关闭按钮（不重复顶栏的品牌），高度紧凑 */
+  height: 44px;
+  padding: 0 var(--s-sp-4);
   box-sizing: border-box;
+}
+
+/* 覆盖式抽屉不重复顶栏品牌（顶栏在页顶是透明的，重复会叠出两个 Serata） */
+.s-drawer .s-drawer__head .s-brand {
+  display: none;
+}
+
+/* 常驻侧栏：老页面左偏移已让开 248px，头部恢复品牌 + 与顶栏等高 */
+@media all and (min-width: 60em) {
+  .s-drawer.is-docked .s-drawer__head {
+    height: calc(var(--s-header-h) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) var(--s-sp-4) 0;
+  }
+
+  .s-drawer.is-docked .s-drawer__head .s-brand {
+    display: inline-flex;
+  }
 }
 
 .s-drawer__close {
@@ -1451,7 +1582,7 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: var(--s-z-header);
+    z-index: var(--s-z-nav);
     height: var(--s-bottom-nav-h);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     box-sizing: content-box;
@@ -1498,9 +1629,10 @@ onBeforeUnmount(() => {
     display: none;
   }
 
-  /* 移动端抽屉顶部对齐 sm 顶栏 */
-  .s-drawer__head {
-    height: calc(var(--s-header-h-sm) + env(safe-area-inset-top, 0px));
+  /* 移动端抽屉：顶边对齐 sm 顶栏（头部 44px 只留关闭按钮，品牌由顶栏负责），
+     底栏(--s-z-nav 80) 在层级上高于抽屉(--s-z-drawer 60)，底部让出底栏高度 */
+  .s-drawer {
+    padding-bottom: calc(var(--s-bottom-nav-h) + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>

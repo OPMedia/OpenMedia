@@ -20,12 +20,22 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { motion } from 'motion-v'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
 import type { BaseItemDto } from '@/api/types'
 import { getFavorites, getItems, getLatestItems, getNextUp, getUserViews } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
 import HomeHero from '@/components/home/HomeHero.vue'
 import { useHomeHero } from '@/composables/useHomeHero'
+import {
+  S_DUR,
+  S_EASE_CSS,
+  flipConfig,
+  riseVariants,
+  staggerContainer,
+  useReducedMotionSafe,
+} from '@/lib/motion'
 import markGradient from '@/assets/brand/mark-gradient.svg'
 
 const auth = useAuthStore()
@@ -243,7 +253,6 @@ async function load() {
   } finally {
     loading.value = false
     await nextTick()
-    if (!failed.value) entered.value = true
     syncAllTracks()
   }
 }
@@ -252,8 +261,42 @@ async function reload() {
   await Promise.allSettled([load(), heroReload()])
 }
 
-// ---------- 行入场：一次性错峰，只播一次（滚动不重播） ----------
-const entered = ref(false)
+// ---------- 行入场：滚入视口才播、交错一次、不重播（motion-v 变体，见 styles/serata/README §5） ----------
+const reduced = useReducedMotionSafe()
+/** IntersectionObserver 不可用时直接给终态 —— 内容绝不能停在 opacity 0 */
+const canObserve = typeof window !== 'undefined' && 'IntersectionObserver' in window
+
+/**
+ * 行容器变体：行壳淡入 + 子项交错（子项用 riseVariants 上浮）。
+ * reduced / 无 IO → 初始即终态，一次位移都不挂（铁律 16）。
+ */
+const rowVariants = computed(() => {
+  if (reduced.value || !canObserve) return { hidden: { opacity: 1 }, visible: { opacity: 1 } }
+  const { visible } = staggerContainer(reduced.value)
+  return {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { ...visible.transition, duration: S_DUR.slow / 1000, ease: S_EASE_CSS.std },
+    },
+  }
+})
+
+/** 卡片变体：时长/缓动显式走令牌镜像，不吃库默认值（铁律 14） */
+const cardVariants = computed(() => {
+  const v = riseVariants(reduced.value)
+  if (reduced.value) return v
+  return {
+    hidden: v.hidden,
+    visible: { ...v.visible, transition: { duration: S_DUR.slow / 1000, ease: S_EASE_CSS.std } },
+  }
+})
+
+/** 进场初始态：reduced / 无 IO 时直接从终态开始，等于完全不播 */
+const entranceInitial = computed(() => (reduced.value || !canObserve ? 'visible' : 'hidden'))
+
+/** 列表 FLIP：切库/刷新时行与卡片不硬跳；reduce 时 duration=0（双保险） */
+const flipOptions = computed(() => flipConfig(reduced.value))
 
 // ---------- 横向滚动 / 箭头可用性 ----------
 const tracks = new Map<string, HTMLElement>()
@@ -374,12 +417,13 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
       </button>
     </div>
 
-    <div v-else class="s-home-inner">
+    <!-- 行容器接 FLIP：切库/刷新/槽位重排时行不硬跳 -->
+    <div v-else class="s-home-inner" v-auto-animate="flipOptions">
       <!-- 加载中：每个槽位 6 张骨架卡；hero 槽位出 hero 自己的骨架 -->
       <template v-if="loading">
         <template v-for="sk in skeletonRows" :key="sk.key">
           <HomeHero v-if="sk.isHero" :items="heroItems" :loading="true" />
-          <section v-else class="s-row s-row-skel is-in">
+          <section v-else class="s-row s-row-skel">
             <div class="s-row-head">
               <div class="s-skel-title s-skeleton"></div>
             </div>
@@ -394,66 +438,90 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
         </template>
       </template>
 
-      <!-- 行：一次性错峰入场（第 n 行 n×60ms），滚动不重播。
-           hero 也走同一个 v-for —— 它的位置由设置页的 homeSection* 槽位决定。 -->
+      <!-- 行：首次滚入视口时整行淡入 + 卡片按序上浮（motion-v 变体，once 不重播）。
+           reduced-motion 下 entranceInitial 直接是终态，等于完全不播。
+           hero 也走同一个 v-for —— 它的位置由设置页的 homeSection* 槽位决定（铁律 12，勿动）。
+
+           ⚠️ 这里的 prop 名必须是 `in-view-options`，**不是** `viewport`。
+           motion-v 2.8.0 只声明了 `inViewOptions`（node_modules/motion-v/dist/es/components/motion/props.mjs:110），
+           whileInView 特性读的也是 `state.options.inViewOptions`（.../features/gestures/in-view/index.mjs:20）。
+           写成 `:viewport="..."` 时它是个**未声明 prop**，整个对象会落进 $attrs 渲染成 DOM 属性
+           `viewport="[object Object]"`，而 `inViewOptions` 是 undefined → IO 退回默认 threshold:0、
+           `once` 也拿不到。后果是行在**完全没进视口（ratio≈0）时就播完**，用户永远看不到入场动效，
+           并且滚出会被动画回 hidden、滚回再重播一次。这个 bug 曾真实存在过，别再改回去。
+
+           ⚠️ amount 也不能拍脑袋写小值。实测「卡片顶部相对整行的高度」：
+             桌面 1440px：行 289/356px，卡片顶 49/63px → 需要 amount > 0.169 / 0.176
+             移动  390px：行 256/301px，卡片顶 49/63px → 需要 amount > 0.191 / 0.208
+           原先写的 0.15 **恰好卡在所有阈值之下**，于是触发时只有标题在屏幕里、
+           卡片可见比例实测为 0 —— 交错动效全在视口外播完，用户根本看不到。
+           取 0.3（比最大需求 0.208 高约 44%），触发时卡片已露出 15~44px。
+           注意 framer 的 `amount` 只吃数字或 'some'/'all'，**不支持像素值**，
+           所以无法写成「露出 60px」这种与行高无关的形式；行高变了要重新核这个数。 -->
       <template v-else>
-        <template v-for="(row, i) in rows" :key="row.key">
+        <template v-for="row in rows" :key="row.key">
           <HomeHero v-if="row.isHero" :items="heroItems" :loading="heroLoading" />
-          <section
+          <motion.section
             v-else
             class="s-row"
-            :class="{ 'is-in': entered }"
-            :style="{ transitionDelay: `${i * 60}ms` }"
+            :variants="rowVariants"
+            :initial="entranceInitial"
+            while-in-view="visible"
+            :in-view-options="{ once: true, amount: 0.3 }"
           >
-          <div class="s-row-head">
-            <h2 class="s-row-title">{{ row.title }}</h2>
-            <button v-if="targetFor(row)" type="button" class="s-row-all" @click="goRow(row)">
-              {{ t('home.viewAll') }}
-            </button>
-          </div>
-          <div class="s-row-rail">
-            <button
-              type="button"
-              class="s-arrow s-arrow-back"
-              :disabled="atStart(row.key)"
-              :aria-label="t('home.scrollBack')"
-              @click="scrollRow(row.key, -1)"
-            >
-              <svg class="s-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-
-            <div
-              :ref="(el) => setTrack(row.key, el)"
-              class="s-row-track s-scroll-x s-fade-x"
-              tabindex="0"
-              role="group"
-              :aria-label="row.title"
-              @scroll.passive="onScroll(row.key, $event)"
-            >
-              <EmbyCard
-                v-for="item in row.items"
-                :key="item.Id"
-                :item="item"
-                :shape="row.shape"
-                :class="sizeClass(row.shape, row.size)"
-              />
+            <div class="s-row-head">
+              <h2 class="s-row-title">{{ row.title }}</h2>
+              <button v-if="targetFor(row)" type="button" class="s-row-all" @click="goRow(row)">
+                {{ t('home.viewAll') }}
+              </button>
             </div>
+            <div class="s-row-rail">
+              <button
+                type="button"
+                class="s-arrow s-arrow-back"
+                :disabled="atStart(row.key)"
+                :aria-label="t('home.scrollBack')"
+                @click="scrollRow(row.key, -1)"
+              >
+                <svg class="s-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
 
-            <button
-              type="button"
-              class="s-arrow s-arrow-fwd"
-              :disabled="atEnd(row.key)"
-              :aria-label="t('home.scrollForward')"
-              @click="scrollRow(row.key, 1)"
-            >
-              <svg class="s-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-          </div>
-          </section>
+              <!-- 卡片容器接 FLIP：数据变化时卡片滑动归位，不硬跳 -->
+              <div
+                :ref="(el) => setTrack(row.key, el)"
+                class="s-row-track s-scroll-x s-fade-x"
+                v-auto-animate="flipOptions"
+                tabindex="0"
+                role="group"
+                :aria-label="row.title"
+                @scroll.passive="onScroll(row.key, $event)"
+              >
+                <!-- 交错子项：只带 variants，靠父级 hidden→visible 驱动（同一处只用 motion-v 一种机制） -->
+                <motion.div
+                  v-for="item in row.items"
+                  :key="item.Id"
+                  class="s-row-item"
+                  :variants="cardVariants"
+                >
+                  <EmbyCard :item="item" :shape="row.shape" :class="sizeClass(row.shape, row.size)" />
+                </motion.div>
+              </div>
+
+              <button
+                type="button"
+                class="s-arrow s-arrow-fwd"
+                :disabled="atEnd(row.key)"
+                :aria-label="t('home.scrollForward')"
+                @click="scrollRow(row.key, 1)"
+              >
+                <svg class="s-arrow-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </motion.section>
         </template>
       </template>
     </div>
@@ -476,6 +544,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
 }
 
 .s-home-inner {
+  position: relative; /* auto-animate 的 FLIP 会给移动中的行临时 position:absolute */
   display: flex;
   flex-direction: column;
   gap: var(--s-row-gap);
@@ -498,17 +567,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
 }
 
 /* ---------- 行 ---------- */
-.s-row {
-  opacity: 0;
-  transform: translateY(12px);
-  transition:
-    opacity var(--s-dur-slow) var(--s-ease-std),
-    transform var(--s-dur-slow) var(--s-ease-std);
-}
-.s-row.is-in {
-  opacity: 1;
-  transform: none;
-}
+/* 行的进场（淡入 + 卡片交错上浮）由 motion-v 变体驱动，这里不再写 opacity/transform，
+   避免"CSS 过渡 + JS 变体"两套机制抢同一个 transform（铁律 14 / 任务约定：同一处只用一种） */
 
 .s-row-head {
   display: flex;
@@ -547,10 +607,16 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
 
 /* 上下留 8px：悬停抬升 -4px 不会被 overflow-y:hidden 裁掉 */
 .s-row-track {
+  position: relative; /* 同上：FLIP 期间子项会被临时绝对定位 */
   display: flex;
   gap: var(--s-sp-3);
   padding: var(--s-sp-2) var(--s-gutter);
   scroll-padding-inline: var(--s-gutter);
+}
+
+/* 交错子项：宽度仍由 EmbyCard 自己的尺寸类决定，这里只做 flex 项收口 */
+.s-row-item {
+  flex: 0 0 auto;
 }
 
 /* ---------- 卡片尺寸（EmbyCard 与骨架共用，保证 CLS≈0）---------- */
@@ -741,10 +807,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
   }
 }
 
-/* ---------- 减少动效：不位移、不缓动 ---------- */
-@media (prefers-reduced-motion: reduce) {
-  .s-row {
-    transform: none;
-  }
-}
+/* ---------- 减少动效 ----------
+   JS 侧已在 entranceInitial / rowVariants / cardVariants / flipOptions 里全部短路
+   （reduced=true 时初始即终态、staggerChildren=0、FLIP duration=0），
+   这里不再需要单独的 transform 兜底 —— 位移根本没有被挂上。 */
 </style>

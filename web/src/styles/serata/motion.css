@@ -1,0 +1,296 @@
+/**
+ * Serata 设计层 —— 动效原语（motion）。
+ *
+ * 这是动效层的**冻结接口**：所有进入/退出/交错动画都从这里取类名与关键帧，
+ * 组件里不允许再写裸 keyframes、裸 ms、裸 cubic-bezier。
+ *
+ * ── 三层动效分工（谁负责什么，见 components/ui/README.md）──────────────
+ *  ① 本文件（CSS 关键帧/过渡）—— 遮罩、弹层、toast 的进入/退出；悬停/聚焦微状态。
+ *  ② motion-v（JS 弹簧/手势）—— 滚动进场、指针驱动的悬停编排、布局与共享元素过渡。
+ *  ③ @formkit/auto-animate（FLIP）—— 列表增删/重排的位移动画。
+ *
+ * ── 四条铁律 ──────────────────────────────────────────────────────────
+ *  ① 只动 transform / opacity / filter；禁止 transition: all，禁止动 width/height/top/left。
+ *  ② 时长与缓动一律走 tokens.css 的 --s-dur-* / --s-ease-*，禁止裸数值。
+ *  ③ 退出必须比进场快（--s-dur-exit < --s-dur-*）；进场用 spring，退出用 exit。
+ *  ④ prefers-reduced-motion: reduce 下位移必须完全消失（见文件末尾兜底）。
+ *
+ * ── 两套调用姿势（共享同一批关键帧，词汇表统一）──────────────────────
+ *  A. reka-ui 组件（关不掉就卸载的，靠 data-state 驱动）：
+ *     <DialogContent class="s-anim-pop" />  → 内部会渲染 data-state="open|closed"
+ *     reka 的 Presence 会等 animationend 才卸载，所以这里必须用 animation 而非 transition。
+ *  B. 手写 v-if 内容（靠 Vue <Transition> 驱动）：
+ *     <Transition name="s-pop"><div v-if="open" /></Transition>
+ */
+
+/* ============================================================
+   1. 关键帧 —— 唯一真源
+   ============================================================ */
+@keyframes s-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes s-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 弹层：从触发点缩放展开（transform-origin 由 --s-pop-origin 控制） */
+@keyframes s-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes s-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+/* 内容上浮进场（列表项、区块、卡片） */
+@keyframes s-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 底部弹层 / toast */
+@keyframes s-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes s-up-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* 侧边弹层（贴 inline-end 边） */
+@keyframes s-end-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes s-end-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+/* 路由转场：淡入 + 极轻上浮（不要位移过大，页面级位移会晕） */
+@keyframes s-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   2. reka-ui 状态动画（data-state 驱动）
+   Presence 等 animationend 才卸载 → 必须用 animation，不能用 transition
+   ============================================================ */
+.s-anim-scrim[data-state='open'] {
+  animation: s-fade-in var(--s-dur-base) var(--s-ease-std) both;
+}
+.s-anim-scrim[data-state='closed'] {
+  animation: s-fade-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+.s-anim-pop {
+  transform-origin: var(--s-pop-origin, center top);
+}
+.s-anim-pop[data-state='open'] {
+  animation: s-pop-in var(--s-dur-base) var(--s-ease-spring) both;
+}
+.s-anim-pop[data-state='closed'] {
+  animation: s-pop-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+.s-anim-up[data-state='open'] {
+  animation: s-up-in var(--s-dur-sheet) var(--s-ease-std) both;
+}
+.s-anim-up[data-state='closed'] {
+  animation: s-up-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+.s-anim-end {
+  transform-origin: var(--s-pop-origin, center center);
+}
+.s-anim-end[data-state='open'] {
+  animation: s-end-in var(--s-dur-sheet) var(--s-ease-std) both;
+}
+.s-anim-end[data-state='closed'] {
+  animation: s-end-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+/* ============================================================
+   3. Vue <Transition> 类族（同一批关键帧，词汇表统一）
+   用法：<Transition name="s-pop"><div v-if="open" /></Transition>
+   ============================================================ */
+/* s-scrim-*：**纯透明度**交叉淡入淡出。名字来自它最主要的用途（遮罩），
+   但因为它只动 opacity、不带位移，内容块换片（HomeHero 的文案切换）复用它也不算误用，
+   不要为此再发明一个 s-fade 别名——同一份关键帧重复两遍只会让人以为两者有区别。
+   需要位移请用 s-rise / s-up。 */
+.s-scrim-enter-active {
+  animation: s-fade-in var(--s-dur-base) var(--s-ease-std) both;
+}
+.s-scrim-leave-active {
+  animation: s-fade-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+.s-pop-enter-active {
+  animation: s-pop-in var(--s-dur-base) var(--s-ease-spring) both;
+}
+.s-pop-leave-active {
+  animation: s-pop-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+.s-rise-enter-active {
+  animation: s-rise-in var(--s-dur-slow) var(--s-ease-spring) both;
+}
+.s-rise-leave-active {
+  animation: s-fade-out var(--s-dur-fast) var(--s-ease-exit) both;
+}
+
+.s-up-enter-active {
+  animation: s-up-in var(--s-dur-sheet) var(--s-ease-std) both;
+}
+.s-up-leave-active {
+  animation: s-up-out var(--s-dur-exit) var(--s-ease-exit) both;
+}
+
+/* 路由转场（App.vue 的 <RouterView> 外层，mode="out-in"） */
+.s-page-enter-active {
+  animation: s-page-in var(--s-dur-slow) var(--s-ease-std) both;
+}
+.s-page-leave-active {
+  animation: s-fade-out var(--s-dur-fast) var(--s-ease-exit) both;
+}
+
+/* ============================================================
+   4. 交错进场（CSS 版）
+   容器加 .s-stagger，子元素上写 --s-i 序号：
+     <ul class="s-stagger"><li v-for="(x,i) in xs" :style="{ '--s-i': i }">
+   JS 版（motion-v）见 src/lib/motion.ts 的 riseVariants()。
+   ============================================================ */
+.s-stagger > * {
+  animation: s-rise-in var(--s-dur-slow) var(--s-ease-spring) both;
+  /* 序号封顶：超过 --s-stagger-max 之后不再累加延迟 */
+  animation-delay: calc(min(var(--s-i, 0), var(--s-stagger-max)) * var(--s-stagger-step));
+}
+
+/* ============================================================
+   5. 交互微状态（悬停/按下；只动 transform / opacity）
+   与 emby495 的 .emby-button-focusscale 并存，互不覆盖。
+   ============================================================ */
+.s-press {
+  transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+.s-press:active {
+  transform: scale(0.97);
+}
+.s-lift {
+  transition:
+    transform var(--s-dur-base) var(--s-ease-spring),
+    box-shadow var(--s-dur-base) var(--s-ease-std);
+}
+@media (hover: hover) {
+  .s-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* ============================================================
+   7. View Transitions —— **只**用在主题切换（useTheme.ts）
+   路由转场走上面的 s-page 类族，两套不要混用。
+   老快照保持不透明、新快照淡入：直接对叠两套主题会糊成中间色。
+   ============================================================ */
+::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+::view-transition-new(root) {
+  animation: s-fade-in var(--s-dur-base) var(--s-ease-std) both;
+}
+
+/* ============================================================
+   8. 减少动效兜底
+   tokens 已把 --s-dur-* 压到 1ms，但关键帧动画不会因此消失（1ms 会闪一下），
+   这里直接一刀切掉 animation，保证"初始态即终态"。
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .s-anim-scrim,
+  .s-anim-pop,
+  .s-anim-up,
+  .s-anim-end,
+  .s-stagger > * {
+    animation: none !important;
+  }
+  [class*='s-scrim-'][class*='-active'],
+  [class*='s-pop-'][class*='-active'],
+  [class*='s-rise-'][class*='-active'],
+  [class*='s-up-'][class*='-active'],
+  [class*='s-page-'][class*='-active'] {
+    animation: none !important;
+  }
+  .s-press:active {
+    transform: none;
+  }
+  .s-lift:hover {
+    transform: none;
+  }
+  /* View Transition 在 JS 侧已经被 useTheme 跳过；这里是浏览器原生 transition 的兜底 */
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(*) {
+    animation-duration: 1ms !important;
+  }
+}

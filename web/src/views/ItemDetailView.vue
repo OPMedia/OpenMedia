@@ -16,11 +16,29 @@ import EmbyCard from '@/components/EmbyCard.vue'
 import ItemMenuSheet from '@/components/ItemMenuSheet.vue'
 import EmbySelect from '@/components/EmbySelect.vue'
 import type { EmbySelectOption } from '@/components/EmbySelect.vue'
+import SSheet from '@/components/ui/SSheet.vue'
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
+import { flipConfig, useReducedMotionSafe } from '@/lib/motion'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const { t } = useI18n()
+
+/** 分集列表 FLIP(切季时整列换血)：JS 动画先问 reduced-motion（铁律 16） */
+const reducedMotion = useReducedMotionSafe()
+const listFlip = computed(() => flipConfig(reducedMotion.value))
+
+/**
+ * 面板级几何只能走 content-style：SSheet 的模板根是 fragment(scrim + panel)，
+ * 父视图的 scoped data-v 落不到面板上（实测面板只有 SSheet 自己的 data-v），
+ * 写在 <style scoped> 里的 `.imageEditorDialog{width:...}` 是死代码。
+ * center 变体是 inset:0 + margin:auto，width/height:auto 会被拉伸成 92vw×84vh，
+ * 故内容尺寸弹层必须显式 fit-content（旧实现：编辑元数据 509×388、人物 137×129）。
+ */
+const CENTER_PANEL_STYLE = { width: 'fit-content', height: 'fit-content' }
+/** 图像编辑器保持真实站宽度（原 scoped 规则 `.imageEditorDialog{width:min(60em,92vw)}`，实测 867×524） */
+const IMAGE_EDITOR_PANEL_STYLE = { width: 'min(60em, 92vw)', height: 'fit-content' }
 
 const loading = ref(true)
 const notFound = ref(false)
@@ -619,7 +637,7 @@ function libIcon(): string {
                 />
               </div>
               <div class="emby-scroller padded-top-focusscale padded-bottom-focusscale padded-left padded-left-page padded-right scrollX hiddenScrollX scrollFrameX flex-direction-row">
-                <div class="scrollSlider focuscontainer-x itemsContainer focusable scrollSliderX emby-scrollbuttons-scrollSlider">
+                <div v-auto-animate="listFlip" class="scrollSlider focuscontainer-x itemsContainer focusable scrollSliderX emby-scrollbuttons-scrollSlider">
                   <div v-for="ep in episodes" :key="ep.Id" class="card backdropCard card-horiz backdropCard-horiz card-hoverable card-autoactive" @click="goEpisode(ep)">
                     <div class="cardBox cardBox-touchzoom">
                       <button type="button" data-action="link" tabindex="-1" class="itemAction cardContent-button cardContent cardImageContainer cardContent-background cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-backdrop">
@@ -758,12 +776,18 @@ function libIcon(): string {
         @toggle-favorite="toggleEpisodeFavoriteFromMenu"
       />
 
-      <!-- 编辑元数据(formdialog;真实站 dialog/formdialog 形态) -->
-      <Teleport to="body">
-        <div v-if="editMetadataOpen" class="dialogContainer" @click.self="editMetadataOpen = false">
-          <div class="dialog dialog-animated formDialog opened" @click.stop>
+      <!-- 编辑元数据(formdialog;真实站 dialog/formdialog 形态)
+           行为(焦点陷阱/Esc/点外关闭/滚动锁定/进出动效)交给 SSheet;可见标题仍留在插槽里 -->
+      <SSheet
+        :open="editMetadataOpen"
+        variant="center"
+        :title="t('menu.editMeta')"
+        panel-class="dialog formDialog"
+        :content-style="CENTER_PANEL_STYLE"
+        @close="editMetadataOpen = false"
+      >
             <div class="formDialogHeader">
-              <button type="button" class="paper-icon-button-light btnCloseDialog emby-button-focusscale" title="关闭" @click="editMetadataOpen = false">
+              <button type="button" class="paper-icon-button-light s-press btnCloseDialog emby-button-focusscale" title="关闭" @click="editMetadataOpen = false">
                 <i class="md-icon autortl">&#xE2EA;</i>
               </button>
               <h3 class="formDialogHeaderTitle">编辑元数据</h3>
@@ -787,19 +811,22 @@ function libIcon(): string {
               </div>
             </div>
             <div class="formDialogFooter">
-              <button type="button" class="raised button-cancel formDialogFooterItem emby-button emby-button-focusscale" @click="editMetadataOpen = false">取消</button>
-              <button type="button" class="raised button-submit formDialogFooterItem emby-button emby-button-focusscale" @click="saveMetadata">保存</button>
+              <button type="button" class="raised button-cancel s-press formDialogFooterItem emby-button emby-button-focusscale" @click="editMetadataOpen = false">取消</button>
+              <button type="button" class="raised button-submit s-press formDialogFooterItem emby-button emby-button-focusscale" @click="saveMetadata">保存</button>
             </div>
-          </div>
-        </div>
-      </Teleport>
+      </SSheet>
 
       <!-- 编辑图像(结构照真实站 imageeditor:图像类型标签 + 类型列表 + 当前图预览 + 上传/删除/刷新) -->
-      <Teleport to="body">
-        <div v-if="editImagesOpen" class="dialogContainer" @click.self="editImagesOpen = false">
-          <div class="dialog dialog-animated formDialog imageEditorDialog opened" @click.stop>
+      <SSheet
+        :open="editImagesOpen"
+        variant="center"
+        :title="t('menu.editImages')"
+        panel-class="dialog formDialog imageEditorDialog"
+        :content-style="IMAGE_EDITOR_PANEL_STYLE"
+        @close="editImagesOpen = false"
+      >
             <div class="formDialogHeader">
-              <button type="button" class="paper-icon-button-light btnCloseDialog emby-button-focusscale" title="关闭" @click="editImagesOpen = false">
+              <button type="button" class="paper-icon-button-light s-press btnCloseDialog emby-button-focusscale" title="关闭" @click="editImagesOpen = false">
                 <i class="md-icon autortl">&#xE2EA;</i>
               </button>
               <h3 class="formDialogHeaderTitle">编辑图像</h3>
@@ -808,7 +835,7 @@ function libIcon(): string {
               <div class="imageTypeList vertical-list">
                 <button
                   v-for="it in IMAGE_TYPES" :key="it.type" type="button"
-                  class="listItem listItem-autoactive itemAction listItemCursor imageTypeOption emby-button-focusscale"
+                  class="listItem s-press listItem-autoactive itemAction listItemCursor imageTypeOption emby-button-focusscale"
                   :class="{ 'imageTypeOption-selected': imageType === it.type }"
                   @click="imageType = it.type"
                 >
@@ -829,36 +856,39 @@ function libIcon(): string {
               </div>
             </div>
             <div class="formDialogFooter">
-              <button type="button" class="raised button-cancel formDialogFooterItem emby-button emby-button-focusscale" title="删除" @click="deleteImage">删除</button>
-              <button type="button" class="raised button-cancel formDialogFooterItem emby-button emby-button-focusscale" title="刷新" @click="imageAction('刷新')">刷新</button>
-              <label class="raised button-submit formDialogFooterItem emby-button emby-button-focusscale imageUploadButton">
+              <button type="button" class="raised button-cancel s-press formDialogFooterItem emby-button emby-button-focusscale" title="删除" @click="deleteImage">删除</button>
+              <button type="button" class="raised button-cancel s-press formDialogFooterItem emby-button emby-button-focusscale" title="刷新" @click="imageAction('刷新')">刷新</button>
+              <label class="raised button-submit s-press formDialogFooterItem emby-button emby-button-focusscale imageUploadButton">
                 <span>{{ t('item.imageUpload') }}</span>
                 <input type="file" accept="image/*" class="imageUploadInput" @change="onImagePicked" />
               </label>
-              <button type="button" class="raised button-submit formDialogFooterItem emby-button emby-button-focusscale" @click="editImagesOpen = false">{{ t('library.done') }}</button>
+              <button type="button" class="raised button-submit s-press formDialogFooterItem emby-button emby-button-focusscale" @click="editImagesOpen = false">{{ t('library.done') }}</button>
             </div>
-          </div>
-        </div>
-      </Teleport>
+      </SSheet>
 
       <!-- 人物信息窗体(真实站跳人物页;v1 面板 + 关闭) -->
-      <Teleport to="body">
-        <div v-if="personSheet" class="dialogContainer" @click.self="personSheet = null">
-          <div class="dialog dialog-animated actionSheet actionSheet-automobile opened" @click.stop>
+      <SSheet
+        :open="!!personSheet"
+        variant="center"
+        :title="personSheet?.Name"
+        panel-class="dialog actionSheet actionSheet-automobile"
+        :content-style="CENTER_PANEL_STYLE"
+        @close="personSheet = null"
+      >
             <div class="actionsheetItemPreview flex flex-shrink-zero flex-direction-row">
-              <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="{ backgroundImage: `url(${imageUrl(personSheet.Id, 'Primary', undefined, { maxWidth: 120, maxHeight: 180, quality: 90 })})` }"></div>
+              <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="{ backgroundImage: personSheet ? `url(${imageUrl(personSheet.Id, 'Primary', undefined, { maxWidth: 120, maxHeight: 180, quality: 90 })})` : '' }"></div>
               <div class="actionsheetItemPreviewContent">
                 <div class="actionsheetItemPreviewText mediaInfoItems actionsheetItemPreviewText-main">
-                  <div class="actionsheetPreviewTextItem mediaInfoItem">{{ personSheet.Name }}</div>
+                  <div class="actionsheetPreviewTextItem mediaInfoItem">{{ personSheet?.Name }}</div>
                 </div>
                 <div class="actionsheetItemPreviewText mediaInfoItems secondaryText">
-                  <div class="actionsheetPreviewTextItem mediaInfoItem">{{ personSheet.Role }}</div>
+                  <div class="actionsheetPreviewTextItem mediaInfoItem">{{ personSheet?.Role }}</div>
                 </div>
               </div>
             </div>
             <div class="actionSheetScroller focuscontainer-x actionSheetScroller-padding-inline emby-scroller dialog-scrollY scrollY scrollFrameY flex-direction-column">
               <div class="actionsheetScrollSlider scrollSlider flex flex-direction-column itemsContainer vertical-list scrollSliderY">
-                <button type="button" class="listItem listItem-autoactive itemAction listItemCursor actionSheetMenuItem" @click="personSheet = null">
+                <button type="button" class="listItem s-press listItem-autoactive itemAction listItemCursor actionSheetMenuItem" @click="personSheet = null">
                   <div class="listItem-content listItem-content-bg actionsheet-noborder">
                     <div class="listItemBody actionsheetListItemBody listItemBody-1-lines">
                       <div class="listItemBodyText actionSheetItemText listItemBodyText-lf">关闭</div>
@@ -867,9 +897,7 @@ function libIcon(): string {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </Teleport>
+      </SSheet>
     </template>
   </div>
 </template>
@@ -896,11 +924,13 @@ function libIcon(): string {
   text-align: start;
 }
 
-/* 图像编辑器(imageeditor 结构:左侧类型列表 + 右侧预览) */
-.imageEditorDialog { width: min(60em, 92vw); }
+/* 图像编辑器(imageeditor 结构:左侧类型列表 + 右侧预览)
+   面板宽度已移到 :content-style(IMAGE_EDITOR_PANEL_STYLE)：面板由 SSheet 渲染，
+   拿不到本视图的 scoped data-v，`.imageEditorDialog{width:...}` 在这里是死代码 */
 .imageEditorBody { display: flex; gap: 1em; padding: 0 1.5em 1em; max-height: 60vh; overflow: auto; }
 .imageTypeList { flex-shrink: 0; width: 10em; }
-.imageTypeOption-selected { background: rgba(255, 255, 255, .12); border-radius: .4em; }
+/* 选中态走 token：原「白 12%」在浅色抬升面上几乎不可见（与库页 .filterChip 同一类遗留硬伤） */
+.imageTypeOption-selected { background: var(--s-hover); border-radius: .4em; }
 .imageEditorPreview { flex-grow: 1; min-height: 16em; gap: .6em; }
 .imageEditorPreviewImage { max-width: 100%; max-height: 45vh; border-radius: .3em; }
 .imageUploadButton { position: relative; overflow: hidden; cursor: pointer; }

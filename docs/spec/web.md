@@ -141,3 +141,35 @@ PC/移动同代码库同一流程（ADR-0011）；断点行为对齐 Emby 网页
 - 现状（2026-10-19）：用户设置只剩 `显示`（外观）与 `主页面`（7 个区块槽位）两组真生效项；
   播放页 / 字幕页 / 配置页的时区·启动行为·文本大小·屏保 / 主页面「媒体库顺序」拖拽
   仍是摆设，待按同一标准处理。
+
+## 11. 组件基座与动效分层（ADR-0014）〔定稿〕
+
+- **组件基座是 Reka UI，不是 shadcn-vue，也不引 Tailwind**。shadcn-vue 本身就是
+  「Reka UI + Tailwind 皮」，而本项目的设计层是冻结的 CSS 令牌体系（`:root` 90.15%、
+  单位必须 px、老页面靠 HSL 变量换肤）；再叠一层原子类等于给同一界面装两套样式真源。
+  **要能力（可访问性原语 + `data-state` 状态机），不要皮。** 这个选择可增量演进：
+  将来真要上 Tailwind 皮，是在 Reka UI 之上叠加，不是推倒重来。
+- **弹层只走 `components/ui/SSheet.vue`**（reka-ui Dialog）。它管行为：焦点陷阱、Esc、
+  点外关闭、滚动锁定、`aria-modal`、焦点归还、进出动效；不管长相：内容由插槽给，
+  宿主继续用 emby495 的 `actionSheet*` 类名，保证 1:1 还原。
+  **禁止手搓 `v-if` 遮罩**——那必然丢掉焦点管理、读屏隔离和滚动锁定。
+- **动效分三层，不要用错工具**：CSS（`motion.css`）管弹层/toast 进出与悬停微状态；
+  `motion-v` 管滚动进场与指针编排（需要弹簧物理）；`@formkit/auto-animate` 管列表 FLIP。
+- **动效令牌唯一真源**：`tokens.css` 定义 → `motion.css` 出类名与关键帧 →
+  `lib/motion.ts` 做 JS 镜像（CSS 变量 JS 读不到，只能镜像）。
+  组件里不许再写 `@keyframes`、裸 `ms`、裸 `cubic-bezier`。
+- **退出必须比进场快**：`--s-dur-exit`(180ms) < `--s-dur-sheet`(280ms)；
+  进场 `--s-ease-spring`，退出 `--s-ease-exit`。
+- **reduced-motion 双保险**：CSS 侧压时长 + `motion.css` 末尾一刀切 `animation`；
+  **JS 侧没有兜底**，所以 motion-v / auto-animate 动手前必须过 `useReducedMotionSafe()`，
+  `reduce` 时完全不位移。
+- **View Transitions 只用在主题切换**（`useTheme.ts` 调 `startViewTransition`）：
+  整页几十个 HSL 变量同时翻转，硬切会闪、两套主题对叠会糊成中间色，
+  所以老快照保持不透明、新快照淡入。**路由转场不走它**——vue-router 没有能包住
+  「DOM 更新」这一步的钩子，路由转场用 Vue `<Transition name="s-page">`。
+  这是有意识的取舍，不是遗漏。
+- **依赖升级先跑 `node tools/probe-libs.mjs`**：它把实际依赖的 41 个导出钉成断言，
+  防止 minor 升级静默改导出。
+- **reka 的两个硬约束**：① `DialogContent` 必须配 `DialogTitle`（缺失报警，SSheet 已用
+  `VisuallyHidden` 兜底）；② `Presence` 靠 `animationend` 判断卸载时机，
+  所以它的状态动画**必须用 `animation` 而不是 `transition`**。

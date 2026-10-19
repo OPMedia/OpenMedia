@@ -396,5 +396,12 @@
     "loading": "加载中…",
     "retry": "重试",
     "error": "出错了"
+  },
+  "ui": {
+    "dialog": "对话框",
+    "close": "关闭",
+    "dismiss": "关闭通知",
+    "notifications": "通知",
+    "more": "更多"
   }
 }
