@@ -186,3 +186,33 @@ main.s-home::-webkit-scrollbar-track {
     rgba(6, 7, 14, 0.94) 100%
   ) !important;
 }
+
+/* ---------- 媒体库工具行与网格对齐 ----------
+ *
+ * 症状（真实数据、1600×900 实测）：条目数「5831 个条目」和排序/筛选/视图三个按钮
+ * 飘在页面中间（x≈779..1053），而下面的海报网格从 x=291 铺到 1541。
+ * 中间空着 500 多 px，看起来像一行没人管的控件浮在版面上。
+ *
+ * 根因是两处原版样式叠加：`.itemsViewSettingsContainer{max-width:95%}` 让它比网格窄一截
+ * （实测工具栏 323..1511 vs 网格 291..1541），再叠一个 `justify-content:center`
+ * 把里面的子项整体居中。
+ *
+ * 改法只针对这一个容器：铺满网格宽度、去掉左右偏移，让「条目数」贴网格左沿，
+ * 三个按钮贴网格右沿且**保持成组**。
+ *
+ * 注意不能用 `justify-content:space-between` —— 那样会把 4 个子项均摊到整行
+ * （实测 291 / 696 / 1137 / 1506，排序和筛选被拆到页面中间，比修之前更散）。
+ * 正确做法是让条目数吃掉所有剩余空间（`margin-inline-end:auto`），按钮自然被挤到右侧成组。
+ * 这里必须带 `!important`：原版有一条
+ * `.itemsViewSettingsContainer-button, .listTotalRecordCount { margin: 0 !important }`，
+ * 不加 !important 时 margin 会被它压回 0（第一版就是这么失效的，实测 margin 仍是 0px）。
+ *
+ * 不动按钮本身的尺寸/配色/动效，也不碰这个容器之外的任何东西。 */
+.itemsViewSettingsContainer {
+  max-width: none;
+  justify-content: flex-start;
+  margin-inline: 0;
+}
+.itemsViewSettingsContainer > .listTotalRecordCount {
+  margin-inline-end: auto !important;
+}
