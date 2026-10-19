@@ -23,6 +23,9 @@ public interface IAuthenticationRepository
 	Task UpdateDeviceOptionsAsync(string deviceId, DeviceOptions options, CancellationToken cancellationToken = default);
 
 	// ---- 兼容桥接（默认实现 → 异步）----
+	// 分析器豁免：这是有意为之的同步适配边界，供未迁移的第三方插件调用；
+	// 实现即「阻塞等待异步」，新代码一律使用 *Async 版本。
+#pragma warning disable VSTHRD002
 	void Create(AuthenticationInfo info) => CreateAsync(info).GetAwaiter().GetResult();
 
 	void Update(AuthenticationInfo info) => UpdateAsync(info).GetAwaiter().GetResult();
@@ -34,4 +37,5 @@ public interface IAuthenticationRepository
 	DeviceOptions GetDeviceOptions(string deviceId) => GetDeviceOptionsAsync(deviceId).GetAwaiter().GetResult();
 
 	void UpdateDeviceOptions(string deviceId, DeviceOptions options) => UpdateDeviceOptionsAsync(deviceId, options).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 }

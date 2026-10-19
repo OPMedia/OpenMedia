@@ -139,14 +139,14 @@ namespace MediaBrowser.Api.UserLibrary
         /// </summary>
         /// <param name="request">The request.</param>
         /// <returns>System.Object.</returns>
-        public object Get(GetItems request)
+        public async Task<object> Get(GetItems request)
         {
             if (request == null)
             {
-                throw new ArgumentNullException("request");
+                throw new ArgumentNullException(nameof(request));
             }
 
-            var result = GetItems(request);
+            var result = await GetItemsAsync(request).ConfigureAwait(false);
 
             return ToOptimizedResult(result);
         }
@@ -155,13 +155,13 @@ namespace MediaBrowser.Api.UserLibrary
         /// Gets the items.
         /// </summary>
         /// <param name="request">The request.</param>
-        private QueryResult<BaseItemDto> GetItems(GetItems request)
+        private async Task<QueryResult<BaseItemDto>> GetItemsAsync(GetItems request)
         {
             var user = !request.UserId.Equals(Guid.Empty) ? _userManager.GetUserById(request.UserId) : null;
 
             var dtoOptions = GetDtoOptions(_authContext, request);
 
-            var result = GetQueryResult(request, dtoOptions, user);
+            var result = await GetQueryResultAsync(request, dtoOptions, user).ConfigureAwait(false);
 
             if (result == null)
             {
@@ -190,7 +190,7 @@ namespace MediaBrowser.Api.UserLibrary
         /// <summary>
         /// Gets the items to serialize.
         /// </summary>
-        private QueryResult<BaseItem> GetQueryResult(GetItems request, DtoOptions dtoOptions, User user)
+        private async Task<QueryResult<BaseItem>> GetQueryResultAsync(GetItems request, DtoOptions dtoOptions, User user)
         {
             if (string.Equals(request.IncludeItemTypes, "Playlist", StringComparison.OrdinalIgnoreCase))
             {
@@ -231,14 +231,14 @@ namespace MediaBrowser.Api.UserLibrary
 
             if (request.Recursive || !string.IsNullOrEmpty(request.Ids) || user == null)
             {
-                return folder.GetItems(GetItemsQuery(request, dtoOptions, user));
+                return await folder.GetItemsAsync(GetItemsQuery(request, dtoOptions, user)).ConfigureAwait(false);
             }
 
             var userRoot = item as UserRootFolder;
 
             if (userRoot == null)
             {
-                return folder.GetItems(GetItemsQuery(request, dtoOptions, user));
+                return await folder.GetItemsAsync(GetItemsQuery(request, dtoOptions, user)).ConfigureAwait(false);
             }
 
             var itemsArray = folder.GetChildren(user, true).ToArray();

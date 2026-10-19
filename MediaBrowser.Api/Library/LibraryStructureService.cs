@@ -285,7 +285,7 @@ namespace MediaBrowser.Api.Library
             {
                 CollectionFolder.OnCollectionFolderChange();
 
-                Task.Run(async () =>
+                _ = Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
@@ -340,7 +340,7 @@ namespace MediaBrowser.Api.Library
             }
             finally
             {
-                Task.Run(async () =>
+                _ = Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
@@ -391,7 +391,7 @@ namespace MediaBrowser.Api.Library
             }
             finally
             {
-                Task.Run(async () =>
+                _ = Task.Run(async () =>
                 {
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)

@@ -359,7 +359,7 @@ public class Folder : BaseItem
 						}, this, notifyParentItem: false);
 					}
 				}
-				BaseItem.LibraryManager.CreateItems(list, this, cancellationToken);
+				await BaseItem.LibraryManager.CreateItemsAsync(list, this, cancellationToken).ConfigureAwait(false);
 			}
 		}
 		else
@@ -509,12 +509,17 @@ public class Folder : BaseItem
 
 	protected List<BaseItem> GetCachedChildren()
 	{
+		// 已知同步边界：GetCachedChildren 是同步 API，被 Children 属性链广泛调用；
+		// 改造成异步需重写 BaseItem.Children/GetChildren 全链路（超出本轮范围）。
+		// 该路径命中 LibraryItemsCache 后不再访问数据库，故实际阻塞概率低。
+#pragma warning disable VSTHRD002
 		return BaseItem.ItemRepository.GetItemList(new InternalItemsQuery
 		{
 			Parent = this,
 			GroupByPresentationUniqueKey = false,
 			DtoOptions = new DtoOptions(allFields: true)
 		});
+#pragma warning restore VSTHRD002
 	}
 
 	public virtual int GetChildCount(User user)
@@ -754,18 +759,29 @@ public class Folder : BaseItem
 
 	public QueryResult<BaseItem> GetItems(InternalItemsQuery query)
 	{
+#pragma warning disable VSTHRD002
+		return GetItemsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+	}
+
+	/// <summary>
+	/// 分页查询（原生异步）。ItemIds 排序路径走异步仓储，其余走内存/Channel 路径。
+	/// </summary>
+	public async Task<QueryResult<BaseItem>> GetItemsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
+	{
 		if (query.ItemIds.Length != 0)
 		{
 			if (query.OrderBy.Length == 0)
 			{
 				int? limit = query.Limit;
 				query.Limit = null;
-				QueryResult<BaseItem> itemsResult = BaseItem.LibraryManager.GetItemsResult(query);
+				QueryResult<BaseItem> itemsResult = await BaseItem.LibraryManager
+					.GetItemsResultAsync(query, cancellationToken).ConfigureAwait(false);
 				List<Guid> ids = query.ItemIds.ToList();
 				itemsResult.Items = itemsResult.Items.OrderBy((BaseItem i) => ids.IndexOf(i.Id)).Take(limit ?? int.MaxValue).ToArray();
 				return itemsResult;
 			}
-			return BaseItem.LibraryManager.GetItemsResult(query);
+			return await BaseItem.LibraryManager.GetItemsResultAsync(query, cancellationToken).ConfigureAwait(false);
 		}
 		return GetItemsInternal(query);
 	}

@@ -438,10 +438,10 @@ namespace Emby.Server.Implementations.Library
 
             item.SetParent(null);
 
-            ItemRepository.DeleteItem(item.Id, CancellationToken.None);
+            ItemRepository.DeleteItemAsync(item.Id, CancellationToken.None).GetAwaiter().GetResult();
             foreach (var child in children)
             {
-                ItemRepository.DeleteItem(child.Id, CancellationToken.None);
+                ItemRepository.DeleteItemAsync(child.Id, CancellationToken.None).GetAwaiter().GetResult();
             }
 
             _libraryItemsCache.Remove(item.Id);
@@ -1279,7 +1279,7 @@ namespace Emby.Server.Implementations.Library
                 progress.Report(percent * 100);
             }
 
-            ItemRepository.UpdateInheritedValues(cancellationToken);
+            ItemRepository.UpdateInheritedValuesAsync(cancellationToken).GetAwaiter().GetResult();
 
             // S2 验收：条目缓存命中率报告（每轮扫描时点；容量/TTL 可用
             // OPENMEDIA_ITEM_CACHE_SIZE / OPENMEDIA_ITEM_CACHE_TTL_SECONDS 调）
@@ -1402,6 +1402,14 @@ namespace Emby.Server.Implementations.Library
 
         public List<BaseItem> GetItemList(InternalItemsQuery query, bool allowExternalContent)
         {
+            // 兼容桥接：未迁移的调用方仍走同步入口
+#pragma warning disable VSTHRD002
+            return GetItemListAsync(query, allowExternalContent, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, bool allowExternalContent, CancellationToken cancellationToken = default)
+        {
             if (query.Recursive && !query.ParentId.Equals(Guid.Empty))
             {
                 var parent = GetItemById(query.ParentId);
@@ -1416,7 +1424,7 @@ namespace Emby.Server.Implementations.Library
                 AddUserToQuery(query, query.User, allowExternalContent);
             }
 
-            return ItemRepository.GetItemList(query);
+            return await ItemRepository.GetItemListAsync(query, cancellationToken).ConfigureAwait(false);
         }
 
         public List<BaseItem> GetItemList(InternalItemsQuery query)
@@ -1424,7 +1432,19 @@ namespace Emby.Server.Implementations.Library
             return GetItemList(query, true);
         }
 
+        public async Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
+        {
+            return await GetItemListAsync(query, true, cancellationToken).ConfigureAwait(false);
+        }
+
         public int GetCount(InternalItemsQuery query)
+        {
+#pragma warning disable VSTHRD002
+            return GetCountAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<int> GetCountAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query.Recursive && !query.ParentId.Equals(Guid.Empty))
             {
@@ -1440,10 +1460,17 @@ namespace Emby.Server.Implementations.Library
                 AddUserToQuery(query, query.User);
             }
 
-            return ItemRepository.GetCount(query);
+            return await ItemRepository.GetCountAsync(query, cancellationToken).ConfigureAwait(false);
         }
 
         public List<BaseItem> GetItemList(InternalItemsQuery query, List<BaseItem> parents)
+        {
+#pragma warning disable VSTHRD002
+            return GetItemListAsync(query, parents, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, List<BaseItem> parents, CancellationToken cancellationToken = default)
         {
             SetTopParentIdsOrAncestors(query, parents);
 
@@ -1455,10 +1482,17 @@ namespace Emby.Server.Implementations.Library
                 }
             }
 
-            return ItemRepository.GetItemList(query);
+            return await ItemRepository.GetItemListAsync(query, cancellationToken).ConfigureAwait(false);
         }
 
         public QueryResult<BaseItem> QueryItems(InternalItemsQuery query)
+        {
+#pragma warning disable VSTHRD002
+            return QueryItemsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<QueryResult<BaseItem>> QueryItemsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query.User != null)
             {
@@ -1467,23 +1501,32 @@ namespace Emby.Server.Implementations.Library
 
             if (query.EnableTotalRecordCount)
             {
-                return ItemRepository.GetItems(query);
+                return await ItemRepository.GetItemsAsync(query, cancellationToken).ConfigureAwait(false);
             }
+
+            var list = await ItemRepository.GetItemListAsync(query, cancellationToken).ConfigureAwait(false);
 
             return new QueryResult<BaseItem>
             {
-                Items = ItemRepository.GetItemList(query).ToArray()
+                Items = list.ToArray()
             };
         }
 
         public List<Guid> GetItemIds(InternalItemsQuery query)
+        {
+#pragma warning disable VSTHRD002
+            return GetItemIdsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<List<Guid>> GetItemIdsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query.User != null)
             {
                 AddUserToQuery(query, query.User);
             }
 
-            return ItemRepository.GetItemIdsList(query);
+            return await ItemRepository.GetItemIdsListAsync(query, cancellationToken).ConfigureAwait(false);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetStudios(InternalItemsQuery query)
@@ -1494,7 +1537,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetStudios(query);
+            return ItemRepository.GetStudiosAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetGenres(InternalItemsQuery query)
@@ -1505,7 +1548,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetGenres(query);
+            return ItemRepository.GetGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetGameGenres(InternalItemsQuery query)
@@ -1516,7 +1559,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetGameGenres(query);
+            return ItemRepository.GetGameGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetMusicGenres(InternalItemsQuery query)
@@ -1527,7 +1570,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetMusicGenres(query);
+            return ItemRepository.GetMusicGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetAllArtists(InternalItemsQuery query)
@@ -1538,7 +1581,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetAllArtists(query);
+            return ItemRepository.GetAllArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetArtists(InternalItemsQuery query)
@@ -1549,7 +1592,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetArtists(query);
+            return ItemRepository.GetArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         private void SetTopParentOrAncestorIds(InternalItemsQuery query)
@@ -1593,10 +1636,17 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetAlbumArtists(query);
+            return ItemRepository.GetAlbumArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public QueryResult<BaseItem> GetItemsResult(InternalItemsQuery query)
+        {
+#pragma warning disable VSTHRD002
+            return GetItemsResultAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<QueryResult<BaseItem>> GetItemsResultAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
             if (query.Recursive && !query.ParentId.Equals(Guid.Empty))
             {
@@ -1614,14 +1664,14 @@ namespace Emby.Server.Implementations.Library
 
             if (query.EnableTotalRecordCount)
             {
-                return ItemRepository.GetItems(query);
+                return await ItemRepository.GetItemsAsync(query, cancellationToken).ConfigureAwait(false);
             }
 
-            var list = ItemRepository.GetItemList(query);
+            var list = await ItemRepository.GetItemListAsync(query, cancellationToken).ConfigureAwait(false);
 
             return new QueryResult<BaseItem>
             {
-                Items = list.ToArray(list.Count)
+                Items = list.ToArray()
             };
         }
 
@@ -1972,9 +2022,17 @@ namespace Emby.Server.Implementations.Library
         /// <returns>Task.</returns>
         public void CreateItems(IEnumerable<BaseItem> items, BaseItem parent, CancellationToken cancellationToken)
         {
+            // 兼容桥接：未迁移的调用方仍走同步入口（内部阻塞等待异步实现）
+#pragma warning disable VSTHRD002
+            CreateItemsAsync(items, parent, cancellationToken).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task CreateItemsAsync(IEnumerable<BaseItem> items, BaseItem parent, CancellationToken cancellationToken)
+        {
             var list = items.ToList();
 
-            ItemRepository.SaveItems(list, cancellationToken);
+            await ItemRepository.SaveItemsAsync(list, cancellationToken).ConfigureAwait(false);
 
             foreach (var item in list)
             {
@@ -2009,7 +2067,9 @@ namespace Emby.Server.Implementations.Library
 
         public void UpdateImages(BaseItem item)
         {
-            ItemRepository.SaveImages(item);
+#pragma warning disable VSTHRD002
+            ItemRepository.SaveImagesAsync(item).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 
             RegisterItem(item);
         }
@@ -2018,6 +2078,14 @@ namespace Emby.Server.Implementations.Library
         /// Updates the item.
         /// </summary>
         public void UpdateItems(List<BaseItem> items, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken)
+        {
+            // 兼容桥接：未迁移的调用方仍走同步入口
+#pragma warning disable VSTHRD002
+            UpdateItemsAsync(items, parent, updateReason, cancellationToken).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task UpdateItemsAsync(List<BaseItem> items, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken)
         {
             foreach (var item in items)
             {
@@ -2034,7 +2102,7 @@ namespace Emby.Server.Implementations.Library
             //var logName = item.LocationType == LocationType.Remote ? item.Name ?? item.Path : item.Path ?? item.Name;
             //_logger.Debug("Saving {0} to database.", logName);
 
-            ItemRepository.SaveItems(items, cancellationToken);
+            await ItemRepository.SaveItemsAsync(items, cancellationToken).ConfigureAwait(false);
 
             if (ItemUpdated != null)
             {
@@ -2105,7 +2173,14 @@ namespace Emby.Server.Implementations.Library
         /// <returns>BaseItem.</returns>
         public BaseItem RetrieveItem(Guid id)
         {
-            return ItemRepository.RetrieveItem(id);
+#pragma warning disable VSTHRD002
+            return RetrieveItemAsync(id, CancellationToken.None).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+        }
+
+        public async Task<BaseItem> RetrieveItemAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await ItemRepository.RetrieveItemAsync(id, cancellationToken).ConfigureAwait(false);
         }
 
         public List<Folder> GetCollectionFolders(BaseItem item)
@@ -2945,7 +3020,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<PersonInfo> GetPeople(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeople(query);
+            return ItemRepository.GetPeopleAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public List<PersonInfo> GetPeople(BaseItem item)
@@ -2968,7 +3043,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<Person> GetPeopleItems(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeopleNames(query).Select(i =>
+            return ItemRepository.GetPeopleNamesAsync(query, CancellationToken.None).GetAwaiter().GetResult().Select(i =>
             {
                 try
                 {
@@ -2985,7 +3060,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<string> GetPeopleNames(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeopleNames(query);
+            return ItemRepository.GetPeopleNamesAsync(query, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public void UpdatePeople(BaseItem item, List<PersonInfo> people)
@@ -2995,7 +3070,7 @@ namespace Emby.Server.Implementations.Library
                 return;
             }
 
-            ItemRepository.UpdatePeople(item.Id, people);
+            ItemRepository.UpdatePeopleAsync(item.Id, people, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public async Task<ItemImageInfo> ConvertImageToLocal(BaseItem item, ItemImageInfo image, int imageIndex)
@@ -3280,7 +3355,7 @@ namespace Emby.Server.Implementations.Library
                 var folderId = GetNewItemId(path, typeof(CollectionFolder));
                 try
                 {
-                    ItemRepository.DeleteItem(folderId, CancellationToken.None);
+                    ItemRepository.DeleteItemAsync(folderId, CancellationToken.None).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {

@@ -2533,7 +2533,7 @@ namespace Emby.Server.PgData
                     var id = reader.GetGuid(0);
                     string path = null;
 
-                    if (!reader.IsDBNull(1))
+                    if (!await reader.IsDBNullAsync(1, cancellationToken).ConfigureAwait(false))
                     {
                         path = reader.GetString(1);
                     }

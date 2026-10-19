@@ -339,7 +339,8 @@ namespace Emby.Server.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("device_id", NpgsqlDbType.Text) { Value = deviceId });
 
                 await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false) && !reader.IsDBNull(0))
+                if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+                    && !await reader.IsDBNullAsync(0, cancellationToken).ConfigureAwait(false))
                 {
                     result.CustomName = reader.GetString(0);
                 }

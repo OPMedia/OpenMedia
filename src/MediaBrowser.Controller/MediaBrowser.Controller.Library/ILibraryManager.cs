@@ -81,11 +81,26 @@ public interface ILibraryManager
 
 	void CreateItems(IEnumerable<BaseItem> items, BaseItem parent, CancellationToken cancellationToken);
 
+	/// <summary>
+	/// 批量创建条目（原生异步，媒体库扫描主路径）。
+	/// </summary>
+	Task CreateItemsAsync(IEnumerable<BaseItem> items, BaseItem parent, CancellationToken cancellationToken);
+
 	void UpdateItems(List<BaseItem> items, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken);
+
+	/// <summary>
+	/// 批量更新条目（原生异步，元数据落库主路径）。
+	/// </summary>
+	Task UpdateItemsAsync(List<BaseItem> items, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken);
 
 	void UpdateItem(BaseItem item, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken);
 
 	BaseItem RetrieveItem(Guid id);
+
+	/// <summary>
+	/// 按 GUID 检索条目（原生异步）。
+	/// </summary>
+	Task<BaseItem> RetrieveItemAsync(Guid id, CancellationToken cancellationToken = default);
 
 	string GetContentType(BaseItem item);
 
@@ -163,11 +178,26 @@ public interface ILibraryManager
 
 	List<BaseItem> GetItemList(InternalItemsQuery query);
 
+	/// <summary>
+	/// 列表查询（原生异步，列表页主路径）。
+	/// </summary>
+	Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// 列表查询（原生异步，可控制外部内容）。
+	/// </summary>
+	Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, bool allowExternalContent, CancellationToken cancellationToken = default);
+
 	List<BaseItem> GetItemList(InternalItemsQuery query, bool allowExternalContent);
 
 	List<BaseItem> GetItemList(InternalItemsQuery query, List<BaseItem> parents);
 
 	QueryResult<BaseItem> GetItemsResult(InternalItemsQuery query);
+
+	/// <summary>
+	/// 分页查询（原生异步，列表页 + 总数）。
+	/// </summary>
+	Task<QueryResult<BaseItem>> GetItemsResultAsync(InternalItemsQuery query, CancellationToken cancellationToken = default);
 
 	bool IgnoreFile(FileSystemMetadata file, BaseItem parent);
 
@@ -204,6 +234,11 @@ public interface ILibraryManager
 	QueryResult<Tuple<BaseItem, ItemCounts>> GetAllArtists(InternalItemsQuery query);
 
 	int GetCount(InternalItemsQuery query);
+
+	/// <summary>
+	/// 计数（原生异步）。
+	/// </summary>
+	Task<int> GetCountAsync(InternalItemsQuery query, CancellationToken cancellationToken = default);
 
 	void AddExternalSubtitleStreams(List<MediaStream> streams, string videoPath, string[] files);
 }

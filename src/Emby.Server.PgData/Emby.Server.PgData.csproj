@@ -3,6 +3,11 @@
   <PropertyGroup>
     <AssemblyName>Emby.Server.PgData</AssemblyName>
     <RootNamespace>Emby.Server.PgData</RootNamespace>
+    <!--
+      线程分析器门禁（评审 P1-4）：本工程内阻塞/死锁/崩溃类规则即为 error。
+      声明在 csproj 而非 Directory.Build.props，避免被 ProjectReference 下游继承。
+    -->
+    <WarningsAsErrors>$(WarningsAsErrors);VSTHRD002;VSTHRD003;VSTHRD100;VSTHRD103;VSTHRD110</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

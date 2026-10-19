@@ -58,6 +58,11 @@ BEGIN;
 -- 确保 pgcrypto 可用 (UUID 生成)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- 查询性能可观测性：pg_stat_statements 需要 postgresql.conf 的
+-- shared_preload_libraries 预加载（docker-compose.yml 已配置），
+-- 此处仅负责创建扩展对象，保证「空卷 → compose up → 热点 SQL 可查」可复现。
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
 -- ###########################################################
 -- Database: activitylog
 -- ###########################################################
@@ -68,6 +73,9 @@ CREATE TABLE IF NOT EXISTS activity_log_types (
     name        TEXT NOT NULL,
     PRIMARY KEY (type_id)
 );
+
+-- 唯一：仓储层类型字典走 ON CONFLICT (name) UPSERT
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_log_types_name ON activity_log_types (name);
 
 -- 活动日志 — RANGE 分区 by date_created (时序数据，利于按时间归档/删除)
 CREATE TABLE IF NOT EXISTS activity_log (
@@ -125,7 +133,9 @@ CREATE TABLE IF NOT EXISTS devices (
     PRIMARY KEY (id)
 ) WITH (fillfactor = 90);
 
-CREATE INDEX idx_devices_reported_device_id ON devices (reported_device_id);
+-- 必须唯一：仓储层设备注册走 ON CONFLICT (reported_device_id) UPSERT，
+-- 普通索引会触发 42P10（no unique or exclusion constraint matching the ON CONFLICT specification）。
+CREATE UNIQUE INDEX idx_devices_reported_device_id ON devices (reported_device_id);
 CREATE INDEX idx_devices_ip_address         ON devices (ip_address) WHERE ip_address IS NOT NULL;
 
 COMMENT ON TABLE devices IS '设备注册信息';
@@ -263,6 +273,11 @@ CREATE TABLE media_items_folders   PARTITION OF media_items FOR VALUES IN (0, 1,
 CREATE TABLE media_items_other     PARTITION OF media_items DEFAULT;
 
 -- 分区内索引 (每个分区自动继承)
+-- 唯一：仓储层媒体项 upsert 走 ON CONFLICT (guid, type)；分区表唯一索引必须含分区键 type
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_guid ON media_items (guid, type);
+-- 外键列索引：避免父表 user_data_keys 更新时子表退化为全表 ShareLock
+CREATE INDEX idx_media_items_user_data_key_id                ON media_items (user_data_key_id)
+    WHERE user_data_key_id IS NOT NULL;
 CREATE INDEX idx_media_items_parent_id                       ON media_items (parent_id);
 CREATE INDEX idx_media_items_name                            ON media_items (name);
 CREATE INDEX idx_media_items_sort_name                       ON media_items (sort_name);
@@ -495,12 +510,18 @@ CREATE TABLE IF NOT EXISTS item_extradata (
     item_id            BIGINT  NOT NULL,
     extradata_type_id  INTEGER NOT NULL,
     value              TEXT    NOT NULL,
-    PRIMARY KEY (item_id, extradata_type_id),
+    -- clean_value：Name/Genre/Tag 匹配与聚合分组依赖（旧 ItemValues.CleanValue）
+    clean_value        TEXT,
+    -- 主键必须含 value：多值 Genres/Studios/Tags/Artists 才能共存；
+    -- 同时作为仓储 ON CONFLICT (item_id, extradata_type_id, value) 的仲裁索引。
+    PRIMARY KEY (item_id, extradata_type_id, value),
     -- FK removed: invalid single-column reference to composite PK (id, type); integrity maintained at application layer
     FOREIGN KEY (extradata_type_id) REFERENCES item_extradata_types (extradata_type_id)
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_item_extradata_type_id ON item_extradata (extradata_type_id);
+CREATE INDEX IF NOT EXISTS idx_item_extradata_type_clean_value ON item_extradata (extradata_type_id, clean_value);
+CREATE INDEX IF NOT EXISTS idx_item_extradata_item_type ON item_extradata (item_id, extradata_type_id);
 
 -- ===========================================================
 -- imported_collections (小表)
@@ -749,6 +770,20 @@ CREATE TABLE IF NOT EXISTS user_settings (
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_user_settings_user_id ON user_settings (user_id);
+
+-- 外键列索引：避免父表 user_settings_keys 变更时子表全表扫描
+CREATE INDEX idx_user_settings_key_id ON user_settings (user_settings_key_id);
+
+-- ===========================================================
+-- display_preferences — 用户显示偏好（旧 userdisplaypreferences）
+-- ===========================================================
+CREATE TABLE IF NOT EXISTS display_preferences (
+    item_id UUID    NOT NULL,
+    user_id INTEGER NOT NULL,
+    client  TEXT    NOT NULL,
+    data    JSONB   NOT NULL,
+    PRIMARY KEY (item_id, user_id, client)
+);
 
 -- ###########################################################
 -- 物化视图 — 预聚合统计

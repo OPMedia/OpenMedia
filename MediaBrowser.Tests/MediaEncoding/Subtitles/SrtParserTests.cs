@@ -96,7 +96,7 @@ namespace MediaBrowser.Tests.MediaEncoding.Subtitles
 
             var sut = new SrtParser(new NullLogger());
 
-            var stream = File.OpenRead(@"MediaEncoding\Subtitles\TestSubtitles\unit.srt");
+            var stream = File.OpenRead(Path.Combine("MediaEncoding", "Subtitles", "TestSubtitles", "unit.srt"));
 
             var result = sut.Parse(stream, CancellationToken.None);
 

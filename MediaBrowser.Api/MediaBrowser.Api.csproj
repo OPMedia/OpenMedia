@@ -3,6 +3,11 @@
   <PropertyGroup>
     <AssemblyName>MediaBrowser.Api</AssemblyName>
     <RootNamespace>MediaBrowser.Api</RootNamespace>
+    <!--
+      线程分析器：本工程仍有 78 处历史阻塞点（async void / .Result / 同步 Read 等），
+      暂保持 warning（由 .editorconfig 统一设定），治理完成后再提升为 error。
+      已完成治理的 Emby.Server.PgData 已在本轮启用 error 门禁。
+    -->
   </PropertyGroup>
 
   <ItemGroup>

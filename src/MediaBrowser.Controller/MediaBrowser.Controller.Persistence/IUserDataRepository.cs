@@ -24,6 +24,9 @@ public interface IUserDataRepository : IRepository, IDisposable
 	Task SaveAllUserDataAsync(long internalUserId, UserItemData[] userData, CancellationToken cancellationToken);
 
 	// ---- 兼容桥接（默认实现 → 异步）----
+	// 分析器豁免：这是有意为之的同步适配边界，供未迁移的第三方插件调用；
+	// 实现即「阻塞等待异步」，新代码一律使用 *Async 版本。
+#pragma warning disable VSTHRD002
 	void SaveUserData(long internalUserId, string key, UserItemData userData, CancellationToken cancellationToken)
 		=> SaveUserDataAsync(internalUserId, key, userData, cancellationToken).GetAwaiter().GetResult();
 
@@ -38,4 +41,5 @@ public interface IUserDataRepository : IRepository, IDisposable
 
 	void SaveAllUserData(long internalUserId, UserItemData[] userData, CancellationToken cancellationToken)
 		=> SaveAllUserDataAsync(internalUserId, userData, cancellationToken).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 }

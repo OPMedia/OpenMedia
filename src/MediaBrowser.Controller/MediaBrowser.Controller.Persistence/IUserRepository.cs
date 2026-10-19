@@ -24,6 +24,9 @@ public interface IUserRepository : IRepository, IDisposable
 	Task<long?> GetInternalIdAsync(Guid guid, CancellationToken cancellationToken = default);
 
 	// ---- 兼容桥接（默认实现 → 异步）----
+	// 分析器豁免：这是有意为之的同步适配边界，供未迁移的第三方插件调用；
+	// 实现即「阻塞等待异步」，新代码一律使用 *Async 版本。
+#pragma warning disable VSTHRD002
 	void CreateUser(User user) => CreateUserAsync(user).GetAwaiter().GetResult();
 
 	void UpdateUser(User user) => UpdateUserAsync(user).GetAwaiter().GetResult();
@@ -31,4 +34,5 @@ public interface IUserRepository : IRepository, IDisposable
 	List<User> RetrieveAllUsers() => RetrieveAllUsersAsync().GetAwaiter().GetResult();
 
 	void DeleteUser(User user) => DeleteUserAsync(user).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 }

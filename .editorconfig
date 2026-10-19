@@ -1,0 +1,59 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{csproj,props,targets,xml,json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# ============================================================
+# Microsoft.VisualStudio.Threading.Analyzers 严重级别
+#
+# 分级理由：
+#   error      —— 会在线程池上造成真实阻塞/死锁/进程崩溃，必须阻断构建；
+#   suggestion —— 命名规范类（Async 后缀），存量数千处，先观测不阻塞。
+#
+# 生效范围：仅 src/Emby.Server.PgData、Emby.Server.Implementations、
+#          MediaBrowser.Api 三个工程（见 Directory.Build.props 的
+#          EnableVSTHRDAnalyzers 开关），避免 BDInfo/DvdLib 等老工程直接爆掉。
+# ============================================================
+
+[*.cs]
+# --- 阻塞与死锁（全仓 warning）---
+#
+# 说明：这里刻意设为 warning 而非 error。
+# .editorconfig 的 severity 是**全仓全局**的（不受工程边界限制），
+# 若设为 error，会让 BDInfo / DvdLib / MediaBrowser.Controller 等
+# 尚未迁移的历史工程直接构建失败。
+#
+# 「对三个目标工程升级为 error」通过各工程 csproj 内的
+# WarningsAsErrors 实现（见 P1-4 交付说明），二者组合后：
+#   - 三个目标工程：命中即构建失败（门禁生效）
+#   - 其余工程    ：仅为 warning（不阻塞，可渐进治理）
+#
+# VSTHRD002: 同步等待 Task（.Result / .Wait() / GetAwaiter().GetResult()）
+dotnet_diagnostic.VSTHRD002.severity = warning
+# VSTHRD003: await 一个不在当前上下文中启动的 Task
+dotnet_diagnostic.VSTHRD003.severity = warning
+# VSTHRD100: async void 方法（未捕获异常会直接终止进程）
+dotnet_diagnostic.VSTHRD100.severity = warning
+# VSTHRD103: 在 async 方法中调用同步阻塞 API（ReadToEnd/Write/Connect/Cancel…）
+dotnet_diagnostic.VSTHRD103.severity = warning
+# VSTHRD110: 未观察返回的 awaitable（即发即忘，异常静默丢失）
+dotnet_diagnostic.VSTHRD110.severity = warning
+
+# --- 命名规范（不阻塞）---
+# VSTHRD200: 返回 awaitable 的方法应以 Async 结尾（存量数千处）
+dotnet_diagnostic.VSTHRD200.severity = suggestion
+
+# --- 其它 ---
+dotnet_diagnostic.VSTHRD101.severity = warning
+dotnet_diagnostic.VSTHRD105.severity = warning

@@ -89,6 +89,9 @@ public interface IItemRepository : IRepository, IDisposable
 	Task<List<string>> GetAllArtistNamesAsync(CancellationToken cancellationToken = default);
 
 	// ===================== 遗留同步桥接（默认实现） =====================
+	// 分析器豁免：有意为之的同步适配边界（供未迁移的第三方插件）。
+	// 仓储实现内部已全异步，这里只是阻塞等待；新代码一律用 *Async。
+#pragma warning disable VSTHRD002
 
 	void SaveItem(BaseItem item, CancellationToken cancellationToken) => SaveItemAsync(item, cancellationToken).GetAwaiter().GetResult();
 
@@ -153,4 +156,5 @@ public interface IItemRepository : IRepository, IDisposable
 	List<string> GetGenreNames() => GetGenreNamesAsync().GetAwaiter().GetResult();
 
 	List<string> GetAllArtistNames() => GetAllArtistNamesAsync().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 }

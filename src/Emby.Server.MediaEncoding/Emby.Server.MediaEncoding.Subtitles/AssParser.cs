@@ -55,7 +55,7 @@ public class AssParser : ISubtitleParser
 						val2.Text = string.Join(",", array.Skip(dictionary["Text"]));
 						RemoteNativeFormatting(val2);
 						val2.Text = StringHelper.Replace(val2.Text, "\\n", "\r\n", StringComparison.OrdinalIgnoreCase);
-						val2.Text = Regex.Replace(val2.Text, "\\{(\\\\[\\w]+\\(?([\\w\\d]+,?)+\\)?)+\\}", string.Empty, RegexOptions.IgnoreCase);
+						val2.Text = Regex.Replace(val2.Text, "\\{[^{}\\r\\n]*\\\\[^{}\\r\\n]*\\}", string.Empty, RegexOptions.IgnoreCase);
 						list.Add(val2);
 					}
 				}

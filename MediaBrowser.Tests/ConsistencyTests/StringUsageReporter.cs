@@ -51,7 +51,7 @@ namespace MediaBrowser.Tests.ConsistencyTests
         /// <remarks>
         /// Can be an absolute path or a path relative to the binaries folder (bin\Debug).
         /// </remarks>
-        public const string WebFolder = @"..\..\..\MediaBrowser.WebDashboard\dashboard-ui";
+        public const string WebFolder = @"..\..\..\..\MediaBrowser.WebDashboard\dashboard-ui";
 
         /// <summary>
         /// Path to the strings file, relative to <see cref="WebFolder"/>.
@@ -121,7 +121,7 @@ namespace MediaBrowser.Tests.ConsistencyTests
             Trace("Output Path: {0}", outputFolderInfo.FullName);
 
             // Load Strings
-            var stringsFileName = Path.Combine(rootFolderInfo.FullName, StringsFile);
+            var stringsFileName = Path.Combine(rootFolderInfo.FullName, StringsFile.Replace('\\', Path.DirectorySeparatorChar));
 
             if (!File.Exists(stringsFileName))
             {
@@ -234,6 +234,9 @@ namespace MediaBrowser.Tests.ConsistencyTests
 
         private DirectoryInfo ResolveFolder(string currentDir, string folderPath)
         {
+            // 跨平台：把 Windows 反斜杠路径统一转为当前平台分隔符
+            folderPath = folderPath.Replace('\\', Path.DirectorySeparatorChar);
+
             if (folderPath.IndexOf(@"\:") != 1)
             {
                 folderPath = Path.Combine(currentDir, folderPath);

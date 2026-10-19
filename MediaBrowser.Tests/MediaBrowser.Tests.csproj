@@ -10,6 +10,13 @@
     <Compile Include="..\SharedVersion.cs" Link="Properties\SharedVersion.cs" />
   </ItemGroup>
 
+  <!-- 测试资源：字幕样例随输出目录复制，避免依赖运行目录（跨平台） -->
+  <ItemGroup>
+    <None Include="MediaEncoding\Subtitles\TestSubtitles\**\*"
+          Link="MediaEncoding\Subtitles\TestSubtitles\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\src\MediaBrowser.Model\MediaBrowser.Model.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Common\MediaBrowser.Common.csproj" />

@@ -1889,6 +1889,9 @@ public abstract class BaseItem : IHasProviderIds, IHasLookupInfo<ItemLookupInfo>
 		//IL_0041: Unknown result type (might be due to invalid IL or missing references)
 		if ((int)imageType == 10)
 		{
+			// 已知同步边界：GetImageInfo 是同步属性 API（ImageInfos 链），
+			// 改异步需重写 DTO 图片标签生成全链路；章节查询为单行主键查找，代价可控。
+#pragma warning disable VSTHRD002
 			ChapterInfo chapter = ItemRepository.GetChapter(this, imageIndex);
 			if (chapter == null)
 			{
@@ -1897,8 +1900,10 @@ public abstract class BaseItem : IHasProviderIds, IHasLookupInfo<ItemLookupInfo>
 			string imagePath = chapter.ImagePath;
 			if (string.IsNullOrEmpty(imagePath))
 			{
+#pragma warning restore VSTHRD002
 				return null;
 			}
+#pragma warning restore VSTHRD002
 			return new ItemImageInfo
 			{
 				Path = imagePath,

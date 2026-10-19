@@ -207,7 +207,9 @@ namespace MediaBrowser.Api.ScheduledTasks
                 }
             }
 
-            TaskManager.Execute(task, new TaskOptions());
+            // 任务调度是即发即忘语义：Execute 返回的 Task 由 TaskManager 内部跟踪，
+            // 这里显式丢弃以免被误判为未观察异常。
+            _ = TaskManager.Execute(task, new TaskOptions());
         }
 
         /// <summary>

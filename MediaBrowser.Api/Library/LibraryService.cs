@@ -1032,11 +1032,13 @@ namespace MediaBrowser.Api.Library
         /// <param name="request">The request.</param>
         public void Post(RefreshLibrary request)
         {
-            Task.Run(() =>
+            // 即发即忘：异常已在 lambda 内捕获记录，显式丢弃 Task
+            _ = Task.Run(async () =>
             {
                 try
                 {
-                    _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None);
+                    await _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

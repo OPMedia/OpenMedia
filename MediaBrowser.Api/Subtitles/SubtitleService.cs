@@ -277,7 +277,7 @@ namespace MediaBrowser.Api.Subtitles
                 {
                     using (var reader = new StreamReader(stream))
                     {
-                        var text = reader.ReadToEnd();
+                        var text = await reader.ReadToEndAsync().ConfigureAwait(false);
 
                         text = text.Replace("WEBVTT", "WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000");
 
@@ -327,7 +327,8 @@ namespace MediaBrowser.Api.Subtitles
         {
             var video = (Video)_libraryManager.GetItemById(request.Id);
 
-            Task.Run(async () =>
+            // 即发即忘：异常在 lambda 内捕获，显式丢弃 Task
+            _ = Task.Run(async () =>
             {
                 try
                 {

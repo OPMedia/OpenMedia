@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-10-19T08:36:47.8869463\u002B08:00",
+  "clients": 100,
+  "rounds_per_client": 20,
+  "expected_transactions": 2000,
+  "ok": 2000,
+  "failed": 0,
+  "failures": [],
+  "elapsed_sec": 3.066,
+  "throughput_tps": 652.4,
+  "latency_ms": {
+    "p50": 55.32,
+    "p95": 479.47,
+    "p99": 777.23,
+    "max": 1573.9
+  },
+  "threadpool": {
+    "baseline": 3,
+    "peak": 17,
+    "pending_work_items": 0
+  },
+  "deadlocks_before": 0,
+  "deadlocks_after": 0,
+  "deadlocks_delta": 0
+}

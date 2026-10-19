@@ -218,7 +218,8 @@ namespace MediaBrowser.Api.System
         /// <param name="request">The request.</param>
         public void Post(ShutdownApplication request)
         {
-            Task.Run(async () =>
+            // 即发即忘：关机流程自身负责日志与退出
+            _ = Task.Run(async () =>
             {
                 await Task.Delay(100).ConfigureAwait(false);
                 await _appHost.Shutdown().ConfigureAwait(false);

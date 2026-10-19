@@ -12,7 +12,9 @@ public static class EventHelper
 		{
 			return;
 		}
-		Task.Run(() =>
+		// 事件派发是即发即忘语义：显式丢弃 Task，避免未观察告警；
+		// 异常已在 lambda 内捕获记录，不会变成未处理异常。
+		_ = Task.Run(() =>
 		{
 			try
 			{
@@ -31,7 +33,9 @@ public static class EventHelper
 		{
 			return;
 		}
-		Task.Run(() =>
+		// 事件派发是即发即忘语义：显式丢弃 Task，避免未观察告警；
+		// 异常已在 lambda 内捕获记录，不会变成未处理异常。
+		_ = Task.Run(() =>
 		{
 			try
 			{

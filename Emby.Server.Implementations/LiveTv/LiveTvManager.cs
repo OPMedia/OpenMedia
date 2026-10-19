@@ -1283,12 +1283,12 @@ namespace Emby.Server.Implementations.LiveTv
 
                     if (newPrograms.Count > 0)
                     {
-                        _libraryManager.CreateItems(newPrograms, null, cancellationToken);
+                        await _libraryManager.CreateItemsAsync(newPrograms, null, cancellationToken).ConfigureAwait(false);
                     }
 
                     if (updatedPrograms.Count > 0)
                     {
-                        _libraryManager.UpdateItems(updatedPrograms, currentChannel, ItemUpdateType.MetadataImport, cancellationToken);
+                        await _libraryManager.UpdateItemsAsync(updatedPrograms, currentChannel, ItemUpdateType.MetadataImport, cancellationToken).ConfigureAwait(false);
                     }
 
                     currentChannel.IsMovie = isMovie;

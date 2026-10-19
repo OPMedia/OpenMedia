@@ -66,9 +66,32 @@ namespace Emby.Server.PgData
         private readonly IAssemblyInfo _assemblyInfo;
 
         /// <summary>
-        /// GUID → media_items.id 缓存（§5.3：写入 RETURNING id 填充，读取 SELECT 填充）。
+        /// GUID → media_items.id 缓存（写入 RETURNING guid,id 填充）。
+        ///
+        /// 生命周期约束（防无界增长）：
+        /// - Initialize 时整体 Clear（换库/重连后旧映射必然失效）；
+        /// - 写入路径超过 <see cref="GuidMapSoftLimit"/> 时整体清空（缓存而非事实来源，
+        ///   清空只影响命中率，下次未命中回查数据库）。
         /// </summary>
         private readonly ConcurrentDictionary<Guid, long> _guidToIdMap = new ConcurrentDictionary<Guid, long>();
+
+        /// <summary>
+        /// GUID 映射缓存软上限。超过即整体失效，避免全量重扫后无限增长。
+        /// </summary>
+        private const int GuidMapSoftLimit = 200_000;
+
+        /// <summary>
+        /// 缓存写入 + 上限保护。
+        /// </summary>
+        private void CacheGuidId(Guid guid, long id)
+        {
+            if (_guidToIdMap.Count >= GuidMapSoftLimit)
+            {
+                _guidToIdMap.Clear();
+            }
+
+            _guidToIdMap[guid] = id;
+        }
 
         public PgItemRepository(
             IServerConfigurationManager config,
@@ -101,6 +124,9 @@ namespace Emby.Server.PgData
         /// </summary>
         public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
+            // 换库/重连后旧 GUID→id 映射必然失效，整体清空
+            _guidToIdMap.Clear();
+
             await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             var tables = new[] { "media_items", "chapters", "media_streams", "item_people", "ancestor_ids", "item_extradata" };
@@ -229,7 +255,7 @@ namespace Emby.Server.PgData
             }
 
             var id = Convert.ToInt64(result);
-            _guidToIdMap[guid] = id;
+            CacheGuidId(guid, id);
             return id;
         }
 
@@ -324,30 +350,123 @@ namespace Emby.Server.PgData
                 return;
             }
 
-            for (int chunkStart = 0; chunkStart < sortedItems.Count; chunkStart += BatchChunkSize)
+            // ---- 事务外一次性提取全部内存侧数据（不占用连接）----
+            var allRows = sortedItems.Select(BuildBatchRow).ToList();
+            var allExtraRows = sortedItems
+                .Select(i => (Item: i.Id, Values: GetItemValuesToSave(i, i.GetInheritedTags())))
+                .ToList();
+            var allGuids = sortedItems.Select(i => i.Id).ToArray();
+
+            // ================= 阶段 1：分块 upsert（引用列留 NULL）=================
+            for (int start = 0; start < allRows.Count; start += BatchChunkSize)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var chunk = sortedItems.Skip(chunkStart).Take(BatchChunkSize).ToList();
 
-                await SaveItemsChunkAsync(chunk, cancellationToken).ConfigureAwait(false);
+                var rowChunk = allRows.Skip(start).Take(BatchChunkSize).ToList();
+                var chunkGuids = new HashSet<Guid>(rowChunk.Select(r => r.Guid));
+
+                var extraChunk = allExtraRows.Where(e => chunkGuids.Contains(e.Item)).ToList();
+
+                await UpsertItemsChunkAsync(rowChunk, extraChunk, cancellationToken).ConfigureAwait(false);
+            }
+
+            // ================= 阶段 2：全局引用回填 =================
+            // 所有块已 upsert 完毕，父项/系列项必然存在（无论其落在哪个块）。
+            await BackfillReferencesAllAsync(allRows, cancellationToken).ConfigureAwait(false);
+
+            // ================= 阶段 3：全局闭包表重建（递归 CTE，含真实 distance）=================
+            // 所有块 upsert + 全局 parent_id 回填已完成，此时沿 parent_id 上溯必然可达。
+            for (int start = 0; start < allGuids.Length; start += BatchChunkSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var guidChunk = allGuids.Skip(start).Take(BatchChunkSize).ToArray();
+
+                await RunInTransactionAsync((connection, transaction, ct) =>
+                    RebuildAncestorsAsync(connection, transaction, guidChunk, ct), cancellationToken).ConfigureAwait(false);
             }
         }
 
         /// <summary>
-        /// 单块批量落库（一个短事务内完成，全部为集合式 SQL）。
+        /// 重建本批 item 的祖先闭包（含真实层级 distance）。
+        ///
+        /// 采用 **SQL 递归 CTE** 在数据库内沿 parent_id 上溯：
+        ///   - 不依赖 LibraryManager 内存缓存（扫描期父项常未注册，内存推导会得到空链）；
+        ///   - 天然覆盖「父项在其它 chunk / 上一轮扫描」的情况；
+        ///   - distance 由递归深度直接给出（父=1、祖父=2 …）。
+        ///
+        /// 必须在所有 chunk upsert + 全局 parent_id 回填之后调用。
         /// </summary>
-        private Task SaveItemsChunkAsync(List<BaseItem> chunk, CancellationToken cancellationToken)
+        private static Task RebuildAncestorsAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid[] itemGuids,
+            CancellationToken cancellationToken)
         {
-            // ---- 事务外完成全部内存侧字段提取（不占用连接）----
-            var rows = chunk.Select(item => BuildBatchRow(item)).ToList();
-            var ancestorRows = chunk
-                .Where(i => i.SupportsAncestors)
-                .Select(i => (Item: i.Id, Ancestors: i.GetAncestorIds().Distinct().OrderBy(g => g).ToList()))
-                .ToList();
-            var extraRows = chunk
-                .Select(i => (Item: i.Id, Values: GetItemValuesToSave(i, i.GetInheritedTags())))
-                .ToList();
+            if (itemGuids.Length == 0)
+            {
+                return Task.CompletedTask;
+            }
 
+            const string recursiveSql = @"
+                WITH RECURSIVE walk AS (
+                    SELECT m.id AS item_id, m.parent_id AS ancestor_id, 1 AS distance
+                    FROM media_items m
+                    WHERE m.guid = ANY(@guids) AND m.parent_id IS NOT NULL
+                    UNION ALL
+                    SELECT w.item_id, p.parent_id, w.distance + 1
+                    FROM walk w
+                    JOIN media_items p ON p.id = w.ancestor_id
+                    WHERE p.parent_id IS NOT NULL
+                      AND w.distance < 64
+                )
+                INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
+                SELECT item_id, ancestor_id, min(distance)
+                FROM walk
+                GROUP BY item_id, ancestor_id
+                ON CONFLICT (item_id, ancestor_id) DO UPDATE SET distance = EXCLUDED.distance";
+
+            return RebuildAncestorsCoreAsync(connection, transaction, itemGuids, recursiveSql, cancellationToken);
+        }
+
+        private static async Task RebuildAncestorsCoreAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid[] itemGuids,
+            string insertSql,
+            CancellationToken cancellationToken)
+        {
+            // 先清空本批 item 的旧闭包
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                @"DELETE FROM ancestor_ids a
+                  USING media_items m
+                  WHERE a.item_id = m.id AND m.guid = ANY(@guids)",
+                cancellationToken,
+                new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = itemGuids }).ConfigureAwait(false);
+
+            // 再递归重建（含真实 distance）
+            await ExecuteNonQueryAsync(
+                connection,
+                transaction,
+                insertSql,
+                cancellationToken,
+                new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = itemGuids }).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 单块 upsert（一个短事务）：清理同 guid 异 type 历史行 → 解析 user_data_key →
+        /// UNNEST 批量 UPSERT → 批量写 extradata。
+        ///
+        /// 注意：本阶段**不**写 parent_id / series_id / ancestor_ids —— 父项可能落在后续块，
+        /// 引用与闭包由全局阶段（<see cref="BackfillReferencesAllAsync"/> /
+        /// <see cref="WriteAncestorsAllAsync"/>）在所有块 upsert 完成后统一处理。
+        /// </summary>
+        private Task UpsertItemsChunkAsync(
+            List<MediaItemBatchRow> rows,
+            List<(Guid Item, List<Tuple<int, string>> Values)> extraRows,
+            CancellationToken cancellationToken)
+        {
             return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
                 // ---- 1. 清理同 guid 异 type 的历史行（一次集合删除）----
@@ -372,16 +491,30 @@ namespace Emby.Server.PgData
                 var insertedIds = await UpsertMediaItemsBatchAsync(connection, transaction, rows, userDataKeyIdMap, ct).ConfigureAwait(false);
                 for (int i = 0; i < rows.Count; i++)
                 {
-                    _guidToIdMap[rows[i].Guid] = insertedIds[i];
+                    CacheGuidId(rows[i].Guid, insertedIds[i]);
                 }
 
-                // ---- 4. 单条集合 UPDATE 回填 parent_id / series_id（GUID → id 子查询）----
-                await BackfillReferencesAsync(connection, transaction, rows, ct).ConfigureAwait(false);
-
-                // ---- 5. 祖先闭包 + extradata 批量写入 ----
-                await WriteAncestorsBatchAsync(connection, transaction, ancestorRows, ct).ConfigureAwait(false);
+                // ---- 4. extradata 批量写入 ----
                 await WriteExtraDataBatchAsync(connection, transaction, extraRows, ct).ConfigureAwait(false);
             }, cancellationToken);
+        }
+
+        /// <summary>
+        /// 全局回填 parent_id / series_id：在所有块 upsert 完成后执行，
+        /// 保证父项无论落在哪个块都已存在（彻底消除跨块父子丢失）。
+        /// </summary>
+        private async Task BackfillReferencesAllAsync(
+            List<MediaItemBatchRow> allRows,
+            CancellationToken cancellationToken)
+        {
+            for (int start = 0; start < allRows.Count; start += BatchChunkSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunk = allRows.Skip(start).Take(BatchChunkSize).ToList();
+
+                await RunInTransactionAsync((connection, transaction, ct) =>
+                    BackfillReferencesAsync(connection, transaction, chunk, ct), cancellationToken).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -827,14 +960,18 @@ namespace Emby.Server.PgData
                     external_series_id = EXCLUDED.external_series_id,
                     owner_id = EXCLUDED.owner_id,
                     date_last_media_added = EXCLUDED.date_last_media_added
-                RETURNING id";
+                RETURNING guid, id";
 
             await using var cmd = new NpgsqlCommand(sql, connection, transaction);
             cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guid });
             cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = type });
             cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = typeName });
             cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = data });
-            cmd.Parameters.Add(new NpgsqlParameter("parent_id", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = parentGuid });
+            // parent_id 为 BIGINT 外键：本批次先写 NULL，由 BackfillReferencesAsync 统一解析回填
+            cmd.Parameters.Add(new NpgsqlParameter("parent_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+            {
+                Value = new long?[count]
+            });
             cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = path });
             cmd.Parameters.Add(new NpgsqlParameter("start_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = startDate });
             cmd.Parameters.Add(new NpgsqlParameter("end_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = endDate });
@@ -902,41 +1039,33 @@ namespace Emby.Server.PgData
             cmd.Parameters.Add(new NpgsqlParameter("owner_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = ownerId });
             cmd.Parameters.Add(new NpgsqlParameter("date_last_media_added", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateLastMediaAdded });
 
-            var ids = new List<long>(count);
+            // PostgreSQL 对 INSERT ... ON CONFLICT ... RETURNING 不保证行序，
+            // 因此 RETURNING 直接带出 guid，按 guid 建映射（绝不按下标配对）。
+            var map = new Dictionary<Guid, long>(count);
             await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
             {
                 while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    ids.Add(reader.GetInt64(0));
+                    map[reader.GetGuid(0)] = reader.GetInt64(1);
                 }
             }
 
-            // RETURNING 顺序不保证与输入一致 → 再按 guid 对齐
-            var map = new Dictionary<Guid, long>(ids.Count);
-            if (ids.Count == count)
+            if (map.Count != count)
             {
-                for (int i = 0; i < count; i++)
-                {
-                    map[guid[i]] = ids[i];
-                }
-            }
-            else
-            {
-                await using var lookup = new NpgsqlCommand(
-                    "SELECT guid, id FROM media_items WHERE guid = ANY(@guids)",
-                    connection, transaction);
-                lookup.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guid });
-                await using var lr = await lookup.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-                while (await lr.ReadAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    map[lr.GetGuid(0)] = lr.GetInt64(1);
-                }
+                throw new InvalidOperationException(
+                    $"Batch upsert returned {map.Count} rows for {count} input rows (guid/type conflict mismatch).");
             }
 
             var result = new long[count];
             for (int i = 0; i < count; i++)
             {
-                result[i] = map.TryGetValue(guid[i], out var v) ? v : 0L;
+                if (!map.TryGetValue(guid[i], out var v))
+                {
+                    throw new InvalidOperationException(
+                        $"Batch upsert did not return id for guid {guid[i]}.");
+                }
+
+                result[i] = v;
             }
 
             return result;
@@ -972,66 +1101,6 @@ namespace Emby.Server.PgData
                 new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guids },
                 new NpgsqlParameter("parent_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = parentGuids },
                 new NpgsqlParameter("series_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = seriesGuids });
-        }
-
-        /// <summary>
-        /// 祖先闭包表批量写入（单条 UNNEST：先按 item 集合删除，再集合插入）。
-        /// </summary>
-        private static async Task WriteAncestorsBatchAsync(
-            NpgsqlConnection connection,
-            NpgsqlTransaction transaction,
-            List<(Guid Item, List<Guid> Ancestors)> ancestorRows,
-            CancellationToken cancellationToken)
-        {
-            if (ancestorRows.Count == 0)
-            {
-                return;
-            }
-
-            var itemGuids = ancestorRows.Select(r => r.Item).ToArray();
-
-            await ExecuteNonQueryAsync(
-                connection,
-                transaction,
-                @"DELETE FROM ancestor_ids a
-                  USING media_items m
-                  WHERE a.item_id = m.id AND m.guid = ANY(@item_guids)",
-                cancellationToken,
-                new NpgsqlParameter("item_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = itemGuids }).ConfigureAwait(false);
-
-            var childGuids = new List<Guid>();
-            var ancestorGuids = new List<Guid>();
-            foreach (var row in ancestorRows)
-            {
-                foreach (var anc in row.Ancestors)
-                {
-                    if (anc.Equals(Guid.Empty))
-                    {
-                        continue;
-                    }
-
-                    childGuids.Add(row.Item);
-                    ancestorGuids.Add(anc);
-                }
-            }
-
-            if (childGuids.Count == 0)
-            {
-                return;
-            }
-
-            await ExecuteNonQueryAsync(
-                connection,
-                transaction,
-                @"INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-                  SELECT c.id, p.id, 0
-                  FROM UNNEST(@child_guids, @ancestor_guids) AS u(cg, ag)
-                  JOIN media_items c ON c.guid = u.cg
-                  JOIN media_items p ON p.guid = u.ag
-                  ON CONFLICT (item_id, ancestor_id) DO NOTHING",
-                cancellationToken,
-                new NpgsqlParameter("child_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = childGuids.ToArray() },
-                new NpgsqlParameter("ancestor_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ancestorGuids.ToArray() }).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1375,7 +1444,7 @@ namespace Emby.Server.PgData
             item.Id = reader.GetGuid(reader.GetOrdinal("guid"));
 
             long internalId = reader.GetInt64(reader.GetOrdinal("id"));
-            _guidToIdMap[item.Id] = internalId;
+            CacheGuidId(item.Id, internalId);
 
             // ===== 扁平列覆盖（对照旧 GetItem 逐字段） =====
 

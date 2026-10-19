@@ -19,4 +19,27 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.13.2" PrivateAssets="all" />
   </ItemGroup>
+
+  <!--
+    线程分析器门禁开关（评审 P1-4）：
+    仅对已完成异步化的三个工程把 VSTHRD002/003/100/103/110 提升为 error，
+    避免 BDInfo / DvdLib / Mono.Nat 等历史工程直接阻断构建。
+    具体严重级别定义见根目录 .editorconfig。
+  -->
+  <!--
+    线程分析器门禁（评审 P1-4）。
+
+    实现方式说明：
+      MSBuild 的 WarningsAsErrors 会被 ProjectReference 下游工程继承，
+      若在 props 里按工程名设置，会误伤 MediaBrowser.Controller 等历史工程。
+      因此这里只打开分析器；「升级为 error」由各目标工程 csproj 内的
+      WarningsAsErrors 精确声明（见 src/Emby.Server.PgData/Emby.Server.PgData.csproj
+      等三处），确保只作用于自身编译单元。
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Emby.Server.PgData'
+                             Or '$(MSBuildProjectName)' == 'Emby.Server.Implementations'
+                             Or '$(MSBuildProjectName)' == 'MediaBrowser.Api'">
+    <EnableVSTHRDAnalyzers>true</EnableVSTHRDAnalyzers>
+  </PropertyGroup>
+
 </Project>

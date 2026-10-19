@@ -20,6 +20,9 @@ public interface IDisplayPreferencesRepository : IRepository, IDisposable
 	Task<List<DisplayPreferences>> GetAllDisplayPreferencesAsync(Guid userId, CancellationToken cancellationToken = default);
 
 	// ---- 兼容桥接（默认实现 → 异步）----
+	// 分析器豁免：这是有意为之的同步适配边界，供未迁移的第三方插件调用；
+	// 实现即「阻塞等待异步」，新代码一律使用 *Async 版本。
+#pragma warning disable VSTHRD002
 	void SaveDisplayPreferences(DisplayPreferences displayPreferences, string userId, string client, CancellationToken cancellationToken)
 		=> SaveDisplayPreferencesAsync(displayPreferences, new Guid(userId), client, cancellationToken).GetAwaiter().GetResult();
 
@@ -31,4 +34,5 @@ public interface IDisplayPreferencesRepository : IRepository, IDisposable
 
 	IEnumerable<DisplayPreferences> GetAllDisplayPreferences(Guid userId)
 		=> GetAllDisplayPreferencesAsync(userId).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 }

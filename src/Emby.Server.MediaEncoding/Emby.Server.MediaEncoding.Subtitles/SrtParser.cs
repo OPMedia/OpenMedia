@@ -68,7 +68,7 @@ public class SrtParser : ISubtitleParser
 				}
 				val2.Text = string.Join("\r\n", list2);
 				val2.Text = StringHelper.Replace(val2.Text, "\\N", "\r\n", StringComparison.OrdinalIgnoreCase);
-				val2.Text = Regex.Replace(val2.Text, "\\{(\\\\[\\w]+\\(?([\\w\\d]+,?)+\\)?)+\\}", string.Empty, RegexOptions.IgnoreCase);
+				val2.Text = Regex.Replace(val2.Text, "\\{[^{}\\r\\n]*\\\\[^{}\\r\\n]*\\}", string.Empty, RegexOptions.IgnoreCase);
 				val2.Text = Regex.Replace(val2.Text, "<", "&lt;", RegexOptions.IgnoreCase);
 				val2.Text = Regex.Replace(val2.Text, ">", "&gt;", RegexOptions.IgnoreCase);
 				val2.Text = Regex.Replace(val2.Text, "&lt;(\\/?(font|b|u|i|s))((\\s+(\\w|\\w[\\w\\-]*\\w)(\\s*=\\s*(?:\\\".*?\\\"|'.*?'|[^'\\\">\\s]+))?)+\\s*|\\s*)(\\/?)&gt;", "<$1$3$7>", RegexOptions.IgnoreCase);
