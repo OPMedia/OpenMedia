@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 472 200" width="472" height="200" role="img" aria-label="Serata">
+  <title>Serata — horizontal lockup, for dark surfaces</title>
+  <desc>Transparent background, cream wordmark and mark. The wordmark is live text pinned with textLength so the layout cannot overflow.</desc>
+  <g transform="translate(-49.66 -8.58) scale(.424)">
+    <path fill="#FFF8F1" stroke="#FFF8F1" stroke-width="44" stroke-linejoin="round"
+          d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+  </g>
+  <text x="140" y="139" fill="#FFF8F1" font-size="112" font-weight="600" letter-spacing="-1.5"
+        textLength="318" lengthAdjust="spacing"
+        font-family="Inter, 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">Serata</text>
+</svg>

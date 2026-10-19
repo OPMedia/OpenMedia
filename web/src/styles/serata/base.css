@@ -1,0 +1,171 @@
+/**
+ * Serata 设计层 —— 全局基元（base）。
+ *
+ * 只放跨组件复用的原语：焦点环、滚动条、图片淡入、骨架屏、行遮罩、转场命名。
+ * 组件自己的版式一律写在组件 <style scoped> 里，并且只消费 tokens.css 的变量。
+ * 这里不允许出现任何布局类（不写 flex/grid 规则），避免和 emby495 老页面互相踩。
+ */
+
+/* ---------- 焦点环：只在键盘导航时出现 ----------
+   注意：老 emby CSS 里有一族 `.button-link/.listItem/.emby-button{outline:0!important}`，
+   它会**静默吃掉**新层画在这些元素上的 outline（实测首页 42 个 Tab 停靠点里有 17 个
+   卡片文字按钮中招）。所以这里 outline 带 !important 压回去，同时再补一圈 box-shadow
+   ——老 CSS 完全不碰 box-shadow，双保险，任何混了老类名的元素都不会丢焦点指示。 */
+:focus-visible {
+  outline: 2px solid var(--s-accent) !important;
+  outline-offset: 2px !important;
+  box-shadow:
+    0 0 0 2px var(--s-bg),
+    0 0 0 4px var(--s-accent) !important;
+}
+/* 鼠标点击不显示焦点环 */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---------- 文本选择 ---------- */
+::selection {
+  background: var(--s-accent-soft);
+  color: var(--s-text-1);
+}
+
+/* ---------- 细滚动条（仅新层容器使用；main.s-home 是首页主滚动容器） ---------- */
+.s-scroll,
+main.s-home {
+  scrollbar-width: thin;
+  scrollbar-color: var(--s-line-strong) transparent;
+}
+.s-scroll::-webkit-scrollbar,
+main.s-home::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.s-scroll::-webkit-scrollbar-thumb,
+main.s-home::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--s-line-strong) 62%, transparent);
+  border: 3px solid transparent;
+  border-radius: var(--s-r-pill);
+  background-clip: content-box;
+}
+.s-scroll::-webkit-scrollbar-track,
+main.s-home::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 横向轨道：隐藏滚动条但保留滚动（行内滑动） */
+.s-scroll-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+}
+.s-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+.s-scroll-x > * {
+  scroll-snap-align: start;
+}
+
+/* ---------- 图片淡入（消除"图一张张蹦出来"） ---------- */
+.s-img {
+  opacity: 0;
+  transition: opacity var(--s-dur-base) var(--s-ease-std);
+  background-color: var(--s-img-placeholder);
+}
+.s-img.is-loaded {
+  opacity: 1;
+}
+
+/* ---------- 骨架屏 ---------- */
+/* ---------- 骨架屏：微光只动 transform，不重绘背景 ---------- */
+@keyframes s-shimmer {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(110%);
+  }
+}
+.s-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--s-surface);
+  border-radius: var(--s-r-md);
+}
+.s-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--s-skeleton-hi) 50%,
+    transparent 80%
+  );
+  transform: translateX(-110%);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .s-skeleton::after {
+    animation: s-shimmer 1.6s var(--s-ease-std) infinite;
+  }
+}
+
+/* ---------- 行两侧渐隐遮罩 ----------
+   注意：mask-image 里的 #000 / transparent 是**遮罩 alpha 通道**，不是品牌色，
+   不能用 --s-* 令牌替换（令牌带 alpha 会把遮罩变软）。这是本文件唯一允许的
+   裸色值位置。 */
+.s-fade-x {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 var(--s-gutter),
+    #000 calc(100% - var(--s-gutter)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 var(--s-gutter),
+    #000 calc(100% - var(--s-gutter)),
+    transparent 100%
+  );
+}
+
+/* ---------- 视觉隐藏（屏幕阅读器可见） ---------- */
+.s-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- 页面转场（View Transitions；不支持的浏览器自动忽略） ---------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--s-dur-base);
+  animation-timing-function: var(--s-ease-std);
+}
+/* 共享元素（首页卡片 → 详情页主图） */
+::view-transition-group(s-poster) {
+  animation-duration: var(--s-dur-slow);
+  animation-timing-function: var(--s-ease-std);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(*) {
+    animation-duration: 1ms !important;
+  }
+  .s-skeleton::after {
+    animation: none;
+  }
+}

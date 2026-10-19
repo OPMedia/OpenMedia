@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 240" width="600" height="240" role="img" aria-label="Serata">
+  <title>Serata — horizontal lockup on a dark plate</title>
+  <desc>Opaque dusk gradient plate with rounded corners.</desc>
+  <defs>
+    <linearGradient id="duskLockupPlate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1F3B"/>
+      <stop offset=".55" stop-color="#46356F"/>
+      <stop offset="1" stop-color="#E0705A"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="240" rx="52" fill="url(#duskLockupPlate)"/>
+  <g transform="translate(64 20)">
+    <g transform="translate(-49.66 -8.58) scale(.424)">
+      <path fill="#FFF8F1" stroke="#FFF8F1" stroke-width="44" stroke-linejoin="round"
+            d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+    </g>
+    <text x="140" y="139" fill="#FFF8F1" font-size="112" font-weight="600" letter-spacing="-1.5"
+          textLength="318" lengthAdjust="spacing"
+          font-family="Inter, 'Segoe UI Variable Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif">Serata</text>
+  </g>
+</svg>

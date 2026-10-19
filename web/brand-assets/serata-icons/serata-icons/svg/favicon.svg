@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Serata">
+  <title>Serata — favicon</title>
+  <desc>Favicon build: the mark is scaled up so it still reads at 16 px.</desc>
+  <defs>
+    <linearGradient id="duskFavicon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1F3B"/>
+      <stop offset=".55" stop-color="#46356F"/>
+      <stop offset="1" stop-color="#E0705A"/>
+    </linearGradient>
+    <linearGradient id="markCreamFavicon" gradientUnits="userSpaceOnUse" x1="158" y1="146" x2="158" y2="366">
+      <stop offset="0" stop-color="#FFFBF6"/>
+      <stop offset="1" stop-color="#FFE7D5"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#duskFavicon)" d="M512 0C850 0 1024 174 1024 512S850 1024 512 1024 0 850 0 512 174 0 512 0Z"/>
+  <g transform="translate(-117.8 -89.6) scale(2.35)">
+    <path fill="url(#markCreamFavicon)" stroke="url(#markCreamFavicon)" stroke-width="44" stroke-linejoin="round"
+          d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+  </g>
+</svg>

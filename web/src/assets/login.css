@@ -1,0 +1,28 @@
+/*
+ * 4.9.5 登录页(startup/manuallogin)补充样式 —— 基准=真实服务器页端。
+ * 原版资产:assets/emby495/(theme/appheader/emby-input/emby-button/navdrawer 等)。
+ */
+
+/* logo(theme.css 的 ../themes/logowhite.png 在 vite 下解析失配,此处重指 Serata lockup;header 语境另有 App.vue inline style) */
+.pageTitleWithDefaultLogo {
+  background-image: url('./brand/lockup-on-dark.svg');
+}
+
+/* 忘记密码 button-link 居中(真实站 buttonItems 内居中) */
+.manualLoginForm .buttonItems {
+  justify-content: center;
+}
+
+/* header:withHeaderTabs 语境补底部 padding(--header-height 注释:pad top 1.2em + bottom 1.2em;
+   真实站 header 总高 116 = padTop 17.3 + row 45 + tabs 36 + bottom ~18) */
+.skinHeader.headerTop-withSectionTabs {
+  padding-bottom: 1.2em;
+}
+
+/* 无头像用户按钮:真实站显示用户头像图;无图时用 person 图标(现状),占位一致 */
+
+/* 真实站 startup 页表单贴 header(viewTitle y=80,header 高 80):
+   startup 视图无 padded-top-page */
+.view .manualLoginForm .viewTitle {
+  margin-top: 0;
+}

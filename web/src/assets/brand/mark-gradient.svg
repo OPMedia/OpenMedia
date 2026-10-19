@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Serata">
+  <title>Serata — mark (gradient)</title>
+  <desc>Mark only, transparent background. Legible on light and dark surfaces.</desc>
+  <defs>
+    <linearGradient id="markGradient" gradientUnits="userSpaceOnUse" x1="158" y1="146" x2="158" y2="366">
+      <stop offset="0" stop-color="#332A63"/>
+      <stop offset=".5" stop-color="#7A4A87"/>
+      <stop offset="1" stop-color="#E0705A"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#markGradient)" stroke="url(#markGradient)" stroke-width="44" stroke-linejoin="round"
+        d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+</svg>

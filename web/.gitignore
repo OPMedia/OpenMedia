@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+.eslintcache
+
+# Cypress
+/cypress/videos/
+/cypress/screenshots/
+
+# Vitest
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+# CDP 调试用浏览器 profile（Edge 用户数据，十几 MB，绝不能进仓库）
+.cdp-profile/
+.cdp-profile-*/
+
+# 探针截图产物（几十 MB 的 PNG/JPG，只留 tools/*.mjs 脚本）
+tools/shots/
+
+# Emby 上游参考拷贝（只读资料，不是我们的代码）
+reference/
+
+.tmp/
+

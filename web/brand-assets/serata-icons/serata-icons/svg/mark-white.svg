@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Serata">
+  <title>Serata — mark (white)</title>
+  <desc>Single-colour mark for dark surfaces. Transparent background.</desc>
+  <path fill="#FFF8F1" stroke="#FFF8F1" stroke-width="44" stroke-linejoin="round"
+        d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+</svg>

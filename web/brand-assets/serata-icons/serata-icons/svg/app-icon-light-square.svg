@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Serata">
+  <title>Serata — app icon (light, opaque)</title>
+  <desc>Full-bleed ivory version, no transparency.</desc>
+  <defs>
+    <linearGradient id="plateLightSq" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F2EBE2"/>
+    </linearGradient>
+    <linearGradient id="markDuskLightSq" gradientUnits="userSpaceOnUse" x1="158" y1="146" x2="158" y2="366">
+      <stop offset="0" stop-color="#2A2356"/>
+      <stop offset=".5" stop-color="#6E4080"/>
+      <stop offset="1" stop-color="#D9604C"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#plateLightSq)"/>
+  <g transform="translate(-24 0) scale(2)">
+    <path fill="url(#markDuskLightSq)" stroke="url(#markDuskLightSq)" stroke-width="44" stroke-linejoin="round"
+          d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+  </g>
+</svg>

@@ -1,0 +1,213 @@
+/**
+ * Serata 设计层 —— 令牌（tokens）。
+ *
+ * 这是并行开发的**冻结接口**：所有新组件只允许消费这里的变量，
+ * 不允许出现裸色值（#xxx / rgb()），也不允许使用 emby-* 类名。
+ *
+ * 配色来源：serata-icons 的 dusk 色阶（#1B1F3B → #46356F → #E0705A）
+ * 全部对比度实测见 web/brand-assets/serata-palette.png。
+ *
+ * 三条铁律：
+ *  ① 珊瑚是强调色，单屏 ≤5 处；夜/紫只做面，禁止做文字色。
+ *  ② 品牌渐变只出现两处：进度条（横向）与 hero 环境光晕（纵向）。
+ *  ③ 单位一律 px（Emby 把 :root 设成 90.15%，用 rem 会得到 14.42px 的非整数基准）。
+ */
+
+:root {
+  /* ---------- 字体 ---------- */
+  --s-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
+  --s-font-mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas, monospace;
+
+  --s-fs-hero: clamp(30px, 3.2vw, 52px);
+  --s-fs-display: 34px;
+  --s-fs-h1: 26px;
+  --s-fs-h2: 19px;
+  --s-fs-h3: 16px;
+  --s-fs-body: 14px;
+  --s-fs-sm: 13px;
+  --s-fs-xs: 12px;
+
+  --s-lh-tight: 1.15;
+  --s-lh-snug: 1.35;
+  --s-lh-body: 1.6;
+
+  --s-fw-regular: 400;
+  --s-fw-medium: 500;
+  --s-fw-semibold: 600;
+  --s-tracking-tight: -0.01em;
+  --s-tracking-hero: -0.022em;
+
+  /* ---------- 间距（4px 基准） ---------- */
+  --s-sp-1: 4px;
+  --s-sp-2: 8px;
+  --s-sp-3: 12px;
+  --s-sp-4: 16px;
+  --s-sp-5: 20px;
+  --s-sp-6: 24px;
+  --s-sp-7: 32px;
+  --s-sp-8: 40px;
+  --s-sp-9: 48px;
+  --s-sp-10: 64px;
+  --s-sp-11: 80px;
+
+  --s-gutter: 24px;
+  --s-gutter-sm: 16px;
+  --s-row-gap: 40px;
+
+  /* ---------- 圆角 ---------- */
+  --s-r-xs: 4px;
+  --s-r-sm: 6px;
+  --s-r-md: 10px;
+  --s-r-lg: 14px;
+  --s-r-xl: 18px;
+  --s-r-pill: 999px;
+
+  /* ---------- 动效 ---------- */
+  --s-dur-instant: 80ms;
+  --s-dur-fast: 140ms;
+  --s-dur-base: 220ms;
+  --s-dur-slow: 320ms;
+  --s-dur-xslow: 480ms;
+  --s-ease-std: cubic-bezier(0.2, 0, 0, 1);
+  --s-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --s-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --s-transition: var(--s-dur-fast) var(--s-ease-std);
+
+  /* ---------- 布局 ---------- */
+  --s-header-h: 64px;
+  --s-header-h-sm: 56px;
+  --s-drawer-w: 248px;
+  --s-hero-h: min(75vh, 860px);
+  --s-hero-min-h: 460px;
+  --s-content-max: 1680px;
+  --s-bottom-nav-h: 60px;
+
+  --s-z-backdrop: 40;
+  --s-z-drawer: 60;
+  --s-z-header: 70;
+  --s-z-nav: 80;
+  --s-z-sheet: 90;
+  --s-z-toast: 100;
+
+  /* ---------- 品牌常量（与深浅模式无关） ---------- */
+  --s-night: #1b1f3b;
+  --s-violet: #46356f;
+  --s-plum: #7a4a87;
+  --s-coral: #e0705a;
+  --s-coral-deep: #d9604c;
+  --s-cream: #fff8f1;
+  --s-ink: #171a2e;
+  --s-ivory: #f2ebe2;
+
+  /* 品牌渐变：唯一允许的两条 */
+  --s-gradient-dusk: linear-gradient(180deg, #1b1f3b 0%, #46356f 55%, #e0705a 100%);
+  --s-gradient-dusk-h: linear-gradient(90deg, #46356f 0%, #7a4a87 55%, #e0705a 100%);
+}
+
+/* ============================================================
+   深色模式 —— dusk night
+   ============================================================ */
+html.theme-dark {
+  color-scheme: dark;
+
+  --s-bg: #0a0c18;
+  --s-bg-deep: #06070e;
+  --s-surface: #11142a;
+  --s-raised: #1a1f3b;
+  --s-hover: #232a4d;
+  --s-active: #2b3358;
+
+  --s-line: rgba(255, 248, 241, 0.08);
+  --s-line-strong: #5a5f8a;
+
+  --s-text-1: #fff8f1;
+  --s-text-2: #c6bfd4;
+  --s-text-3: #8e88a4;
+
+  --s-accent: #e0705a;
+  --s-accent-hi: #ec8a76;
+  --s-accent-soft: rgba(224, 112, 90, 0.14);
+  --s-accent-ink: #171a2e;
+
+  /* 主 CTA「纸与墨」 */
+  --s-cta-bg: #fff8f1;
+  --s-cta-fg: #171a2e;
+  --s-cta-bg-hover: #ffffff;
+  --s-cta2-bg: rgba(255, 248, 241, 0.1);
+  --s-cta2-bg-hover: rgba(255, 248, 241, 0.16);
+  --s-cta2-fg: #fff8f1;
+
+  --s-scrim: rgba(6, 7, 14, 0.72);
+  --s-scrim-soft: rgba(6, 7, 14, 0.4);
+  /* 模态遮罩（弹层/抽屉背后的压暗层）：两种主题都必须"压暗"，不能像 --s-scrim 那样在浅色下变成提亮 */
+  --s-scrim-modal: rgba(6, 7, 14, 0.6);
+  --s-shadow-sheet: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --s-shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --s-glow: radial-gradient(60% 55% at 70% 40%, rgba(122, 74, 135, 0.18) 0%, rgba(10, 12, 24, 0) 70%);
+  --s-img-placeholder: #161a30;
+  /* 骨架屏微光高光（配合 base.css 的 .s-skeleton::after） */
+  --s-skeleton-hi: rgba(255, 248, 241, 0.08);
+}
+
+/* ============================================================
+   浅色模式 —— dusk ivory
+   ============================================================ */
+html.theme-light {
+  color-scheme: light;
+
+  --s-bg: #f7f5f2;
+  --s-bg-deep: #efece7;
+  --s-surface: #ffffff;
+  --s-raised: #f2ebe2;
+  --s-hover: #ebe3d9;
+  --s-active: #e4dbd0;
+
+  --s-line: rgba(23, 26, 46, 0.1);
+  --s-line-strong: #8a8299;
+
+  --s-text-1: #171a2e;
+  --s-text-2: #4a4560;
+  --s-text-3: #6b6480;
+
+  /* 浅底上珊瑚不可做正文：accent 仅用于填充/3px 轨道，文字用 --s-accent-text */
+  --s-accent: #d9604c;
+  --s-accent-hi: #c4523f;
+  --s-accent-text: #a83e2c;
+  --s-accent-soft: rgba(217, 96, 76, 0.12);
+  --s-accent-ink: #171a2e;
+
+  --s-cta-bg: #171a2e;
+  --s-cta-fg: #fff8f1;
+  --s-cta-bg-hover: #232a45;
+  --s-cta2-bg: rgba(23, 26, 46, 0.06);
+  --s-cta2-bg-hover: rgba(23, 26, 46, 0.11);
+  --s-cta2-fg: #171a2e;
+
+  --s-scrim: rgba(247, 245, 242, 0.78);
+  --s-scrim-soft: rgba(247, 245, 242, 0.45);
+  --s-scrim-modal: rgba(23, 26, 46, 0.32);
+  --s-shadow-sheet: 0 24px 64px rgba(23, 26, 46, 0.18);
+  --s-shadow-card: 0 8px 24px rgba(23, 26, 46, 0.1);
+  --s-glow: radial-gradient(60% 55% at 70% 40%, rgba(122, 74, 135, 0.12) 0%, rgba(247, 245, 242, 0) 70%);
+  --s-img-placeholder: #ece5db;
+  --s-skeleton-hi: rgba(23, 26, 46, 0.06);
+}
+
+/* 深色模式下的浅色文字别名（浅色模式里珊瑚文字要换深一档） */
+html.theme-dark {
+  --s-accent-text: var(--s-accent);
+}
+
+/* ============================================================
+   减少动效：全局一刀切（保留颜色过渡，去掉位移与自动播放）
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --s-dur-instant: 1ms;
+    --s-dur-fast: 1ms;
+    --s-dur-base: 1ms;
+    --s-dur-slow: 1ms;
+    --s-dur-xslow: 1ms;
+  }
+}

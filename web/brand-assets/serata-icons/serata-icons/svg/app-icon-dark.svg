@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Serata">
+  <title>Serata — app icon (dark)</title>
+  <desc>Dusk gradient plate, cream sail. Corners are transparent.</desc>
+  <defs>
+    <linearGradient id="duskDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1F3B"/>
+      <stop offset=".55" stop-color="#46356F"/>
+      <stop offset="1" stop-color="#E0705A"/>
+    </linearGradient>
+    <linearGradient id="markCream" gradientUnits="userSpaceOnUse" x1="158" y1="146" x2="158" y2="366">
+      <stop offset="0" stop-color="#FFFBF6"/>
+      <stop offset="1" stop-color="#FFE7D5"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#duskDark)" d="M512 0C850 0 1024 174 1024 512S850 1024 512 1024 0 850 0 512 174 0 512 0Z"/>
+  <g transform="translate(-64.2 -38.4) scale(2.15)">
+    <path fill="url(#markCream)" stroke="url(#markCream)" stroke-width="44" stroke-linejoin="round"
+          d="M158 146 L378 256 L158 366 Q208 256 158 146 Z"/>
+  </g>
+</svg>

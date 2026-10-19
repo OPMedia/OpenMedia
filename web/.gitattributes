@@ -1,0 +1,17 @@
+# 统一 LF 落库：前端源码（含 .vue/.ts/.css）不允许 CRLF 混入，
+# 否则每次 diff 都是整文件重写，code review 全废。
+* text=auto eol=lf
+
+# 二进制：不做换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.p12 binary
+
+# 生成物 / 锁文件：diff 里不显示
+pnpm-lock.yaml -diff

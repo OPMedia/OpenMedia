@@ -1,0 +1,95 @@
+/**
+ * Serata 设计层 —— Emby 老页面换肤桥（bridge）。
+ *
+ * 背景：库页/详情/搜索/设置/管理后台仍是 emby495 的 1:1 移植 CSS。
+ * 好消息是它的主题不是硬编码色值，而是 HSL 变量驱动（见 modules__themes__dark__theme.css）：
+ *   --background-hue/saturation/lightness          → 画布、侧栏、页头、页脚
+ *   --theme-primary-color-hue/saturation/lightness  → 进度条 / 计数徽标 / 按钮底色
+ *   --theme-accent-text-color-darkbg / -lightbg     → 链接与强调文字
+ *   --theme-text-color-hue/saturation/lightness     → 全部文字
+ *   --line-background                               → 全部分隔线（跟随文字色 alpha）
+ * 所以覆盖这几组变量 = 老页面整体换肤，**不碰任何压缩 CSS、不改任何尺寸**。
+ *
+ * 本文件必须最后加载（import 在 emby495.ts 尾部）。
+ */
+
+html.theme-dark {
+  /* 画布 hsl(231, 41%, 6.7%) = #0A0C18 */
+  --background-hue: 231;
+  --background-saturation: 41%;
+  --background-lightness: 6.7%;
+
+  /* 主色 hsl(10, 68%, 62%) ≈ #E0705A（进度条/徽标/按钮底色都走它） */
+  --theme-primary-color-hue: 10;
+  --theme-primary-color-saturation: 68%;
+  --theme-primary-color-lightness: 62%;
+
+  /* 文字 hsl(30, 100%, 97.3%) = #FFF8F1 奶白 */
+  --theme-text-color-hue: 30;
+  --theme-text-color-saturation: 100%;
+  --theme-text-color-lightness: 97.3%;
+
+  /* 强调文字（深底 6.15:1） */
+  --theme-accent-text-color-darkbg: #e0705a;
+  --theme-accent-text-color-darkbg-alt: #ec8a76;
+}
+
+html.theme-light {
+  /* 画布 hsl(36, 24%, 95.9%) = #F7F5F2 象牙 */
+  --background-hue: 36;
+  --background-saturation: 24%;
+  --background-lightness: 95.9%;
+
+  --theme-primary-color-hue: 10;
+  --theme-primary-color-saturation: 65%;
+  --theme-primary-color-lightness: 57.5%;
+
+  /* 文字 hsl(232, 33%, 14%) = #171A2E 墨 */
+  --theme-text-color-hue: 232;
+  --theme-text-color-saturation: 33%;
+  --theme-text-color-lightness: 14%;
+
+  /* 浅底强调文字必须用深一档珊瑚（5.69:1），#D9604C 只有 3.37:1 不可做正文 */
+  --theme-accent-text-color-lightbg: #a83e2c;
+  --theme-accent-text-color-lightbg-alt: #c4523f;
+}
+
+/* 浅色主题的侧栏是硬编码 #f2f2f7（iOS 灰蓝），不在变量体系内，需单独对齐象牙 */
+html.theme-light .mainDrawer {
+  background: var(--s-surface);
+}
+
+/* 进度条：品牌渐变替掉品牌绿（唯一允许横向使用渐变的位置之一）。
+   底色用 --s-accent 而不是 --s-coral：浅色主题的珊瑚要深一档（#D9604C），
+   否则同屏会出现两种珊瑚。 */
+html.theme-dark .itemProgressBarForeground,
+html.theme-light .itemProgressBarForeground {
+  background-color: var(--s-accent);
+  background-image: linear-gradient(
+    90deg,
+    rgba(70, 53, 111, 0.95) 0%,
+    rgba(122, 74, 135, 0.65) 45%,
+    rgba(224, 112, 90, 0) 100%
+  );
+}
+
+/* 选中态的折叠箭头 / 强调图标跟随强调色 */
+html.theme-dark .emby-collapse-expandIcon,
+html.theme-light .emby-collapse-expandIcon {
+  color: var(--s-text-3);
+}
+
+/* 页头玻璃感：老页面里页头底色由 --header-background 给出，这里只在滚动容器上补一层模糊 */
+html.theme-dark .skinHeader-withBackground {
+  background-color: color-mix(in srgb, var(--s-bg) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+html.theme-light .skinHeader-withBackground {
+  background-color: color-mix(in srgb, var(--s-bg) 84%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+/* 老版「获取 Emby Premiere」胶囊已从 DOM 移除；这里再兜一层，防止任何残留渲染成绿色 */
+.btnHeaderPremiere {
+  display: none !important;
+}

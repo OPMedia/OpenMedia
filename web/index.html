@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" type="image/svg+xml" href="/serata-favicon.svg">
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Serata —— 自建媒体库的流媒体前端">
+    <meta name="theme-color" content="#0A0C18">
+    <title>Serata</title>
+    <style>
+      /* 首帧底色：CSS 包还在下载/解析时，画布已经是主题色，避免出现纯白空帧。
+         用 html[class] 而不是 :root，保证与上面的主题类同源；两个主题都给。 */
+      html.theme-dark {
+        background-color: #0a0c18;
+      }
+      html.theme-light {
+        background-color: #f7f5f2;
+      }
+    </style>
+    <script>
+      /* 首帧防闪：在 CSS/JS 加载前就把主题类挂到 <html>。
+         与 src/composables/useTheme.ts 读取同一 localStorage 键，逻辑保持一致。 */
+      (function () {
+        try {
+          var m = localStorage.getItem('serata.themeMode') || 'dark'
+          var dark = m === 'system'
+            ? window.matchMedia('(prefers-color-scheme: dark)').matches
+            : m !== 'light'
+          var r = document.documentElement
+          r.classList.add(dark ? 'theme-dark' : 'theme-light')
+          r.dataset.serataTheme = dark ? 'dark' : 'light'
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? '#0A0C18' : '#F7F5F2')
+        } catch (e) {
+          document.documentElement.classList.add('theme-dark')
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

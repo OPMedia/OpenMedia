@@ -1,0 +1,63 @@
+/*
+ * Emby 4.9.5 本地 override 层 —— 只放 vite 构建丢失/需要环境适配的规则。
+ * 已证实:card_sizes_varcalcmax.css 的 width:calc(100% / max(...)) 在 vite(cssnano 类)
+ * 构建链中被丢弃,浏览器直接解析无碍 —— 此处按原样重写(值与变量档位照原版)。
+ *
+ * 交互态(hover/active)说明:真实站的悬停/按压规则全部在已下载的原版 css 内
+ * (theme_nontv 的 raised/fab hover、card_nontv2 的 overlay 淡入、button_nontv 的
+ * button-link underline)——此处不自创,保持 1:1。桌面端卡片 hover = overlay 淡入
+ * (不缩放);触屏端 active 缩放由 card_nontv.css 的 pointer 媒体查询提供。
+ */
+
+/* 搜索页:真实站 searchSuggestions 全宽(flex column center 语境;本地实测收缩为 fit-content,补齐) */
+.searchSuggestions {
+  width: 100%;
+}
+
+/* listview 缩略图容器:contain:strict(size)在本布局链中把显式宽度解析为 0(真实站以 auto+内容宽渲染出
+   相同视觉),本地放宽为 layout style,尺寸仍由 em 规则给出,视觉一致 */
+.listItemImageContainer {
+  contain: layout style;
+}
+
+/* 折叠区展开态(真实站由 JS 置 inline height:auto;静态复刻) */
+.collapseContent.expanded {
+  height: auto;
+}
+
+/* 加载/错误态(4.9.5 风格;原版无独立类,以 secondaryText 视觉) */
+.page-loading,
+.page-error {
+  padding: 4em 0;
+  text-align: center;
+  color: rgba(255, 255, 255, .6);
+}
+
+/* emby-button custom element 运行时注入的 inline 修正(真实站取证:仅 header 首映钮为 .5em 垂直 pad)
+   注意:不可全局覆盖 .raised-mini —— 库页排序钮等真实站仍用 CSS 的 .6em */
+.btnHeaderPremiere {
+  padding-top: .5em;
+  padding-bottom: .5em;
+}
+
+@supports (width: max(10em, 5vw)) {
+  .portraitCard {
+    width: calc(100% / max((var(--portrait-cards) + var(--user-cards-size-adjust) + var(--app-cards-size-adjust)), 3));
+  }
+  .backdropCard {
+    width: calc(100% / max((var(--backdrop-cards) + var(--user-cards-size-adjust) + var(--app-cards-size-adjust)), 1));
+  }
+  .squareCard {
+    width: calc(100% / max((var(--square-cards) + var(--user-cards-size-adjust) + var(--app-cards-size-adjust)), 2));
+  }
+  .bannerCard {
+    width: calc(100% / max((var(--banner-cards) + var(--user-cards-size-adjust) + var(--app-cards-size-adjust)), 1));
+  }
+  /* 横向滚动容器内(93vw 基准) */
+  .portraitCard-horiz {
+    width: calc(93vw / max((var(--portrait-cards) + var(--user-cards-size-adjust)), 3));
+  }
+  .backdropCard-horiz {
+    width: calc(93vw / max((var(--backdrop-cards) + var(--user-cards-size-adjust)), 1));
+  }
+}
