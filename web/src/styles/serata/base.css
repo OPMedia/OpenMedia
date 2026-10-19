@@ -165,19 +165,21 @@ main.s-home::-webkit-scrollbar-track {
  * 问题（真实 Emby 数据下才暴露）：详情页整页只有背景大图是"暗色语境"，
  * 而它的文字是原版 `darkContentContainer-item` 定死的白色
  * （`--theme-text-color-lightness:100%`，且该规则在 @media (min-width:50em) 内 → 桌面端专属）。
- * 实测浅色主题下正文是 `rgb(255,255,255)` 压在 `rgb(247,245,242)` 上，
- * 对比度 **1.09:1** —— 标题、简介、演职人员几乎完全不可读。
+ * 实测（上一轮、背景图还没透出来时）浅色主题下正文是 `rgb(255,255,255)` 压在
+ * `rgb(247,245,242)` 上，对比度 **1.09:1** —— 标题、简介、演职人员几乎完全不可读。
  *
  * 根因不是文字颜色，而是**背景图没显示**：
  * `.backdropContainer` 是 `z-index:-1`，被 `.backgroundContainer` 的不透明底色盖住。
- * App.vue 现在给详情页加上原版的 `.withBackdrop` 开关让图透出来；
- * 下面这一条再把 scrim 固定成暗色 —— 因为 Emby 浅色主题的 `.withBackdrop` 是
- * `rgba(255,255,255,.8)`（白色），白字压上去依然是白压白。
+ * App.vue 现在给详情页加上原版的 `.withBackdrop` 开关让图透出来。
  *
- * 渐变而非纯色：顶部留一点 fanart 的颜色，向下收敛到接近全暗，
+ * 下面这一条是**深色档专用**的 scrim：顶部留一点 fanart 的颜色，向下收敛到接近全暗，
  * 保证**任意亮度**的海报上白字都够读（最低档 .78 在纯白底上仍有 5.4:1）。
  * 只作用于详情页（`s-backdrop-dark` 只由 App.vue 的 isItem 分支挂上），
- * 不碰其它任何页面的背景。 */
+ * 不碰其它任何页面的背景。
+ *
+ * ⚠️ 浅色档**不再走这一条** —— 见下面「浅色主题：详情页/人物页」一节：
+ *    浅色档的 scrim 与文字色都在那里按主题还原（task-12，用户决策「浅色就用浅色」）。
+ *    两条规则各自 `html.theme-light` / 深色默认，互不覆盖。 */
 .backgroundContainer.withBackdrop.s-backdrop-dark {
   background: linear-gradient(
     180deg,
@@ -185,6 +187,103 @@ main.s-home::-webkit-scrollbar-track {
     rgba(6, 7, 14, 0.86) 55%,
     rgba(6, 7, 14, 0.94) 100%
   ) !important;
+}
+
+/* ============================================================
+   浅色主题：详情页/人物页「浅色就用浅色」
+   ============================================================
+ *
+ * 用户决策（2026-10-19）：浅色主题下详情页必须整体是浅色，不再保留
+ * 原版 Emby「详情页 = 白字压暗色 fanart」的暗色语境。深色主题一个字都不改。
+ *
+ * 为什么上一轮的修法不够：上一轮只解决了「背景图被不透明底色盖死」，
+ * 于是把 scrim 固定成深色（上面那条规则），两套主题都暗 —— 因为当时文字还是白的。
+ * 现在文字跟随主题了，scrim 也必须跟随主题，否则就是「浅色主题里的黑块」。
+ *
+ * 三个必须同时改的点，缺一个都还是花的：
+ *   ① scrim（本规则）—— 深色压暗 → 浅色蒙版；
+ *   ② 文字色（下面 .darkContentContainer-item 块）—— 原版桌面端专属白字 → 跟随主题；
+ *   ③ 卡片/按钮/输入/分隔线（同一个块）—— 原版那套 HSL 三件套是给暗底调的，
+ *      不改的话浅色页面上会浮出一堆 `rgba(44,44,44,.7)` 的深灰卡片。
+ *
+ * ① 浅色 scrim 为什么用 `--s-scrim` 而不是白色：
+ *    `--s-scrim` 浅色档 = rgba(247,245,242,.78)，就是 `--s-bg` 的透明版 ——
+ *    和奶油色侧栏/画布同一个色相，内容区与侧栏的接缝不会有色差（白色会显出一道灰边）。
+ *    顶部留 22% 让剧照仍看得见（要求「不是纯白板」），越往下越实，
+ *    保证「演职人员/关于」这些滚动到下半屏的文字也够读。
+ *    最坏情况核算：`.78` 蒙版压在纯黑剧照上 => 底色 ≈ rgb(193,191,189)，
+ *    纯黑文字对比度 ≈ 12.6:1；压在纯白剧照上 => rgb(249,247,244)，仍 ≥ 16:1。
+ *    （实测数字见 scratch/detail/after-report.txt，不靠这条注释自证。） */
+html.theme-light .backgroundContainer.withBackdrop.s-backdrop-dark {
+  background: linear-gradient(
+    180deg,
+    var(--s-scrim) 0%,
+    color-mix(in srgb, var(--s-bg) 88%, transparent) 55%,
+    color-mix(in srgb, var(--s-bg) 94%, transparent) 100%
+  ) !important;
+}
+
+/* ② + ③ 原版 `darkContentContainer-item` 的暗色覆盖还原
+ *
+ * 根因（读过原版 CSS 才敢下结论）：
+ *   `modules__themes__common__darkcontentcontainer_item.css` 里有
+ *     @media all and (min-width:50em){ .darkContentContainer-item{ --theme-text-color-lightness:100%; ... } }
+ *   —— 桌面端专属，且**是元素自身声明**，会盖掉 `:root` 上的浅色主题值
+ *   （自定义属性按"最近的声明"生效，`:root` 的值只是被继承，元素自己的声明永远赢）。
+ *   所以只改 tokens 或 `:root` 都无效，必须在这个元素上还原。
+ *
+ * 为什么选择「还原成浅色 :root 的值」而不是「发明一套新配色」：
+ *   这些值是 Emby 浅色主题 `:root` 里已经存在的原值（--background-lightness:100%、
+ *   --card-background-lightness:96.25%、--line-background:…,.15 等），
+ *   等于把这个容器从"暗色覆盖"退回"跟随主题"。不新增任何色值，
+ *   也就不会违反「只消费令牌、不写裸色值」的铁律。
+ *
+ * 覆盖面：全仓只有 `ItemDetailView.vue` 和 `PersonView.vue` 两个页面用这个类，
+ * 都是内容页，浅色主题下都该跟随浅色 —— 一起修，不留半个白字页面。
+ *
+ * 唯一一处「换令牌」：`--theme-accent-text-color`。
+ *   Emby 浅色主题给的 `--theme-accent-text-color-lightbg` 是 `green`，
+ *   在奶油底上对比度只有 2.85:1，且和 Serata 珊瑚完全不搭；
+ *   这里换成设计层的「浅底文字珊瑚」`--s-accent-text`。 */
+html.theme-light .darkContentContainer-item {
+  /* 底与面 */
+  --background-hue: 0;
+  --background-saturation: 0%;
+  --background-lightness: 100%;
+  /* 文字（含 alpha，`.85` 那条 .details-additionalContent-withbackdrop 会再叠一层） */
+  --theme-text-color-hue: 0;
+  --theme-text-color-saturation: 0%;
+  --theme-text-color-lightness: 0%;
+  --theme-text-color-alpha: 1;
+  /* 链接/强调文字：绿色 → 设计层珊瑚（浅底专用档） */
+  --theme-accent-text-color: var(--s-accent-text);
+  --theme-accent-text-color-alt: var(--s-accent-text);
+  /* 分隔线/描边：原来是白色 14%，浅底上等于隐形 */
+  --line-background: hsla(
+    var(--theme-text-color-hue),
+    var(--theme-text-color-saturation),
+    var(--theme-text-color-lightness),
+    0.15
+  );
+  /* 卡片 / 按钮 / 输入框：原来分别是 17.25% / 40% / 40% 的深灰 */
+  --card-background-hue: 240;
+  --card-background-saturation: 14.29%;
+  --card-background-lightness: 96.25%;
+  --card-background-alpha: 0.7;
+  --button-background-hue: 240;
+  --button-background-saturation: 23.81%;
+  --button-background-lightness: 93.88%;
+  --button-background-alpha: 0.7;
+  --input-background-hue: 0;
+  --input-background-saturation: 0%;
+  --input-background-lightness: 100%;
+  /* 焦点态：原版给暗底反色（focus 底 100%/字 0%），浅色下必须反过来，
+     否则键盘走到卡片上会出现"白底白字" */
+  --focus-background-lightness: 13.33%;
+  --focus-blur-background-lightness: 13.33%;
+  --focus-text-color-lightness: 100%;
+  /* 抽屉底色：原版是 calc(--background-lightness + 18%)，浅色下会算出 118% 被截断 */
+  --docked-drawer-background: hsla(0, 0%, 56%, 0.2);
 }
 
 /* ---------- 媒体库工具行与网格对齐 ----------

@@ -29,6 +29,13 @@
 `--s-night` `--s-violet` `--s-plum` `--s-coral` `--s-coral-deep` `--s-cream` `--s-ink` `--s-ivory`
 `--s-gradient-dusk`（纵向）`--s-gradient-dusk-h`（横向）
 
+**图画区（hero）—— 永远压在剧照上，两种主题同值，只放在 `:root`、不在主题块里覆盖**
+`--s-hero-ink` `--s-hero-ink-2` `--s-hero-cta-bg` `--s-hero-cta-fg` `--s-hero-cta-bg-hover`
+`--s-hero-cta2-bg` `--s-hero-cta2-bg-hover` `--s-hero-cta2-fg` `--s-hero-shade` `--s-hero-tile-veil`
+`--s-hero-tile-ring` `--s-hero-tile-dim` `--s-hero-hairline`
+> 和 `--s-badge-*` 同一条理由：这一层压在**美术图**上而不是主题底色上。浅色主题的 `--s-text-1`/`--s-cta-bg` 都是深墨，直接拿来压深色剧照会糊成一团（实测正文对比度掉到 ~1.1:1）。
+> 剧照是 16:9 的 TMDB 大图，明暗不可控，所以压字的地方**必须自带压暗层**，不能指望图片"刚好够暗"。
+
 **字体** `--s-font` `--s-font-mono` `--s-fs-hero/display/h1/h2/h3/body/sm/xs` `--s-lh-tight/snug/body` `--s-fw-regular/medium/semibold` `--s-tracking-tight/hero`
 
 **间距** `--s-sp-1`(4px) … `--s-sp-11`(80px)、`--s-gutter`(24px)、`--s-gutter-sm`(16px)、`--s-row-gap`(40px)
@@ -37,7 +44,10 @@
 
 **动效** `--s-dur-instant/fast/base/slow/xslow/sheet/exit`（80/140/220/320/480/280/180ms）、`--s-ease-std/exit/spring`、`--s-transition`、`--s-stagger-step`(45ms)、`--s-stagger-max`(8)
 
-**布局** `--s-header-h`(64) `--s-header-h-sm`(56) `--s-drawer-w`(248) `--s-hero-h` `--s-hero-min-h` `--s-content-max` `--s-bottom-nav-h`
+**布局** `--s-header-h`(64) `--s-header-h-sm`(56) `--s-drawer-w`(248) `--s-hero-min-h`(460) `--s-content-max` `--s-bottom-nav-h`
+> hero 高度**不再有令牌**：旧的 `--s-hero-h: min(75vh, 860px)` 已删除。首页 banner 的高度由
+> **16:9 主图的宽度反推**（`HomeHero.vue` 的 `.hero-stage { aspect-ratio: 16/9 }`），
+> 这样窄屏不会把图压扁、宽屏不会让画框撑破首屏，也不会有留白空洞。
 
 **层级** `--s-z-backdrop`(40) `--s-z-drawer`(60) `--s-z-header`(70) `--s-z-nav`(80) `--s-z-sheet`(1000) `--s-z-toast`(1200)
 > 弹层带（1000/1200）与壳层（≤80）之间留空档，避免 header/drawer 和弹层抢层级。旧实现里各写各的硬编码 999/1000，已收敛。

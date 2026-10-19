@@ -231,6 +231,57 @@ export function backdropUrl(
   const b = backdropOf(item)
   return b ? imageUrl(b.id, 'Backdrop', b.tag, opts) : ''
 }
+
+/**
+ * 横版大图（≈16:9）的真实归属。
+ *
+ * 这是「hero banner / 首页首屏主图」唯一认可的图源，比 backdropOf 多一条来源：
+ * **库（CollectionFolder）和少数影片的横版图挂在 Primary 上**，不在 Backdrop 上。
+ *
+ * 实测（真机 4.9.5.0）：`CollectionFolder` 的 `ImageTags.Primary` 存在且
+ * `PrimaryImageAspectRatio = 1.7778 / 1.7792` —— 是横图。而剧集/影片的海报
+ * `PrimaryImageAspectRatio = 0.667` —— 是竖图。
+ * 只按"不是 Backdrop 就当竖版"来判断会把这些横版 Primary 当成竖版渲染成 2:3 画框，
+ * 于是首页出现一张又高又窄、边缘错位的怪卡片。所以判断必须看真实宽高比。
+ *
+ * 返回 null 表示**这张条目拿不到任何横版大图**，调用方要么换条目，要么走品牌渐变兜底。
+ */
+export interface WideArt {
+  /** 图片宿主条目 Id（剧集的大图挂在父级系列上，不等于 item.Id） */
+  id: string
+  type: 'Backdrop' | 'Primary'
+  tag?: string
+}
+
+/** 判定横图的容差：16:9 = 1.7778，1.85:1 也算横图（1.85 与 1.7778 差 0.072） */
+const WIDE_ART_TOLERANCE = 0.08
+const WIDE_ART_RATIO = 16 / 9
+
+export function wideArtOf(item: BaseItemDto | null | undefined): WideArt | null {
+  if (!item) return null
+  const b = backdropOf(item)
+  if (b) return { id: b.id, type: 'Backdrop', tag: b.tag }
+  const aspect = item.PrimaryImageAspectRatio
+  const tag = item.ImageTags?.Primary
+  if (tag && typeof aspect === 'number' && Math.abs(aspect - WIDE_ART_RATIO) <= WIDE_ART_TOLERANCE) {
+    return { id: item.Id, type: 'Primary', tag }
+  }
+  return null
+}
+
+/** 这张条目能不能当横版 banner 用（hero 入池的硬条件） */
+export function hasWideArt(item: BaseItemDto | null | undefined): boolean {
+  return wideArtOf(item) !== null
+}
+
+/** 横版大图 URL；拿不到时返回空串（调用方据此走渐变兜底，不要请求必然 404 的地址） */
+export function wideArtUrl(
+  item: BaseItemDto | null | undefined,
+  opts: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+): string {
+  const a = wideArtOf(item)
+  return a ? imageUrl(a.id, a.type, a.tag, opts) : ''
+}
 // ---------- 管理后台(SPEC/api 管理面) ----------
 
 export interface AdminTask {

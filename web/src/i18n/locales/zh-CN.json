@@ -69,7 +69,10 @@
     "resumePlay": "继续观看",
     "details": "详情",
     "empty": "暂无可推荐的内容",
-    "loading": "正在挑选内容…"
+    "loading": "正在挑选内容…",
+    "upNext": "接下来",
+    "railLabel": "轮转列表",
+    "tile": "第 {n} 项：{name}"
   },
   "shell": {
     "nav": "主导航",

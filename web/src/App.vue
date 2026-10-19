@@ -79,48 +79,19 @@ const isDocked = computed(() => {
   return hasFullDrawer.value || name === 'item' || name === 'search' || isAdminContext.value
 })
 
-// 库页 tabs 文案键（真实站 dump：库名/推荐/预告/收藏/合集/类型/标签/播出平台/集/文件夹）
-// 第 0 项是**库名本身**，运行时解析（见 headerTabs），不用静态键。
-const LIB_TAB_KEYS = [
-  '',
-  'search.suggestions',
-  'item.trailer',
-  'app.favorites',
-  'shell.collections',
-  'library.genres',
-  'library.tags',
-  'library.studios',
-  'item.episodes',
-  'library.folders',
-] as const
-
+/**
+ * 顶栏 tabs：**只有首页**那对「首页 / 收藏」。
+ *
+ * 库页的 10 个老式 Emby tab（库名/推荐/预告片/收藏/合集/类型/标签/工作室/分集/文件夹）
+ * 已整条删除：真机 1600×900 下它和右侧的搜索/主题/头像挤在同一行，视觉极乱。
+ * 删掉之后库名由 pageTitle 直接补进顶栏标题（见下），库内分节仍可用 ?tab= 深链进入
+ * （LibraryView.vue 的 tab 分支保留，不删）。
+ * 详情/搜索/人物/设置/后台同样不放 tabs，顶栏只留返回 + 标题/logo。
+ */
 const headerTabs = computed(() => {
   const current = router.currentRoute.value
-  const name = current.name
-  if (name === 'library') {
-    // 分节列表页(?sectionId=,如"继续观看")没有 section tabs；库页才有
-    if (current.query.sectionId) return []
-    // 真实站 /tv 页 10 个 tab 各有独立内容(tab= 参数)；激活态与点击都跟随 ?tab=
-    const tab = current.query.tab
-    const libId = current.params.id
-    const KEY_OF: Record<number, string> = {
-      1: 'suggestions', 2: 'trailers', 3: 'favorites', 4: 'collections',
-      5: 'genres', 6: 'tags', 7: 'studios', 8: 'episodes', 9: 'folders',
-    }
-    const activeIdx = Object.entries(KEY_OF).find(([, k]) => k === tab)?.[0]
-    // 第 0 个 tab 是库名本身（真实站如此），从已加载的视图列表里解析，解析不到再退回「媒体库」
-    const libName = views.value.find((v) => String(v.Id) === String(libId))?.Name
-    return LIB_TAB_KEYS.map((key, i) => ({
-      key: key || 'library-name',
-      label: key ? t(key) : (libName ?? t('shell.libraries')),
-      active: tab ? String(i) === activeIdx : i === 0,
-      route: i === 0 ? `/library/${libId}` : `/library/${libId}?tab=${KEY_OF[i]}`,
-    }))
-  }
-  // 只有首页与库页有顶栏 tabs：首页 = 首页/收藏，库页 = 库内分节。
-  // 其他页面（详情/搜索/人物/设置/后台）不放 tabs，顶栏只留返回 + 标题/logo，避免噪音。
-  const favoritesActive = name === 'home' && current.query.tab === 'favorites'
-  if (name !== 'home') return []
+  if (current.name !== 'home') return []
+  const favoritesActive = current.query.tab === 'favorites'
   return [
     { key: 'app.home', label: t('app.home'), active: !favoritesActive, route: '/' },
     { key: 'app.favorites', label: t('app.favorites'), active: favoritesActive, route: '/?tab=favorites' },
@@ -137,13 +108,10 @@ const currentLib = computed(() => {
 const pageTitle = computed(() => {
   if (isSearch.value) return t('search.title')
   if (isAdminContext.value) return adminPageTitle.value
-  // 库页：第 0 个 tab 就是库名本身（真实站形态），再在左边写一遍库名会重复。
-  // 只有当首个 tab 的文案和库名不一致（解析失败/其它情况）时，才把库名当标题。
-  if (currentLib.value) {
-    const name = currentLib.value.Name ?? ''
-    const first = headerTabs.value[0]?.label
-    return first && first === name ? '' : name
-  }
+  // 库页：顶栏已没有 tab 条（headerTabs 对 library 返回 []），库名就是标题。
+  // 曾经这里靠「第 0 个 tab 就是库名」来判重，tabs 一删标题就空了 —— 直接吃 currentLib.Name。
+  // views 列表尚未加载完（currentLib 为 null）时仍回落到品牌 logo，不写半截标题。
+  if (currentLib.value) return currentLib.value.Name ?? t('shell.libraries')
   return ''
 })
 
@@ -1661,6 +1629,7 @@ onBeforeUnmount(() => {
    .withHeaderTabs.withFullDrawer:root 那一档），只改位置，不碰字号、配色、结构。
    ============================================================ */
 html:root,
+html:root.withFullDrawer,
 html:root.withHeaderTabs,
 html:root.withHeaderTabs.withFullDrawer,
 html:root.withheadernowplaying.withHeaderTabs.withFullDrawer {
@@ -1678,6 +1647,7 @@ html:root.withheadernowplaying.withHeaderTabs.withFullDrawer {
 /* 移动端：内容给底部导航让位（#app 主区域 + 直接子级的 page 都抬起来） */
 @media (max-width: 768px) {
   html:root,
+  html:root.withFullDrawer,
   html:root.withHeaderTabs,
   html:root.withHeaderTabs.withFullDrawer,
   html:root.withheadernowplaying.withHeaderTabs.withFullDrawer {

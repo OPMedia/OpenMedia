@@ -28,6 +28,7 @@ import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
 import HomeHero from '@/components/home/HomeHero.vue'
 import { useHomeHero } from '@/composables/useHomeHero'
+import { HOME_INITIAL_ROWS, HOME_ROW_PRELOAD_PX, useProgressiveRows, type ProgressiveRow } from '@/composables/useProgressiveRows'
 import {
   S_DUR,
   S_EASE_CSS,
@@ -49,6 +50,23 @@ const CARD_FIELDS = 'Overview,ImageTags,BackdropImageTags,PrimaryImageAspectRati
 const LATEST_PER_LIB = 12
 /** 骨架卡数量（与真实行的可见卡数对齐） */
 const SKELETON_CARDS = 6
+
+/**
+ * 占位骨架要不要画第二行文字条。
+ *
+ * 依据是 EmbyCard 的 `subtitle`（components/EmbyCard.vue:98-111）：只有 Episode 带剧名/集号，
+ * 或者 ProductionYear 是 >=1900 的数字时，卡片下面才有 `.cardText-secondary` 那一行。
+ * 库（CollectionFolder）没有年份 → 真卡只有一行文字 → 占位行也必须少画这一行，
+ * 否则 mymedia 这类行每次挂载都会跳 17.4px（实测：占位 288.7 vs 真行 271.3）。
+ * 取 `some`：同一行里只要有一张卡有副标题，行高就按有副标题算（行高 = 最高的那张卡）。
+ */
+function rowHasSubtitle(items: readonly BaseItemDto[]): boolean {
+  return items.some((it) => {
+    if (it.Type === 'Episode') return !!(it.SeriesName || (it.ParentIndexNumber != null && it.IndexNumber != null))
+    const y = it.ProductionYear
+    return typeof y === 'number' && y >= 1900
+  })
+}
 
 const LS_KEY = 'serata.homescreenSettings'
 /** 未配置时的默认序：首槽 hero = 开箱即流媒体首页形态 */
@@ -177,6 +195,35 @@ const rows = computed<HomeRow[]>(() => {
   return out
 })
 
+// ---------- 分步行懒加载（task-13 C） ----------
+/**
+ * 真机首页 23 行一次性挂载 = 5500+ DOM 节点 / scrollHeight 9778px，而首屏只看得到 hero + 1 行。
+ * 这里只直出首屏 `HOME_INITIAL_ROWS`(4) 行，其余行先渲染**同尺寸骨架占位**（.s-row-ph），
+ * 等它进入「视口底部 + HOME_ROW_PRELOAD_PX(600px)」之内再换成真行。
+ *
+ * 三条不能破的约束：
+ * ① 行序仍然 100% 由上面的 `rows`（设置页 homeSection* 槽位）决定 —— 本 composable 不重排、
+ *    不筛选、不丢行，只决定「此刻挂不挂载」；
+ * ② hero 标成 persistent，**永远不卸载**（它在同一个 v-for 里，铁律 12）；
+ * ③ 占位行与真行同宽同高 → CLS≈0、滚动条不跳；滚到底后全部收敛（.s-row 数 = rows.length）。
+ */
+const homeEl = ref<HTMLElement | null>(null)
+const innerEl = ref<HTMLElement | null>(null)
+const rowStubs = computed<ProgressiveRow[]>(() =>
+  rows.value.map((r) => ({ key: r.key, persistent: Boolean(r.isHero) })),
+)
+const {
+  isMounted: isRowMounted,
+  onScroll: onHomeScroll,
+  sync: syncRows,
+} = useProgressiveRows({
+  rows: rowStubs,
+  scroller: homeEl,
+  container: innerEl,
+  initialRows: HOME_INITIAL_ROWS,
+  preloadPx: HOME_ROW_PRELOAD_PX,
+})
+
 /** 加载中的骨架行：与即将出现的真实行同形状同尺寸（latest 加载期按 1 行占位；hero 同样占位） */
 const skeletonRows = computed<{ key: string; shape: Shape; size: Size; isHero?: boolean }[]>(() => {
   if (isFavoritesTab.value) {
@@ -258,6 +305,8 @@ async function load() {
     loading.value = false
     await nextTick()
     syncAllTracks()
+    // 行容器刚落地：补一趟挂载（屏幕很高/缩放很小时，首屏 4 行之外可能还有行本来就落在提前量内）
+    await syncRows()
   }
 }
 
@@ -392,15 +441,22 @@ function posterShapeClass(shape: Shape) {
 }
 
 watch(() => route.query.tab, () => void load())
+
+/** 窗口尺寸变化：横向箭头可用性 + 行挂载（变宽/变高可能让更多行进入提前量） */
+function onWindowResize(): void {
+  syncAllTracks()
+  void syncRows()
+}
+
 onMounted(() => {
   void load()
-  window.addEventListener('resize', syncAllTracks)
+  window.addEventListener('resize', onWindowResize)
 })
-onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
+onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
 </script>
 
 <template>
-  <main class="s-home" :aria-busy="loading ? 'true' : 'false'">
+  <main ref="homeEl" class="s-home" :aria-busy="loading ? 'true' : 'false'" @scroll.passive="onHomeScroll">
     <p v-if="loading" class="s-sr" role="status">{{ t('home.loading') }}</p>
 
     <!-- 首屏 Hero 已并入下方槽位循环（它的位置由 homeSection* 决定），这里不再单独渲染 -->
@@ -422,7 +478,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
     </div>
 
     <!-- 行容器接 FLIP：切库/刷新/槽位重排时行不硬跳 -->
-    <div v-else class="s-home-inner" v-auto-animate="flipOptions">
+    <div v-else ref="innerEl" class="s-home-inner" v-auto-animate="flipOptions">
       <!-- 加载中：每个槽位 6 张骨架卡；hero 槽位出 hero 自己的骨架 -->
       <template v-if="loading">
         <template v-for="sk in skeletonRows" :key="sk.key">
@@ -466,7 +522,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
         <template v-for="row in rows" :key="row.key">
           <HomeHero v-if="row.isHero" :items="heroItems" :loading="heroLoading" />
           <motion.section
-            v-else
+            v-else-if="isRowMounted(row)"
             class="s-row"
             :variants="rowVariants"
             :initial="entranceInitial"
@@ -526,6 +582,34 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
               </button>
             </div>
           </motion.section>
+
+          <!-- 未挂载的行：同尺寸骨架占位（task-13 C）。
+               ① 类名刻意**不是** .s-row —— 验收口径就是「首屏 .s-row 数 < rows.length，
+                  滚到底收敛到 rows.length」；
+               ② 结构照抄 loading 态那套骨架（.s-row-head + .s-skel-rail），所以与真行同宽同高，
+                  滚动条不跳（CLS≈0）；
+               ③ aria-hidden + 无可聚焦元素：键盘焦点不会停在骨架上；它只是「还没来」的行的占位。 -->
+          <section
+            v-else
+            class="s-row-ph"
+            :data-row-key="row.key"
+            aria-hidden="true"
+          >
+            <div class="s-row-head">
+              <!-- 用真标题同一个 <h2 class="s-row-title">：行盒高度自动等于真标题（见样式块里的说明），
+                   nbsp 只是为了让空 h2 有一个行盒，视觉上不可见 -->
+              <h2 class="s-row-title s-skel-title s-skeleton">&nbsp;</h2>
+            </div>
+            <div class="s-skel-rail">
+              <div v-for="n in SKELETON_CARDS" :key="n" class="s-skel-card" :class="sizeClass(row.shape, row.size)">
+                <div class="s-skel-poster s-skeleton" :class="posterShapeClass(row.shape)"></div>
+                <div class="s-skel-line s-skeleton"></div>
+                <!-- 真卡的第二行文字是 v-if="subtitle"：没有副标题的行（如 mymedia 的库卡）
+                     这里也不能画，否则占位比真行高 17.4px -->
+                <div v-if="rowHasSubtitle(row.items)" class="s-skel-line s-skel-line-sm s-skeleton"></div>
+              </div>
+            </div>
+          </section>
         </template>
       </template>
     </div>
@@ -558,16 +642,19 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
   padding-bottom: var(--s-sp-11);
 }
 
-/* Hero 现在也走槽位循环（位置由设置页决定），但它仍需要"贴顶 + 通栏"：
-   ① 作为首项时吃掉父级的顶部留白；② 在超过版心宽度的大屏上全出血到视口两侧。
-   （子组件根节点会带上父组件的 scoped 标记，所以这里能选到 .hero。） */
+/* Hero 现在也走槽位循环（位置由设置页决定），它需要「贴顶」：作为首项时吃掉父级的顶部留白。
+   （子组件根节点会带上父组件的 scoped 标记，所以这里能选到 .hero。）
+
+   这里曾经还有一组「100vw 全出血」：
+     .s-home-inner > .hero { width: 100vw; max-width: 100vw; margin-inline: calc(50% - 50vw) }
+   已删除。原因：.s-home 是 overflow-y:auto，自带 ~10px 滚动条，.s-home-inner 只有 1590 宽；
+   于是 50% - 50vw = 795 - 800 = -5px，hero 被撑到 1600 并从 x=-5 开始 ——
+   实测 .hero rect x=-5/w=1600、.s-row x=0/w=1590，hero 内容左边缘 19px vs 行 24px，错位 5px。
+   而 hero 的底色本来就是 var(--s-bg)（与页面同值），「出血到视口两侧」视觉上根本不可见，
+   100vw 只买到了这 5px 错位。删掉后 hero 用默认 width:auto = 1590，自己 padding 0 var(--s-gutter)
+   → 内容正好落在 24..1566，与 .s-row 严丝合缝；超宽屏上两者一起被 --s-content-max 居中。 */
 .s-home-inner:has(> .hero:first-child) {
   padding-top: 0;
-}
-.s-home-inner > .hero {
-  width: 100vw;
-  max-width: 100vw;
-  margin-inline: calc(50% - 50vw);
 }
 
 /* ---------- 行 ---------- */
@@ -721,6 +808,46 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncAllTracks))
 .s-skel-line-sm {
   width: 60%;
   height: 10px;
+}
+
+/* ---------- 占位行（未挂载的行，task-13 C）----------
+   目标只有一个：**和真行像素级同高**，否则滚动条会跳（CLS）。
+   下面几条是照着真卡的盒模型逐段对出来的，实测（1600×900、真机 Emby）：
+     真行 356 / 骨架行 341 → 每行差 14.4px，19 行累计 276px（scrollHeight 9778 → 9502）。
+   差在两处：
+     ① 标题行：真 <h2 class="s-row-title"> 的行盒 24.7px，而 .s-skel-title 写死 20px（-4.7）；
+     ② 卡片：真 .cardBox 的外边距是四边 min(.74em, max(.38em, 1.06vw)) = 10.36px，
+        且 .cardBox-bottompadded（backdrop 卡）底边距是 1.8em = 25.2px；
+        骨架把外边距加在 .s-skel-poster 上（四边都有）又没给卡片盒补底边距，
+        于是海报与文字之间多出 10.36px 的假间隙、卡片底部又少了 10.36px。
+   这里不改加载态那套骨架（它有自己的口径），只覆盖 .s-row-ph 里的部分。 */
+.s-row-ph .s-skel-title {
+  /* 高度不再写死：用 <h2 class="s-row-title"> 同一个元素 + 一个 nbsp，
+     行盒高度就由真实 h2 的 font-size/line-height（emby495 的 h2 规则）决定，
+     不引入 1.3 这种魔法比例。 */
+  height: auto;
+}
+.s-row-ph .s-skel-poster {
+  /* 镜像真 .cardBox 的四边外边距公式（同字号 → 同 em 基准）；海报与文字之间真卡没有间隙 */
+  margin: min(0.74em, max(0.38em, 1.06vw));
+  margin-bottom: 0;
+}
+.s-row-ph .s-skel-line {
+  /* = .cardText-first-padded 的行盒：font-size × line-height + .22em 上内距 = 22px */
+  height: calc(var(--s-fs-body) * var(--s-lh-snug) + 0.22em);
+  margin: 0 var(--s-sp-3);
+}
+.s-row-ph .s-skel-line-sm {
+  /* = .cardText-secondary 的行盒：92% × line-height = 17.4px */
+  height: calc(var(--s-fs-body) * 0.92 * var(--s-lh-snug));
+}
+.s-row-ph .s-skel-card {
+  /* 真 .cardBox 的下外边距（骨架卡片是 flex 项，margin 不会被折叠掉） */
+  margin-bottom: min(0.74em, max(0.38em, 1.06vw));
+}
+.s-row-ph .s-skel-card:has(> .s-skel-poster.is-wide) {
+  /* 真 backdrop 卡带 .cardBox-bottompadded → margin-bottom: 1.8em !important */
+  margin-bottom: 1.8em;
 }
 
 /* ---------- 错误 / 空态 ---------- */

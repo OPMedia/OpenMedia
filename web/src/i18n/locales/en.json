@@ -69,7 +69,10 @@
     "resumePlay": "Continue watching",
     "details": "Details",
     "empty": "Nothing to feature yet",
-    "loading": "Picking something for you…"
+    "loading": "Picking something for you…",
+    "upNext": "Up next",
+    "railLabel": "Rotation list",
+    "tile": "Item {n}: {name}"
   },
   "shell": {
     "nav": "Main navigation",
