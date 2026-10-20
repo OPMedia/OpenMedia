@@ -243,6 +243,7 @@ jobs:
           [void]$sb.AppendLine(($out | Out-String))
           $code = $LASTEXITCODE
           [void]$sb.AppendLine("DDL apply exit=$code")
+          ($out | Select-Object -Last 30) | ForEach-Object { "::error::$_" }
           $out = & $env:PSQL_PATH -h localhost -U postgres -d openmedia -c "SELECT count(*) AS tables FROM pg_tables WHERE schemaname='public';" 2>&1
           [void]$sb.AppendLine(($out | Out-String))
           $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
@@ -262,6 +263,8 @@ jobs:
           [void]$sb.AppendLine(($out | Out-String))
           [void]$sb.AppendLine("exit=$code")
           $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          # 注解进 check-run（匿名可读，不需 admin 权限就能看到失败原因）
+          ($out | Select-Object -Last 40) | ForEach-Object { "::error::$_" }
           if ($code -ne 0) { exit $code }
 
       - name: 跑冒烟负载（L1/L1b/L3/L4 各 15s）
