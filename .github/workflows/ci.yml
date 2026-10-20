@@ -1,0 +1,339 @@
+﻿# ============================================================
+# OpenMedia CI —— GitHub Actions 主流水线
+#
+# 本文件每一行都对应一份"本机等价步骤"，见每 job 顶部注释与文件末尾的本机复现清单。
+# 设计原则（docs/adr/0017-ci-perf-gate.md 有完整论证）：
+#   1. 全项目此前零 CI（无 .github/），本文件是第一份
+#   2. 压测进 CI 但**不设硬阈值门禁**（docs/spec/acceptance.md §3 要求"阈值放宽跑"）；
+#      阈值留给人看，不拦合入——理由见 ADR 的"为什么不设门禁"
+#   3. 镜像构建 job 做成 workflow_dispatch 手动触发：本机无 docker，
+#      但 GitHub runner 有；自动跑会每次烧 20+ 分钟且本机无法等价复现
+#
+# 本机 vs runner 能力矩阵（关键，Reviewer 必读）：
+#   ┌──────────────────────────┬──────────────┬──────────────────────┐
+#   │ job                      │ 本机可跑?    │ 本机等价命令          │
+#   ├──────────────────────────┼──────────────┼──────────────────────┤
+#   │ build (Release)          │ 可以         │ dotnet build ...     │
+#   │ test (unit+PG 集成)      │ 可以         │ dotnet test ...      │
+#   │ web (type-check+build)   │ 可以         │ pnpm ...             │
+#   │ perf-smoke (fixture+负载)│ 可以（慢）   │ 见下方注释            │
+#   │ docker (amd64/arm64)     │ **不可以**   │ 只能 push 后在 runner │
+#   └──────────────────────────┴──────────────┴──────────────────────┘
+#   本机没有 docker（docker 命令不存在），也没有 PG service container 概念；
+#   CI 里用 GitHub Actions 的 postgres service container，本机用本机 PG（5432 已在跑）
+#   或 docker compose up -d postgres（后者本机不可行，前者可行）。
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 同一 ref 的新推送取消旧跑，省 runner 分钟
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  SOLUTION: MediaBrowser.sln
+  PG_DB: openmedia
+  PG_USER: postgres
+  PG_PASSWORD: "123456"
+
+jobs:
+  # ------------------------------------------------------------
+  # Job 1：Release 构建（含 VSTHRD 门禁）
+  #   src/Emby.Server.PgData 已把 VSTHRD 设成 error，所以这个 job
+  #   同时是"异步纪律门禁"。Debug 构建不设门禁（历史噪声多）。
+  #
+  # 本机等价：
+  #   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+  #   dotnet build MediaBrowser.sln -c Release --nologo
+  # ------------------------------------------------------------
+  build:
+    name: build (Release)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build Release
+        run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore --nologo
+
+  # ------------------------------------------------------------
+  # Job 2：测试（unit + 3 个 PG 集成用例）
+  #   PG 用 GitHub Actions 的 postgres service container。
+  #   本机没有 docker，所以本机等价是"本机 PG 已在 5432 跑"（可行）
+  #   或 "docker compose up -d postgres"（本机不可行）。
+  #
+  # 本机等价：
+  #   dotnet test MediaBrowser.Tests -c Release
+  #   # PG 集成用例读 OPENMEDIA_TEST_PGCONN，缺省
+  #   # Host=localhost;Port=5432;Database=openmedia;Username=postgres;Password=123456
+  #   # 每用例独立 schema（pgtest_xxx）跑完 DROP CASCADE，不污染共享库
+  # ------------------------------------------------------------
+  test:
+    name: test (unit + PG 集成)
+    runs-on: windows-latest
+    needs: build
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test MediaBrowser.Tests -c Release --no-build --nologo
+        env:
+          OPENMEDIA_TEST_PGCONN: >-
+            Host=localhost;Port=5432;Database=${{ env.PG_DB }};Username=${{ env.PG_USER }};Password=${{ env.PG_PASSWORD }}
+
+  # ------------------------------------------------------------
+  # Job 3：前端（type-check + build）
+  #   在 web/ 下，Node 24 + pnpm（package.json engines 要求 ^22.18 || >=24.12）。
+  #
+  # 本机等价：
+  #   cd web
+  #   pnpm install
+  #   pnpm type-check
+  #   pnpm build-only
+  # ------------------------------------------------------------
+  web:
+    name: web (type-check + build)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Build
+        run: pnpm build-only
+
+  # ------------------------------------------------------------
+  # Job 4：perf-smoke（fixture 生成 + 冒烟负载，P95 上 job summary）
+  #   docs/spec/acceptance.md §3 要求"压测脚本进 CI（阈值放宽跑）"。
+  #   这里**不设硬阈值**——不 fail、不 block 合入，只把数字贴出来给人看。
+  #   为什么（完整论证见 ADR）：
+  #     a) fixture 生成在本机实测 5.6 分钟（195k 条目），CI runner 只会更慢，
+  #        全量 tree-100k 会顶到 6 小时 job 上限；
+  #     b) GitHub runner 是共享/限量 CPU，P95 方差大到任何固定阈值都会随机红；
+  #     c) 真回归应该由本机安静窗口的复测确认（perf-baseline.md 的口径就是这么定的）。
+  #   所以 CI 里用 **fixture-ab-compare.ps1（471 条目，秒级生成）** 做冒烟：
+  #   它验的是"链路没坏、没有数量级劣化"，不是容量承诺。
+  #
+  # 本机等价（一条命令，本机 PG 已在 5432）：
+  #   powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1
+  #   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag ci-smoke -Seconds 15
+  #   # 想看全量 195k 口径：
+  #   #   powershell -ExecutionPolicy Bypass -File tests\perf\setup-perf-db.ps1 -Fixture tree-100k
+  #   #   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag ci-smoke -Db openmedia_perf -User perf-user-001
+  #   #   powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
+  # ------------------------------------------------------------
+  perf-smoke:
+    name: perf-smoke (fixture + 负载, 无门禁)
+    runs-on: windows-latest
+    needs: build
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Release (perf 只测 Release 口径, Debug 已作废)
+        run: dotnet build MediaBrowser.Server -c Release --nologo
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 建独立对比库 + 灌 471 条目树形 fixture
+        shell: pwsh
+        run: |
+          $env:PGPASSWORD = "${{ env.PG_PASSWORD }}"
+          powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1 `
+            -CompareDb openmedia_compare -PgHost localhost -PgPort 5432 `
+            -PgUser ${{ env.PG_USER }} -PgPassword "${{ env.PG_PASSWORD }}"
+
+      - name: 跑冒烟负载（L1/L1b/L3/L4 各 15s）
+        id: smoke
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 `
+            -Tag ci-smoke -Db openmedia_compare -User ab-user-001 -Seconds 15
+
+      - name: P95 汇总到 job summary（不设阈值，不拦合入）
+        if: always()
+        shell: pwsh
+        run: |
+          $f = "tests\perf\results\ab-ci-smoke-latest.json"
+          if (-not (Test-Path $f)) {
+            "### perf-smoke: 没找到结果文件（负载脚本可能没跑起来）" >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $d = Get-Content $f -Raw | ConvertFrom-Json
+          $sb = [Text.StringBuilder]::new()
+          [void]$sb.AppendLine("### perf-smoke P95（Release 口径，471 条目树形 fixture，无门禁）")
+          [void]$sb.AppendLine("")
+          [void]$sb.AppendLine("| 场景 | 请求数 | RPS | P50(ms) | P95(ms) | P99(ms) | 错误率 |")
+          [void]$sb.AppendLine("|---|---|---|---|---|---|---|")
+          foreach ($s in $d.scenarios) {
+            [void]$sb.AppendLine("| $($s.label) | $($s.requests) | $($s.rps) | $($s.p50Ms) | $($s.p95Ms) | $($s.p99Ms) | $($s.errorRate)% |")
+          }
+          [void]$sb.AppendLine("")
+          [void]$sb.AppendLine("注：本数字只验链路健康，**不是容量承诺**。容量口径见 docs/perf-baseline.md")
+          [void]$sb.AppendLine("（Release 复测节）；runner 为共享 CPU，跨 run 不可直接比大小。")
+          [void]$sb.AppendLine($sb.ToString()) | Out-Null
+          $sb.ToString() >> $env:GITHUB_STEP_SUMMARY
+
+      - name: 上传原始结果（artifact，供人工翻）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-results
+          path: tests/perf/results/ab-ci-smoke-*.json
+          if-no-files-found: warn
+
+# ============================================================
+# 独立 workflow：Docker 镜像构建（amd64/arm64 单镜像）
+#
+# **默认不自动跑**（只 workflow_dispatch）：
+#   1. 本机没有 docker，本机无法等价复现任何一步；自动跑等于把不可复现的
+#      东西塞进每次 PR
+#   2. buildx 双架构 + ffmpeg 静态下载每次 20+ 分钟，PR 上跑纯浪费
+#   3. docs/spec/core.md 第 38 行把"amd64/arm64 镜像"归到"发布"环节，
+#      不是每次 CI 都要出
+#
+# 本机等价：**无**。本机 docker 命令不存在。
+#   验证只能在 GitHub runner 上做（见 Dockerfile 注释里的验证步骤），
+#   或 push 后在 runner 上 docker run 起来 curl 一遍。
+# ============================================================
+name: docker
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: "推镜像到 registry（默认只 build 不 push）"
+        required: false
+        default: "false"
+
+jobs:
+  build-image:
+    name: build amd64+arm64 单镜像
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup QEMU（arm64 交叉构建）
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build 双架构镜像（默认不 push）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event.inputs.push_image == 'true' }}
+          tags: openmedia:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ============================================================
+# 本机等价复现清单（Reviewer 照这个逐条跑）
+#
+# 前置（一次性）：
+#   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+#   # PG 18 已在 localhost:5432 跑（postgresql-x64-18，Running）
+#
+# Job 1 build（本机可跑，等价率 100%）：
+#   dotnet build MediaBrowser.sln -c Release --nologo
+#   期望：0 error。493 warning 主要是并行开发中的 VSTHRD103（Emby.Server.PgData 的
+#   VSTHRD 已设 error，所以那边的会直接 fail）。
+#
+# Job 2 test（本机可跑，等价率 100%）：
+#   dotnet test MediaBrowser.Tests -c Release --nologo
+#   期望：12/12 通过（3 个 PG 集成用例依赖 localhost:5432 的 openmedia 库；
+#   并行开发期若有人改坏共享 schema，可能暂时红——重跑而非改代码）。
+#
+# Job 3 web（本机可跑，等价率 100%）：
+#   cd web; pnpm install; pnpm type-check; pnpm build-only
+#
+# Job 4 perf-smoke（本机可跑但慢，等价率 100%——同库同数据同负载）：
+#   powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1
+#   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag ci-smoke -Db openmedia_compare -User ab-user-001 -Seconds 15
+#   全量 195k 口径（本机 ~5.6 分钟灌库，容量承诺看这个）：
+#   powershell -ExecutionPolicy Bypass -File tests\perf\setup-perf-db.ps1 -Fixture tree-100k
+#   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag release -Db openmedia_perf -User perf-user-001 -Seconds 20
+#   powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
+#
+# docker workflow（本机**不可跑**，只能 GitHub runner）：
+#   本机无 docker。GitHub 上手动触发 docker workflow，或在 runner 上
+#   docker buildx build --platform linux/amd64,linux/arm64 -t openmedia:test .
+# ============================================================
