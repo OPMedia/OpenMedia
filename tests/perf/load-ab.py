@@ -11,8 +11,8 @@ Debug/Release 同口径 A/B 对比负载（短版）
   - 输出 results/ab-<tag>.json，供人工对比 Debug vs Release
 
 用法：
-  python tests\perf\load-ab.py --tag debug --user ab-user-001
-  python tests\perf\load-ab.py --tag release --user ab-user-001
+  python tests/perf/load-ab.py --tag debug --user ab-user-001
+  python tests/perf/load-ab.py --tag release --user ab-user-001
 """
 import json, time, threading, uuid, sys, os, argparse
 import http.client as hc
@@ -141,6 +141,36 @@ def resolve_user_id(tok):
     sys.exit(1)
 
 
+def resolve_stream_item(tok):
+    """解析一个静态流目标条目。
+
+    返回 (Id, Path, 本机文件是否存在)：
+      - 优先选 Path 在本机真实存在的条目（静态流能真跑）
+      - 退而求其次返回第一个条目的 Id/Path（调用方按 exists 决定跳过）
+      - 库内无 Movie 条目时返回 ('', '', False)
+
+    历史实现硬编码 openmedia 库的 Movie2 Id（c40cea18…），在 openmedia_perf /
+    openmedia_compare 上永远打不存在的条目 → L3 档位 100% 500，却一直被当成
+    “正常基线”对比（2026-10-20 全量回归定位）。
+    """
+    conn = hc.HTTPConnection('127.0.0.1', 8096, timeout=30)
+    try:
+        conn.request('GET', '/emby/Items?Recursive=true&Limit=20&Fields=Path&IncludeItemTypes=Movie',
+                     headers={'X-Emby-Token': tok})
+        payload = json.loads(conn.getresponse().read().decode())
+    finally:
+        conn.close()
+    items = payload.get('Items') or []
+    if not items:
+        return '', '', False
+    for it in items:
+        p = it.get('Path') or ''
+        if p and os.path.exists(p):
+            return it.get('Id', ''), p, True
+    it = items[0]
+    return it.get('Id', ''), it.get('Path') or '', False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--tag', required=True, help='debug / release')
@@ -173,13 +203,29 @@ def main():
 
     print('== L3 静态流 并发10 ==')
 
-    def stream_fn():
-        h = dict(hdr)
-        h['Range'] = 'bytes=0-1048575'
-        return http('GET', BASE + '/Videos/c40cea18fc9c413b93aca7bad1a80d92/stream?static=true', h, timeout=60)
-    s = run_concurrent(stream_fn, 10, args.seconds, 'L3-静态流-并发10')
-    results.append(s)
-    print(json.dumps(s, ensure_ascii=False))
+    # 动态解析目标条目（不再硬编码跨库 Id）；库为合成数据 / 无媒体文件时明确标记跳过，
+    # 不再把“打不存在的条目”产出的 100% 500 当成基线数字。
+    stream_id, stream_path, file_exists = resolve_stream_item(tok)
+    if not stream_id:
+        s = Collector().summary('L3-静态流-并发10', 0)
+        s['skipped'] = True
+        s['reason'] = '库内无 Movie 条目，无法解析静态流目标'
+        results.append(s)
+        print(json.dumps(s, ensure_ascii=False))
+    elif not file_exists:
+        s = Collector().summary('L3-静态流-并发10', 0)
+        s['skipped'] = True
+        s['reason'] = f'库为合成数据，媒体文件不存在（{stream_path}）——静态流档位不适用'
+        results.append(s)
+        print(json.dumps(s, ensure_ascii=False))
+    else:
+        def stream_fn():
+            h = dict(hdr)
+            h['Range'] = 'bytes=0-1048575'
+            return http('GET', BASE + f'/Videos/{stream_id}/stream?static=true', h, timeout=60)
+        s = run_concurrent(stream_fn, 10, args.seconds, 'L3-静态流-并发10')
+        results.append(s)
+        print(json.dumps(s, ensure_ascii=False))
 
     print('== L4 认证 并发20 ==')
 
