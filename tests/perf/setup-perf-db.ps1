@@ -24,7 +24,18 @@ param(
     [string]$Fixture = '10k'
 )
 $ErrorActionPreference = 'Continue'
-$psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
+# psql 定位：$env:PSQL_PATH > PATH 解析 > Program Files 下的版本目录（取最高版本）> 历史硬编码。
+# CI 的 windows runner 预装 PostgreSQL 16，硬编码 18 会直接找不到。
+$psql = if ($env:PSQL_PATH) { $env:PSQL_PATH }
+        else {
+            $cmd = Get-Command psql.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $cmd.Source }
+            else {
+                $cand = Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
+                        Sort-Object FullName -Descending | Select-Object -First 1
+                if ($cand) { $cand.FullName } else { 'C:\Program Files\PostgreSQL\18\bin\psql.exe' }
+            }
+        }
 if (-not (Test-Path $psql)) { Write-Host "psql 不存在：$psql"; exit 1 }
 $env:PGPASSWORD = $PgPassword
 $base = @('-h', $PgHost, '-p', "$PgPort", '-U', $PgUser)

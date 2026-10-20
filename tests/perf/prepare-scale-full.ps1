@@ -8,7 +8,18 @@ param(
     [switch]$SkipFixture
 )
 $ErrorActionPreference = 'Stop'
-$psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
+# psql 定位：$env:PSQL_PATH > PATH 解析 > Program Files 下的版本目录（取最高版本）> 历史硬编码。
+# CI 的 windows runner 预装 PostgreSQL 16，硬编码 18 会直接找不到。
+$psql = if ($env:PSQL_PATH) { $env:PSQL_PATH }
+        else {
+            $cmd = Get-Command psql.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $cmd.Source }
+            else {
+                $cand = Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
+                        Sort-Object FullName -Descending | Select-Object -First 1
+                if ($cand) { $cand.FullName } else { 'C:\Program Files\PostgreSQL\18\bin\psql.exe' }
+            }
+        }
 $env:PGPASSWORD = '123456'
 $env:PGCLIENTENCODING = 'UTF8'
 $base = @('-h', 'localhost', '-p', "$PgPort", '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-d', 'openmedia_scale')

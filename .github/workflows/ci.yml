@@ -27,9 +27,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 # 同一 ref 的新推送取消旧跑，省 runner 分钟
@@ -86,19 +86,24 @@ jobs:
   # ------------------------------------------------------------
   test:
     name: test (unit + PG 集成)
-    runs-on: windows-latest
+    # service container 只支持 Linux runner（Windows runner 不支持容器），
+    # 故本 job 放 ubuntu；build 仍留 windows（本机等价命令是 Windows 口径）。
+    runs-on: ubuntu-latest
     needs: build
     services:
       postgres:
         image: postgres:18-alpine
+        # 注意：services.*.env 位置**不能用 ${{ env.* }} 上下文**
+        #（GitHub 上下文可用性限制：此处仅 github/inputs/matrix/needs/strategy/vars）。
+        # 写成字面量，与顶层 env 保持一致。
         env:
-          POSTGRES_USER: ${{ env.PG_USER }}
-          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
-          POSTGRES_DB: ${{ env.PG_DB }}
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "123456"
+          POSTGRES_DB: openmedia
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-cmd "pg_isready -U postgres -d openmedia"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -178,22 +183,10 @@ jobs:
   # ------------------------------------------------------------
   perf-smoke:
     name: perf-smoke (fixture + 负载, 无门禁)
+    # Windows runner：service container 不可用（本 job 的脚本是 PowerShell 5.1 + Windows 路径），
+    # 改用 runner 预装的 PostgreSQL（默认安装但未启动，需 Start-Service）。
     runs-on: windows-latest
     needs: build
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: ${{ env.PG_USER }}
-          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
-          POSTGRES_DB: ${{ env.PG_DB }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -201,6 +194,24 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+
+      - name: 启动预装 PostgreSQL（windows runner 无 service container）
+        shell: pwsh
+        run: |
+          $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' -and $_.Status -eq 'Stopped' } | Select-Object -First 1
+          if (-not $svc) { $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' } | Select-Object -First 1 }
+          if (-not $svc) { throw 'windows runner 上没有预装 PostgreSQL 服务' }
+          if ($svc.Status -ne 'Running') { Start-Service $svc.Name; Start-Sleep -Seconds 3 }
+          # 预装实例的超级用户密码统一为 postgres，对齐工作流 env（123456）
+          $psql = (Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
+                   Sort-Object FullName -Descending | Select-Object -First 1).FullName
+          if (-not $psql) { throw '找不到 psql.exe' }
+          $env:PGPASSWORD = 'postgres'
+          & $psql -h localhost -U postgres -c "ALTER USER postgres PASSWORD '123456';" | Out-Null
+          $env:PGPASSWORD = '123456'
+          & $psql -h localhost -U postgres -c "SELECT version();" | Select-Object -First 3
+          "PSQL_PATH=$psql" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PGPASSWORD=123456" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Release (perf 只测 Release 口径, Debug 已作废)
         run: dotnet build MediaBrowser.Server -c Release --nologo
@@ -213,10 +224,10 @@ jobs:
       - name: 建独立对比库 + 灌 471 条目树形 fixture
         shell: pwsh
         run: |
-          $env:PGPASSWORD = "${{ env.PG_PASSWORD }}"
+          $env:PGPASSWORD = "123456"
           powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1 `
             -CompareDb openmedia_compare -PgHost localhost -PgPort 5432 `
-            -PgUser ${{ env.PG_USER }} -PgPassword "${{ env.PG_PASSWORD }}"
+            -PgUser postgres -PgPassword "123456" -Psql $env:PSQL_PATH
 
       - name: 跑冒烟负载（L1/L1b/L3/L4 各 15s）
         id: smoke

@@ -23,10 +23,23 @@ param(
     [int]$PgPort = 5432,
     [string]$PgUser = 'postgres',
     [string]$PgPassword = '123456',
-    [string]$CompareDb = 'openmedia_compare'
+    [string]$CompareDb = 'openmedia_compare',
+    [string]$Psql = ''
 )
 $ErrorActionPreference = 'Continue'  # psql 的 NOTICE 走 stderr，Stop 会把它当终止错误
-$psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
+$env:PGPASSWORD = $PgPassword
+# psql 定位：显式 -Psql > PATH 解析 > Program Files 下的版本目录（取最高版本）> 历史硬编码。
+# CI 的 windows runner 预装的是 PostgreSQL 16（不是 18），硬编码 18 会直接 exit 1。
+$psql = if ($Psql) { $Psql }
+        else {
+            $cmd = Get-Command psql.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $cmd.Source }
+            else {
+                $cand = Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
+                        Sort-Object FullName -Descending | Select-Object -First 1
+                if ($cand) { $cand.FullName } else { 'C:\Program Files\PostgreSQL\18\bin\psql.exe' }
+            }
+        }
 if (-not (Test-Path $psql)) { Write-Host "psql 不存在：$psql"; exit 1 }
 
 # ---- 硬红线：绝不碰共享库 openmedia ----
