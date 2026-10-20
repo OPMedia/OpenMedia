@@ -13,6 +13,10 @@
 #   祖先链同步。TV 树（剧集挂在 Season 深度）同理已安全。
 # 用法：.\gen-movie-subfolders.ps1  → 输出 s8-movie-subfolders.sql
 # 执行时机：管线 link-tree（步骤4）之后、GUID 修正（步骤6）之前。
+param(
+    [int]$PgPort = 5432
+)
+$ErrorActionPreference = 'Stop'
 # ============================================================
 $ErrorActionPreference = 'Stop'
 $psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
@@ -21,13 +25,13 @@ $env:PGCLIENTENCODING = 'UTF8'
 
 # [1/4] 导出顶层 Folder 路径 + 电影路径
 Write-Host "[1/4] 导出路径..."
-& $psql -h localhost -p 15432 -U postgres -d openmedia_scale -A -t -F '|' -c "
+& $psql -h localhost -p $PgPort -U postgres -d openmedia_scale -A -t -F '|' -c "
 SELECT id, path FROM media_items WHERE type = 1 ORDER BY id;" | Out-File -FilePath "$env:TEMP\sf-tops.txt" -Encoding utf8
 $tops = [System.Collections.Generic.HashSet[string]]::new()
 foreach ($l in [IO.File]::ReadAllLines("$env:TEMP\sf-tops.txt")) {
     if ($l -match '^\d+\|(.+)$') { [void]$tops.Add($Matches[1]) }
 }
-& $psql -h localhost -p 15432 -U postgres -d openmedia_scale -A -t -F '|' -c "
+& $psql -h localhost -p $PgPort -U postgres -d openmedia_scale -A -t -F '|' -c "
 SELECT id, path FROM media_items WHERE type = 2 AND path IS NOT NULL ORDER BY id;" | Out-File -FilePath "$env:TEMP\sf-movies.txt" -Encoding utf8
 $movies = [IO.File]::ReadAllLines("$env:TEMP\sf-movies.txt") | Where-Object { $_ -match '^\d+\|' }
 Write-Host "  顶层 Folder $($tops.Count) 个；电影 $($movies.Count) 条"

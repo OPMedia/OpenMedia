@@ -2,16 +2,18 @@
 # 8098 验证实例标准启停脚本（10-16 U2 事故教训固化）
 # 事故：重启 8098 漏带 OPENMEDIA_PGCONN → 实例连共享库 → scale 用户全 401，
 #       测量无效。本脚本把环境变量 + 就绪门禁固化，杜绝人为遗漏。
+# 端口：PG 默认 5432（-PgPort 可覆盖）；PG 端口不再是 15432。
+param(
+    [int]$PgPort = 5432,
+    [switch]$Stop,
+    [int]$TimeoutSec = 900
+)
 # 用法：
 #   .\start-8098.ps1            # 启动并等到完全就绪（健康 + scale 用户认证全过才返回）
 #   .\start-8098.ps1 -Stop      # 按端口占用者停止（群规：禁止按 CommandLine 匹配杀）
 # 就绪门禁说明：1M 库启动回填期认证会 401（Users 集合未稳定，实测 5-15 分钟），
 #               本脚本轮询 scale-user 认证直到 200——U2/soak 开跑前先跑这个。
 # ============================================================
-param(
-    [switch]$Stop,
-    [int]$TimeoutSec = 900
-)
 $ErrorActionPreference = 'Stop'
 
 function Get-Listener {
@@ -32,7 +34,7 @@ if ($Stop) {
 # ---- 启动 ----
 if (Get-Listener) { throw '8098 已在监听——先 .\start-8098.ps1 -Stop 再启动（防双实例）' }
 
-$env:OPENMEDIA_PGCONN = 'Host=localhost;Port=15432;Database=openmedia_scale;Username=postgres;Password=123456'
+$env:OPENMEDIA_PGCONN = "Host=localhost;Port=$PgPort;Database=openmedia_scale;Username=postgres;Password=123456"
 Write-Host 'OPENMEDIA_PGCONN -> openmedia_scale 已设置'
 
 Start-Process -FilePath 'C:\Program Files\dotnet\dotnet.exe' -ArgumentList 'MediaBrowser.Server.dll' -WorkingDirectory 'D:\OpenMedia-8098' -WindowStyle Hidden

@@ -3,6 +3,9 @@
 #       GUID 对不上 → 判 missing 删除（10-15 22:27 扫描事故实证：TV 树 57 万条被删）。
 # 本脚本从 scale 库导出 (id, type, path)，算公式 GUID，生成 UPDATE SQL。
 # 用法：.\gen-media-guid-fix.ps1  → 输出 s7-fix-media-guids.sql
+param(
+    [int]$PgPort = 5432
+)
 $ErrorActionPreference = 'Stop'
 $psql = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
 $env:PGPASSWORD = '123456'
@@ -10,7 +13,7 @@ $env:PGCLIENTENCODING = 'UTF8'
 
 # 导出 (id, type, path)
 Write-Host "[1/3] 导出媒体路径..."
-& $psql -h localhost -p 15432 -U postgres -d openmedia_scale -A -t -F '|' -c "
+& $psql -h localhost -p $PgPort -U postgres -d openmedia_scale -A -t -F '|' -c "
 SELECT id, type, path FROM media_items WHERE type IN (2,3,4,5,6,7,8,9,20) AND path IS NOT NULL ORDER BY id;" | Out-File -FilePath "$env:TEMP\scale-paths.txt" -Encoding utf8
 $lines = [IO.File]::ReadAllLines("$env:TEMP\scale-paths.txt") | Where-Object { $_ -match '^\d+\|' }
 Write-Host "  导出 $($lines.Count) 条"

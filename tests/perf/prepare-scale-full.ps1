@@ -4,7 +4,7 @@
 # 顺序严格；总耗时 ~25 分钟（fixture 13.5 + GUID 应用 6 + 其余 ~5）
 # ============================================================
 param(
-    [string]$PgPort = 15432,
+    [string]$PgPort = 5432,
     [switch]$SkipFixture
 )
 $ErrorActionPreference = 'Stop'

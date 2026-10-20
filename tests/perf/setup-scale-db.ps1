@@ -2,12 +2,11 @@
 # S5 规模化独立库搭建（openmedia_scale，1M 条目）
 # 幂等：drop 若存在 → 重建 → schema（pg_dump -s 实际库）→ fixture-1m.sql
 # 严禁指向共享库 openmedia（安全红线）
-# 注意：PG 已迁 15432（10-15 端口屏蔽事故）；本脚本默认 15432
 # 磁盘预估：data ~1.5GB + 索引 3-5GB，生成前检查 D 盘剩余空间
 # ============================================================
 param(
     [string]$PgHost = 'localhost',
-    [int]$PgPort = 15432,
+    [int]$PgPort = 5432,
     [string]$PgUser = 'postgres',
     [string]$PgPassword = '123456',
     [string]$ScaleDb = 'openmedia_scale',
@@ -28,9 +27,9 @@ if ($drive) {
     if ($freeGB -lt $MinFreeGB) { Write-Host "空间不足，中止（调 -MinFreeGB 或清理磁盘）"; exit 1 }
 }
 
-# 前置：PG 可达性（15432）
+# 前置：PG 可达性
 & $psql @('-h', $PgHost, '-p', "$PgPort", '-U', $PgUser, '-d', 'postgres', '-c', 'SELECT 1;') | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Host "PG 不可达（$PgHost`:$PgPort）——确认 PG 在 15432 运行"; exit 1 }
+if ($LASTEXITCODE -ne 0) { Write-Host "PG 不可达（$PgHost`:$PgPort）——确认 PG 在 $PgPort 运行（-PgPort 可覆盖）"; exit 1 }
 
 Write-Host "[1/5] 删除旧 $ScaleDb（若存在）..."
 & $psql @('-h', $PgHost, '-p', "$PgPort", '-U', $PgUser, '-d', 'postgres', '-c', "DROP DATABASE IF EXISTS $ScaleDb WITH (FORCE);") 2>$null
