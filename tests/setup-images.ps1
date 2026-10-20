@@ -1,16 +1,19 @@
 ﻿# OpenMedia 按名实体/用户图片 fixture（幂等）：给矩阵 ⑤ 类图片端点补 Primary 图
-# 覆盖端点（run-tests.ps1 以 {Name}=Movie1 打）：
-#   /Artists|/Persons|/Genres|/MusicGenres|/GameGenres|/Studios /Movie1/Images/Primary[/{Index}]
+# 覆盖端点（run-tests.ps1 以 {Name}=<实体名> 打）：
+#   /Artists|/Persons|/Genres|/MusicGenres|/GameGenres|/Studios /<实体名>/Images/Primary[/{Index}]
 #   /Users/{adminId}/Images/Primary[/{Index}]
 # 方式：POST /Items/{Id}/Images/Primary（body=Base64 图片串）——按名实体无按名 POST 路由，
-#       先 GET /{Endpoint}/Movie1 解析 Id 再走通用条目路由；用户走 /Users/{Id}/Images。
+#       先 GET /{Endpoint}/{Name} 解析 Id 再走通用条目路由；用户走 /Users/{Id}/Images。
 # 图片：System.Drawing 生成 64x64 JPEG（对齐 setup-media.ps1 兜底模式）。
+# 实体名：默认按端点从库里取第一个实体（与 run-tests.ps1 的 Get-FirstItem 同口径）——
+#       旧实现硬编码 'Movie1'，只有 MusicGenres 恰好叫 Movie1，其余端点全部对不上
+#       （2026-10-20 全量回归暴露）。
 # PowerShell 5.1 兼容。
 param(
     [string]$ApiBase = "http://127.0.0.1:8096/emby",
     [string]$AdminUser = 'admin',
     [string]$AdminPw = '',
-    [string]$EntityName = 'Movie1'
+    [string]$EntityName = ''
 )
 $ErrorActionPreference = 'Stop'
 
@@ -68,21 +71,42 @@ function Post-ImageBase64 {
 
 # ---------- 按名实体：解析 Id → 已有图则跳过，否则 POST ----------
 $endpoints = @('Artists', 'Persons', 'Genres', 'MusicGenres', 'GameGenres', 'Studios')
+
+# 取实体名：显式 -EntityName 则全局用它；否则按端点从库里取第一个实体
+# （与 run-tests.ps1 的 Get-FirstItem 同口径，否则补的图和矩阵打的实体对不上）。
+function Get-FirstEntityName {
+    param([string]$Endpoint)
+    $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$Endpoint`?Limit=1" -Headers $hdrs
+    if ($r.Status -ne 200) { return '' }
+    $j = ConvertFrom-JsonSafe $r.Body
+    $items = @($j.Items)
+    if ($items.Count -eq 0) { return '' }
+    return "$($items[0].Name)"
+}
+
+$entityNames = @{}
+foreach ($ep in $endpoints) {
+    if ($EntityName) { $entityNames[$ep] = $EntityName }
+    else { $entityNames[$ep] = Get-FirstEntityName -Endpoint $ep }
+}
+
 $entityIds = @{}
 foreach ($ep in $endpoints) {
-    $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$EntityName" -Headers $hdrs
-    if ($r.Status -ne 200) { Write-Host "[$ep] 解析失败 $($r.Status)，跳过"; continue }
+    $name = $entityNames[$ep]
+    if (-not $name) { Write-Host "[$ep] 库里无实体（fixture 缺失，无法补图），跳过"; continue }
+    $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$([uri]::EscapeDataString($name))" -Headers $hdrs
+    if ($r.Status -ne 200) { Write-Host "[$ep] 解析失败 $($r.Status)（实体名=$name），跳过"; continue }
     $j = ConvertFrom-JsonSafe $r.Body
     $id = "$($j.Id)"
     $entityIds[$ep] = $id
 
     # 幂等检查：已有 Primary 则跳过
-    $g = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$EntityName/Images/Primary" -Headers $hdrs
-    if ($g.Status -eq 200) { Write-Host "[$ep] 已有 Primary 图，跳过"; continue }
+    $g = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$([uri]::EscapeDataString($name))/Images/Primary" -Headers $hdrs
+    if ($g.Status -eq 200) { Write-Host "[$ep] 已有 Primary 图，跳过（实体名=$name）"; continue }
 
     $code = Post-ImageBase64 -Url "$ApiBase/Items/$id/Images/Primary" -Token $token -Base64 $b64
     if ($code -notin @(200, 204)) { Write-Host "[$ep] 上传失败 $code"; continue }
-    Write-Host "[$ep] Primary 图已上传（Id=$id）"
+    Write-Host "[$ep] Primary 图已上传（实体名=$name Id=$id）"
 }
 
 # ---------- 用户图片：POST /Users/{Id}/Images/Primary ----------
@@ -95,14 +119,21 @@ if ($g.Status -eq 200) {
     else { Write-Host "[User] 上传失败 $code" }
 }
 
-# ---------- 验收断言：14 个矩阵点全绿 ----------
+# ---------- 验收断言：12 个矩阵点全绿（实体缺失的端点记 SKIP，不计失败）----------
 $fail = 0
+$skip = 0
 foreach ($ep in $endpoints) {
+    $name = $entityNames[$ep]
+    if (-not $name) {
+        $skip += 2
+        Write-Host ("  GET {0}/<无实体>{1}: SKIP（库里无该类实体）" -f $ep, '/Images/Primary')
+        continue
+    }
     foreach ($suffix in @('/Images/Primary', '/Images/Primary/0')) {
-        $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$EntityName$suffix" -Headers $hdrs
+        $r = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/$ep/$([uri]::EscapeDataString($name))$suffix" -Headers $hdrs
         $ok = ($r.Status -eq 200 -and $r.ContentType -match '^image/')
         if (-not $ok) { $fail++ }
-        Write-Host ("  GET {0}/{1}{2}: {3} {4}{5}" -f $ep, $EntityName, $suffix, $r.Status, $r.ContentType, $(if ($ok) { ' [PASS]' } else { ' [FAIL] ' + $r.Body.Substring(0, [Math]::Min(60, $r.Body.Length)) }))
+        Write-Host ("  GET {0}/{1}{2}: {3} {4}{5}" -f $ep, $name, $suffix, $r.Status, $r.ContentType, $(if ($ok) { ' [PASS]' } else { ' [FAIL] ' + $r.Body.Substring(0, [Math]::Min(60, $r.Body.Length)) }))
     }
 }
 foreach ($suffix in @('/Images/Primary', '/Images/Primary/0')) {
@@ -114,4 +145,4 @@ foreach ($suffix in @('/Images/Primary', '/Images/Primary/0')) {
 
 if ($fail -gt 0) { throw "$fail 个图片端点未转绿" }
 Write-Host ''
-Write-Host "全部 $($endpoints.Count * 2 + 2) 个图片端点转绿。"
+Write-Host "图片端点全绿（SKIP $skip 个：库里无该类实体）。"
