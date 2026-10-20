@@ -231,19 +231,38 @@ jobs:
         # setup-compare-db.ps1 的口径是「克隆**实际库** schema」（两侧同库同数据），
         # 所以源库 openmedia 必须先存在。CI 的 PG 是全新预装实例，没有这个库。
         # 用仓库里同一份 DDL 建，口径与本机一致（本机 openmedia 也是用它初始化的）。
+        # 输出写进 job summary：失败时不用 admin 权限就能看到 psql 的原始报错。
         run: |
           $env:PGPASSWORD = "123456"
-          & $env:PSQL_PATH -h localhost -U postgres -c "CREATE DATABASE openmedia;" | Out-Null
-          & $env:PSQL_PATH -h localhost -U postgres -d openmedia -v ON_ERROR_STOP=1 -f emby_pgsql_dump_schema_optimized.sql | Out-Null
-          & $env:PSQL_PATH -h localhost -U postgres -d openmedia -c "SELECT count(*) AS tables FROM pg_tables WHERE schemaname='public';"
+          $sb = [Text.StringBuilder]::new()
+          [void]$sb.AppendLine("### 准备 openmedia 库")
+          $out = & $env:PSQL_PATH -h localhost -U postgres -c "CREATE DATABASE openmedia;" 2>&1
+          [void]$sb.AppendLine(($out | Out-String))
+          if ($LASTEXITCODE -ne 0) { $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8; throw "CREATE DATABASE openmedia 失败（exit=$LASTEXITCODE）" }
+          $out = & $env:PSQL_PATH -h localhost -U postgres -d openmedia -v ON_ERROR_STOP=1 -f emby_pgsql_dump_schema_optimized.sql 2>&1
+          [void]$sb.AppendLine(($out | Out-String))
+          $code = $LASTEXITCODE
+          [void]$sb.AppendLine("DDL apply exit=$code")
+          $out = & $env:PSQL_PATH -h localhost -U postgres -d openmedia -c "SELECT count(*) AS tables FROM pg_tables WHERE schemaname='public';" 2>&1
+          [void]$sb.AppendLine(($out | Out-String))
+          $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($code -ne 0) { throw "schema DDL 应用失败（exit=$code）" }
 
       - name: 建独立对比库 + 灌 471 条目树形 fixture
         shell: pwsh
+        # 同上：完整输出进 job summary，失败可诊断（不需要 admin 权限就能读 summary）
         run: |
           $env:PGPASSWORD = "123456"
-          powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1 `
+          $out = & powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1 `
             -CompareDb openmedia_compare -PgHost localhost -PgPort 5432 `
-            -PgUser postgres -PgPassword "123456" -Psql $env:PSQL_PATH
+            -PgUser postgres -PgPassword "123456" -Psql $env:PSQL_PATH 2>&1
+          $code = $LASTEXITCODE
+          $sb = [Text.StringBuilder]::new()
+          [void]$sb.AppendLine("### setup-compare-db.ps1 输出")
+          [void]$sb.AppendLine(($out | Out-String))
+          [void]$sb.AppendLine("exit=$code")
+          $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($code -ne 0) { exit $code }
 
       - name: 跑冒烟负载（L1/L1b/L3/L4 各 15s）
         id: smoke
