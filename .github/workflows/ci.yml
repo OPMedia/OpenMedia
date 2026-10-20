@@ -226,6 +226,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: 准备 openmedia 库（perf 脚本从它 pg_dump -s 克隆 schema）
+        shell: pwsh
+        # setup-compare-db.ps1 的口径是「克隆**实际库** schema」（两侧同库同数据），
+        # 所以源库 openmedia 必须先存在。CI 的 PG 是全新预装实例，没有这个库。
+        # 用仓库里同一份 DDL 建，口径与本机一致（本机 openmedia 也是用它初始化的）。
+        run: |
+          $env:PGPASSWORD = "123456"
+          & $env:PSQL_PATH -h localhost -U postgres -c "CREATE DATABASE openmedia;" | Out-Null
+          & $env:PSQL_PATH -h localhost -U postgres -d openmedia -v ON_ERROR_STOP=1 -f emby_pgsql_dump_schema_optimized.sql | Out-Null
+          & $env:PSQL_PATH -h localhost -U postgres -d openmedia -c "SELECT count(*) AS tables FROM pg_tables WHERE schemaname='public';"
+
       - name: 建独立对比库 + 灌 471 条目树形 fixture
         shell: pwsh
         run: |

@@ -24,7 +24,8 @@ param(
     [string]$PgUser = 'postgres',
     [string]$PgPassword = '123456',
     [string]$CompareDb = 'openmedia_compare',
-    [string]$Psql = ''
+    [string]$Psql = '',
+    [string]$PgDump = ''
 )
 $ErrorActionPreference = 'Continue'  # psql 的 NOTICE 走 stderr，Stop 会把它当终止错误
 $env:PGPASSWORD = $PgPassword
@@ -60,7 +61,19 @@ Write-Host "[2/5] 创建 $CompareDb ..."
 if ($LASTEXITCODE -ne 0) { Write-Host "建库失败"; exit 1 }
 
 Write-Host "[3/5] 克隆实际库 schema（pg_dump -s）..."
-$pgdump = 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe'
+# pg_dump 定位同 psql：显式 > PATH > Program Files 下取最高版本 > 历史硬编码。
+# CI 的 windows runner 预装 PG 17，硬编码 18 会直接 exit 1。
+$pgdump = if ($PgDump) { $PgDump }
+          else {
+              $cmd = Get-Command pg_dump.exe -ErrorAction SilentlyContinue
+              if ($cmd) { $cmd.Source }
+              else {
+                  $cand = Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'pg_dump.exe' -Recurse -ErrorAction SilentlyContinue |
+                          Sort-Object FullName -Descending | Select-Object -First 1
+                  if ($cand) { $cand.FullName } else { 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe' }
+              }
+          }
+if (-not (Test-Path $pgdump)) { Write-Host "pg_dump 不存在：$pgdump"; exit 1 }
 & $pgdump @base -s -d openmedia -f "$env:TEMP\openmedia-schema.sql"
 if ($LASTEXITCODE -ne 0) { Write-Host "pg_dump 失败"; exit 1 }
 & $psql @base -d $CompareDb -v ON_ERROR_STOP=1 -f "$env:TEMP\openmedia-schema.sql" | Out-Null
