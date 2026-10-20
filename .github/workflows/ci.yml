@@ -184,8 +184,8 @@ jobs:
   perf-smoke:
     name: perf-smoke (fixture + 负载, 无门禁)
     # Windows runner：service container 不可用（本 job 的脚本是 PowerShell 5.1 + Windows 路径），
-    # 改用 runner 预装的 PostgreSQL（默认安装但未启动，需 Start-Service）。
-    runs-on: windows-latest
+    # 改用 runner 预装的 PostgreSQL（默认装了但服务是 Disabled，需先改 Manual 再启动）。
+    runs-on: windows-2025
     needs: build
     steps:
       - uses: actions/checkout@v4
@@ -197,21 +197,26 @@ jobs:
 
       - name: 启动预装 PostgreSQL（windows runner 无 service container）
         shell: pwsh
+        # windows-2025 镜像实测：服务 postgresql-x64-17，ServiceStartType=**Disabled**，
+        # 超级用户 postgres 密码 **root**（不是 postgres）。三点任一不对就起不来。
         run: |
-          $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' -and $_.Status -eq 'Stopped' } | Select-Object -First 1
-          if (-not $svc) { $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' } | Select-Object -First 1 }
+          $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' } | Select-Object -First 1
           if (-not $svc) { throw 'windows runner 上没有预装 PostgreSQL 服务' }
-          if ($svc.Status -ne 'Running') { Start-Service $svc.Name; Start-Sleep -Seconds 3 }
-          # 预装实例的超级用户密码统一为 postgres，对齐工作流 env（123456）
+          "PG service: $($svc.Name) (startType=$($svc.StartType))"
+          if ($svc.StartType -eq 'Disabled') { Set-Service -Name $svc.Name -StartupType Manual }
+          if ($svc.Status -ne 'Running') {
+            Start-Service $svc.Name
+            $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(60))
+          }
           $psql = (Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
                    Sort-Object FullName -Descending | Select-Object -First 1).FullName
           if (-not $psql) { throw '找不到 psql.exe' }
-          $env:PGPASSWORD = 'postgres'
+          # 预装实例密码是 root；统一改成 123456（与工作流 env / 脚本默认一致）
+          $env:PGPASSWORD = 'root'
           & $psql -h localhost -U postgres -c "ALTER USER postgres PASSWORD '123456';" | Out-Null
           $env:PGPASSWORD = '123456'
           & $psql -h localhost -U postgres -c "SELECT version();" | Select-Object -First 3
           "PSQL_PATH=$psql" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PGPASSWORD=123456" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Release (perf 只测 Release 口径, Debug 已作废)
         run: dotnet build MediaBrowser.Server -c Release --nologo
