@@ -319,7 +319,8 @@ jobs:
 #
 # Job 2 test（本机可跑，等价率 100%）：
 #   dotnet test MediaBrowser.Tests -c Release --nologo
-#   期望：12/12 通过（3 个 PG 集成用例依赖 localhost:5432 的 openmedia 库；
+#   期望：28/28 通过（BatchWrite 集成 / where 分支差分 / 查询门等用例依赖
+#   localhost:5432 的 openmedia 库；
 #   并行开发期若有人改坏共享 schema，可能暂时红——重跑而非改代码）。
 #
 # Job 3 web（本机可跑，等价率 100%）：
