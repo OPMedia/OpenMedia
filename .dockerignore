@@ -1,0 +1,49 @@
+﻿# ============================================================
+# .dockerignore —— 只把构建真正需要的上下文送进 docker daemon
+#
+# 为什么必须写：tests/perf/ 下有 50MB 的 placeholder-paths.txt、
+# 78MB 的 s7-fix-media-guids.sql、43MB 的 s8-movie-subfolders.sql，
+# 加上 web/node_modules 与 bin/obj。不忽略的话 docker build 的
+# context 传输就要几分钟，且可能把主机路径泄漏进镜像。
+# ============================================================
+
+# 版本控制与 CI
+.git
+.github
+.gitignore
+.dockerignore
+
+# 构建产物（镜像内重新 build，不信任宿主 bin/obj）
+**/bin
+**/obj
+**/Debug
+**/Release
+**/publish
+
+# 前端依赖与产物（镜像内重新 install + build）
+web/node_modules
+web/dist
+web/.vite
+**/*.log
+
+# 测试与压测大文件（这些不是构建输入）
+tests/**
+!tests/media
+!tests/media/**
+docs/**
+*.md
+
+# 编辑器与系统杂项
+.vs
+.vscode
+.idea
+**/*.user
+**/*.suo
+Thumbs.db
+desktop.ini
+
+# 本地运行期数据（绝不能进镜像）
+ProgramData-Server
+**/ProgramData-Server
+**/logs
+**/*.tmp
