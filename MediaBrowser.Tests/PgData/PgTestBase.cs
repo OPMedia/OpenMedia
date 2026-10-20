@@ -13,7 +13,7 @@ namespace MediaBrowser.Tests.PgData
     /// <summary>
     /// PostgreSQL 集成测试基类。
     ///
-    /// 连接目标：环境变量 OPENMEDIA_TEST_PGCONN，缺省为 docker-compose 暴露的 15432。
+    /// 连接目标：环境变量 OPENMEDIA_TEST_PGCONN，缺省为本机 PostgreSQL 的默认端口 5432。
     /// 若数据库不可达，所有用例 Assert.Inconclusive（而不是静默通过）。
     ///
     /// 每个用例在独立 schema（pgdata_test_xxx）中运行，结束即 DROP SCHEMA CASCADE，
@@ -22,7 +22,7 @@ namespace MediaBrowser.Tests.PgData
     public abstract class PgTestBase
     {
         private const string DefaultConn =
-            "Host=localhost;Port=15432;Database=openmedia;Username=postgres;Password=123456";
+            "Host=localhost;Port=5432;Database=openmedia;Username=postgres;Password=123456";
 
         protected string Schema { get; private set; }
 

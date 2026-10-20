@@ -2098,8 +2098,8 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 获取媒体项列表（旧 GetItemList）。
-        /// P8：公共入口包查询门（全局单门 50 并发）；GetItems 的内部委托走
-        /// GetItemListCore（unwrapped——Reviewer 自死锁约束：双占槽位 = 全部持 1 等 2）。
+        /// P8：公共入口包查询门（全局单门，默认 50 并发）；GetItems 的内部委托走
+        /// GetItemListCoreAsync（unwrapped——Reviewer 自死锁约束：双占槽位 = 全部持 1 等 2）。
         /// </summary>
         public Task<List<BaseItem>> GetItemListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
@@ -2108,7 +2108,7 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException(nameof(query));
             }
 
-            return GetItemListCoreAsync(query, cancellationToken);
+            return WithQueryGateAsync(ct => GetItemListCoreAsync(query, ct), cancellationToken);
         }
 
         private async Task<List<BaseItem>> GetItemListCoreAsync(InternalItemsQuery query, CancellationToken cancellationToken)
@@ -2341,7 +2341,7 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 分页查询（旧 GetItems：列表 + 总数）。
-        /// P8：公共入口包查询门；内部委托 GetItemList 走 Core（不双占槽位）。
+        /// P8：公共入口包查询门；内部委托走 GetItemListCoreAsync（不双占槽位）。
         /// </summary>
         public Task<QueryResult<BaseItem>> GetItemsAsync(InternalItemsQuery query, CancellationToken cancellationToken = default)
         {
@@ -2350,7 +2350,7 @@ namespace Emby.Server.PgData
                 throw new ArgumentNullException(nameof(query));
             }
 
-            return GetItemsCoreAsync(query, cancellationToken);
+            return WithQueryGateAsync(ct => GetItemsCoreAsync(query, ct), cancellationToken);
         }
 
         private async Task<QueryResult<BaseItem>> GetItemsCoreAsync(InternalItemsQuery query, CancellationToken cancellationToken)

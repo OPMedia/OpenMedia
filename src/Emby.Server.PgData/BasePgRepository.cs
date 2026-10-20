@@ -1,9 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Net;
 using Npgsql;
 
 namespace Emby.Server.PgData
@@ -15,15 +18,146 @@ namespace Emby.Server.PgData
     /// 设计约束（工业级）：
     /// - 唯一数据访问入口为 async（CreateConnectionAsync / RunInTransactionAsync / ExecuteNonQueryAsync ...），
     ///   仓储实现内不再提供同步模板，从类型系统上杜绝“异步外壳里同步阻塞线程池”。
-    /// - 并发控制完全交还 Npgsql 连接池 + PG 内核，不设应用层人为信号量。
+    /// - 并发控制在「应用层查询门（P8 全局单门）」与「Npgsql 连接池」之间分层：
+    ///   池保护单条连接的获取/释放，门保护长查询对 PG 与池的总并发压力。
     /// </summary>
     public abstract class BasePgRepository : IDisposable
     {
+        // ===========================================================
+        // P8 雪崩防护：应用层查询门（docs/p8-analysis.md ③ 方案 A + B）
+        // ===========================================================
+
+        /// <summary>
+        /// 查询门容量（默认 50）。可被环境变量 OPENMEDIA_QUERY_GATE_CAPACITY 覆盖。
+        /// 依据 docs/p8-analysis.md ①：Npgsql MaxPoolSize 默认 100，门取 50
+        /// 给写入/认证等非受门路径留出同等余量。
+        /// </summary>
+        private static readonly int QueryGateCapacity = ReadIntSetting(
+            "OPENMEDIA_QUERY_GATE_CAPACITY", 50, 1, 1000);
+
+        /// <summary>
+        /// P8 并发防护的查询门本体（docs/p8-analysis.md ③方案 A，Chief 拍板 + Reviewer/Architect 护栏）：
+        /// 全局单门信号量——所有仓储共用同一个池（同连接串 = 同一 NpgsqlDataSource），
+        /// 门也必须是全局一个（护栏①：不能按仓储 ×N，否则 N×50 > 池 100 自己打穿）。
+        ///
+        /// 历史（ADR-0016）：59e842af07（10-16）以阻塞形态 WithQueryGate 落地；
+        /// 86735fd5ef（10-18）重写本类为“真异步”时把整个门连同同步模板一起删掉，
+        /// 属连带误删——该 commit 的意图是消除同步阻塞（VSTHRD002 门禁对象），
+        /// 而非撤下 P8 定案的防护语义；docs/p8-analysis.md 与 docs/scale-design.md §2 #8
+        /// 仍写着“✅ 定案（P8）”，与删除后的代码长期矛盾。此处用 WaitAsync 恢复。
+        ///
+        /// 只守 DB 执行点（护栏②），不包请求管道；嵌套连接检查（护栏③）靠 unwrapped
+        /// core 模式（公共入口包门、内部委托走 *CoreAsync）保证持槽位内不开第二条连接；
+        /// 护栏④（503 语义）靠 PoolExhaustedException 经 ServiceRoutingMiddleware 映射 503。
+        ///
+        /// 注意：必须在 QueryGateCapacity 之后声明——C# 静态字段按声明顺序初始化，
+        /// 颠倒会得到容量 0 的永闭门。
+        /// </summary>
+        private static readonly SemaphoreSlim QueryGate = CreateQueryGate();
+
+        /// <summary>
+        /// 查询门等待上限（默认 3000ms）。可被 OPENMEDIA_QUERY_GATE_TIMEOUT_MS 覆盖。
+        /// 依据 docs/p8-analysis.md ③方案 B：池等待 15s 收窄到 3s，快速失败不雪崩。
+        /// 最坏路径有界：门等 3s + 池等 3s = 6s 上限（Reviewer 记录在案②）。
+        /// </summary>
+        private static readonly int QueryGateTimeoutMs = ReadIntSetting(
+            "OPENMEDIA_QUERY_GATE_TIMEOUT_MS", 3000, 0, 60000);
+
+        /// <summary>
+        /// 查询门饱和计数（可被测试/运维读取的静态计数器，Task D 轻量观测点）。
+        /// </summary>
+        private static long _queryGateRejected;
+
+        /// <summary>
+        /// 查询门拒绝次数（门等待超时抛 <see cref="PoolExhaustedException"/> 的次数）。
+        /// Npgsql 自身还有 MetricsReporter 可采，这里只补 P8 门这一层的计数。
+        /// </summary>
+        internal static long QueryGateRejectedCount => Interlocked.Read(ref _queryGateRejected);
+
+        /// <summary>
+        /// 查询门当前已占用槽位数（测试与运维可直接读取，无需反射 Npgsql 内部池计数）。
+        /// </summary>
+        internal static int QueryGateInUse => QueryGateCapacity - QueryGate.CurrentCount;
+
+        internal static int QueryGateCapacityValue => QueryGateCapacity;
+
+        internal static int QueryGateTimeoutValue => QueryGateTimeoutMs;
+
+        private static SemaphoreSlim CreateQueryGate()
+        {
+            return new SemaphoreSlim(QueryGateCapacity, QueryGateCapacity);
+        }
+
+        private static int ReadIntSetting(string name, int fallback, int min, int max)
+        {
+            var raw = Environment.GetEnvironmentVariable(name);
+            int value;
+            if (!string.IsNullOrWhiteSpace(raw)
+                && int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
+                && value >= min
+                && value <= max)
+            {
+                return value;
+            }
+
+            return fallback;
+        }
+
+        /// <summary>
+        /// 查询门：异步等待槽位（超时抛 <see cref="PoolExhaustedException"/> → 中间件 503），
+        /// 执行查询，释放。
+        /// 覆盖：GetItems/GetItemList/GetItemValues（Reviewer 备注②：不留第二个 U2 形态）。
+        /// 不覆盖：单条 RetrieveItem/GetCount/GetItemIds/认证/写入（门 50 < 池 100 留余量）。
+        ///
+        /// 真异步约束：只允许 <see cref="SemaphoreSlim.WaitAsync(int, CancellationToken)"/>，
+        /// 禁止 <see cref="SemaphoreSlim.Wait(int)"/> / .Result（本工程 VSTHRD002/100/103/110 为 error）。
+        ///
+        /// 嵌套连接检查（护栏③）：调用方必须是公共入口，内部委托一律走 *CoreAsync，
+        /// 否则同一线程第二次 WaitAsync 等自己释放即自死锁。
+        /// </summary>
+        protected static async Task<T> WithQueryGateAsync<T>(
+            Func<CancellationToken, Task<T>> action,
+            CancellationToken cancellationToken)
+        {
+            if (!await QueryGate.WaitAsync(QueryGateTimeoutMs, cancellationToken).ConfigureAwait(false))
+            {
+                Interlocked.Increment(ref _queryGateRejected);
+                throw new PoolExhaustedException(QueryGateCapacity);
+            }
+
+            try
+            {
+                return await action(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                QueryGate.Release();
+            }
+        }
+
         /// <summary>
         /// 默认连接串（可被 OPENMEDIA_PGCONN 环境变量覆盖——ApplicationHost.GetPostgresConnectionString）。
+        /// 端口 5432 对应本机 PostgreSQL 的默认端口（见 docs/setup-local-env.md）；
+        /// 走 docker-compose 或非标准端口时，用 OPENMEDIA_PGCONN 覆盖。
         /// </summary>
+        /// <remarks>
+        /// 以下连接池三个参数原为写死值且无依据注释。Task D 的可配置化：
+        /// 环境变量优先、默认值不变，依据全部落在 docs/p8-analysis.md §① 实测表
+        /// （Npgsql 10.0.3 零覆盖默认值：MaxPoolSize=100 / Timeout=15s / CommandTimeout=30s）。
+        /// P8 只改 Timeout（15s→3s），另两个保持默认——②测算过扩池必须同步扩
+        /// PG max_connections，属部署窗口操作，不在代码里单方面改。
+        /// </remarks>
+        private static readonly int MaxPoolSizeSetting = ReadIntSetting(
+            "OPENMEDIA_PG_MAX_POOL_SIZE", 100, 1, 10000);
+
+        private static readonly int PoolTimeoutSecondsSetting = ReadIntSetting(
+            "OPENMEDIA_PG_POOL_TIMEOUT_SEC", 3, 1, 300);
+
+        private static readonly int CommandTimeoutSecondsSetting = ReadIntSetting(
+            "OPENMEDIA_PG_COMMAND_TIMEOUT_SEC", 30, 1, 3600);
+
         public const string DefaultConnectionString =
-            "Host=localhost;Port=15432;Database=openmedia;Username=postgres;Password=123456";
+            "Host=localhost;Port=5432;Database=openmedia;Username=postgres;Password=123456";
 
         /// <summary>
         /// 按连接串共享的 DataSource 缓存（NpgsqlDataSource 自带连接池，进程内只需一份）。
@@ -65,14 +199,76 @@ namespace Emby.Server.PgData
                 var builder = new NpgsqlConnectionStringBuilder(cs)
                 {
                     Pooling = true,
-                    // 连接池等待上限：由 Npgsql 内部排队，超时才失败（不设应用层信号量）
-                    Timeout = 15,
-                    MaxPoolSize = 100,
+                    // P8 ③方案 B：池等待 3s 快速失败（默认值与依据见上方常数注释）
+                    Timeout = PoolTimeoutSecondsSetting,
+                    MaxPoolSize = MaxPoolSizeSetting,
                     // 长事务/慢查询保护：单条命令 30s 上限，防止连接被无限期占用
-                    CommandTimeout = 30
+                    CommandTimeout = CommandTimeoutSecondsSetting
                 };
                 return NpgsqlDataSource.Create(builder.ConnectionString);
             });
+        }
+
+        /// <summary>
+        /// 连接池占用快照（Task D 轻量观测点；不引新依赖、不用 OpenTelemetry）。
+       /// 形态：(active, idle, total)：
+        /// 形态：(active, idle, total)：
+        /// - active：本进程借出且尚未归还池的连接数（应用层计数，Disposed 事件回收）；
+        /// - idle：池中空闲连接数。Npgsql 10 的 PoolingDataSource 不再公开空闲计数，
+        ///   这里以 total - active 下界估计（仅供参考）；精确侧写走 PG 的 pg_stat_activity
+        ///   或 Npgsql 自带的 NpgsqlDataSource.MetricsReporter（未启用 OpenTelemetry 时不开采）。
+        /// - total：本进程经本基类借出的连接峰值（重启归零）。
+        /// 之所以保留这个形状：docs/spec/acceptance.md §4 的 /metrics 契约要的就是
+        /// active/idle/total 三元组；这里只做 DB 侧观测点，接口形状不变即可平移到 Prometheus。
+        /// </summary>
+        internal static (int Active, int Idle, int Total) PoolSnapshot()
+        {
+            var active = Interlocked.Read(ref _activeConnections);
+            var lifetime = Interlocked.Read(ref _lifetimeConnections);
+            return ((int)active, (int)Math.Max(0, lifetime - active), (int)lifetime);
+        }
+
+        /// <summary>
+        /// 连接池最大容量（与 DataSource 生效值一致，供指标标签使用）。
+        /// </summary>
+        internal static int PoolMaxSize => MaxPoolSizeSetting;
+
+        internal static int PoolTimeoutSeconds => PoolTimeoutSecondsSetting;
+
+        internal static int PoolCommandTimeoutSeconds => CommandTimeoutSecondsSetting;
+
+        /// <summary>
+        /// 累计借出连接数（池占用峰值的上界估计，配合 active 可看 idle）。
+        /// </summary>
+        private static long _lifetimeConnections;
+
+        /// <summary>
+        /// 当前借出未归还的连接数（Disposed 事件里归还）。
+        /// </summary>
+        private static long _activeConnections;
+
+        /// <summary>
+        /// 登记一条借出的连接：active +1，并挂 Disposed 回调做归还记账。
+        /// U2 雪崩定位靠人肉 dotnet-counters（docs/p8-analysis.md）；这里把同口径的数字
+        /// 变成可被测试/运维代码读取的计数器，使"池被打穿"不再只能事后从 PG 侧反推。
+        /// </summary>
+        private static void TrackPoolConnection(NpgsqlConnection connection)
+        {
+            Interlocked.Increment(ref _lifetimeConnections);
+            Interlocked.Increment(ref _activeConnections);
+
+            // NpgsqlConnection 是 sealed，无法包饰器；且 Npgsql 明确不支持 Disposed 事件
+            // （抛 NotSupportedException，请用 StateChange）。连接归还池时状态必然落到
+            // Closed，故用 StateChange 回收计数——await using 与异常路径都走这条路。
+            connection.StateChange += OnConnectionStateChange;
+        }
+
+        private static void OnConnectionStateChange(object sender, StateChangeEventArgs e)
+        {
+            if (e.CurrentState == ConnectionState.Closed)
+            {
+                Interlocked.Decrement(ref _activeConnections);
+            }
         }
 
         /// <summary>
@@ -84,6 +280,7 @@ namespace Emby.Server.PgData
             try
             {
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                TrackPoolConnection(connection);
                 return connection;
             }
             catch

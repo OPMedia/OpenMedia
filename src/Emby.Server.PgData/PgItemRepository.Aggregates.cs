@@ -194,14 +194,16 @@ namespace Emby.Server.PgData
         /// 旧 "group by PresentationUniqueKey" → DISTINCT ON + 外层重排序。
         /// P8：纳入查询门（Reviewer 备注②——1M 规模的重查询入口，不留第二个 U2 形态）。
         /// </summary>
-        private Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetItemValuesAsync(InternalItemsQuery query, int[] itemValueTypes, string returnType, CancellationToken cancellationToken)
+        public Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetItemValuesAsync(InternalItemsQuery query, int[] itemValueTypes, string returnType, CancellationToken cancellationToken)
         {
             if (query == null)
             {
                 throw new ArgumentNullException(nameof(query));
             }
 
-            return GetItemValuesCoreAsync(query, itemValueTypes, returnType, cancellationToken);
+            return WithQueryGateAsync(
+                ct => GetItemValuesCoreAsync(query, itemValueTypes, returnType, ct),
+                cancellationToken);
         }
 
         private async Task<QueryResult<Tuple<BaseItem, ItemCounts>>> GetItemValuesCoreAsync(InternalItemsQuery query, int[] itemValueTypes, string returnType, CancellationToken cancellationToken)
