@@ -88,13 +88,15 @@ WORKDIR /opt/openmedia
 # 3a. .NET 应用本体
 COPY --from=dotnet-build /publish/ /opt/openmedia/server/
 
-# 3b. 官方静态 ffmpeg + ffprobe。
-#     路径选 /opt/openmedia/server/ffmpeg/{version}/ —— 这是 FFMpegLoader 的
-#     第三优先级查找路径（ProgramDataPath/ffmpeg/{version}），容器里
-#     ProgramDataPath 由 -programdata 指向 /opt/openmedia/data，所以
-#     实际查找的是 /opt/openmedia/data/ffmpeg/{version}/ffmpeg。
-#     为了不依赖启动参数，这里**同时**放进 ProgramSystemPath（第一优先级：
-#     与 MediaBrowser.Server.dll 同级），容器起来零配置就能用。
+# 3b. 静态 ffmpeg + ffprobe。
+#     查找优先级（Emby.Server.Implementations/FFMpeg/FFMpegLoader.cs:49）：
+#       1. ProgramSystemPath/ffmpeg   <- 用这个（与 MediaBrowser.Server.dll 同级，零配置）
+#       2. -ffmpeg / -ffprobe 启动参数
+#       3. ProgramDataPath/ffmpeg/{version}/
+#     Linux 分支下 FFMpegFilename = ffmpeg（无 .exe），所以这里不能加后缀。
+#     代码里 Version 硬编码 20170308，那是下载用的版本号而非路径要求；
+#     打在 ProgramSystemPath 正好绕开它，否则它会去
+#     ProgramDataPath/ffmpeg/20170308/ 找一个 2017 年的旧版。
 ARG FFMPEG_VERSION=7.1.1
 COPY --from=ffmpeg-fetch /out/ffmpeg  /opt/openmedia/server/ffmpeg
 COPY --from=ffmpeg-fetch /out/ffprobe /opt/openmedia/server/ffprobe
