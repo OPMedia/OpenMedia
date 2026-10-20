@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
@@ -263,21 +264,125 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
-        /// 类型字典 upsert（activity_log_types.name 唯一索引支持 ON CONFLICT）。
+        /// 类型字典 name → type_id 的进程内缓存（按 search_path 分桶）。
+        ///
+        /// 背景（2026-10-20 全量回归取证，pg_stat_statements Top-1）：
+        ///   INSERT INTO activity_log_types (name) VALUES ($1)
+        ///     ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING type_id
+        ///   —— 36567 次调用 / mean 77.19ms / max 8715.3ms / 累计 2822.7s；
+        ///   而同批 INSERT INTO activity_log 本身 mean 仅 0.27ms。
+        ///   时间全耗在这条 UPSERT 上：DO UPDATE 会对冲突行取排他更新锁，
+        ///   多个事务写同一个 type 名（UserActivity 等）时互相排队，锁等待计入语句耗时。
+        ///
+        /// 修法：活动类型是低基数枚举且 type_id 稳定不变，用进程内缓存消掉绝大多数 UPSERT；
+        /// 未命中时走「无锁 SELECT → 必要时 INSERT ... ON CONFLICT DO NOTHING → 冲突回查」，
+        /// DO NOTHING 不会升级为排他更新锁。
+        ///
+        /// 按 search_path 分桶的原因：集成测试每个用例用独立 schema（pgtest_xxx），
+        /// 各 schema 的 activity_log_types 序列独立、同一 type 名会得到不同 type_id，
+        /// 不分桶会串味（拿到外键不存在的 id）。
+        ///
+        /// 失效条件：仅当有人手工改动 activity_log_types 的 name→id 映射
+        /// （正常流程不会发生——id 由 identity 分配、name 唯一且不可变）。
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, int> _activityLogTypeCache =
+            new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+
+        /// <summary>缓存条目上限：type 名来自内部枚举（低基数），超限说明异常输入，改为不缓存。</summary>
+        private const int ActivityLogTypeCacheLimit = 256;
+
+        /// <summary>
+        /// 取活动类型 type_id（字典表 activity_log_types）。
+        ///
+        /// 缓存命中 → 零 SQL；未命中 → 无锁 SELECT，必要时 INSERT ... ON CONFLICT DO NOTHING
+        /// （不用 DO UPDATE：避免排他更新锁把并发写入串行化，见 _activityLogTypeCache 注释）。
         /// </summary>
         private static async Task<int> GetOrInsertActivityLogTypeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string name, CancellationToken cancellationToken)
         {
-            var result = await ExecuteScalarAsync(
+            var key = name ?? string.Empty;
+            var cacheKey = BuildActivityLogTypeCacheKey(connection, key);
+
+            // 快路径：缓存命中，零 SQL
+            if (_activityLogTypeCache.TryGetValue(cacheKey, out var cachedId))
+            {
+                return cachedId;
+            }
+
+            // 慢路径 1：无锁读，字典行已存在（冷启动后即命中）
+            var existing = await ExecuteScalarAsync(
+                connection,
+                transaction,
+                "SELECT type_id FROM activity_log_types WHERE name = @name LIMIT 1",
+                cancellationToken,
+                new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = key }).ConfigureAwait(false);
+
+            if (existing != null && existing != DBNull.Value)
+            {
+                return CacheActivityLogType(cacheKey, Convert.ToInt32(existing));
+            }
+
+            // 慢路径 2：行不存在 → 插入。DO NOTHING 而非 DO UPDATE：
+            // 并发下只等冲突事务结束，不做排他行更新（语义等价：name 唯一，行一定存在）。
+            var inserted = await ExecuteScalarAsync(
                 connection,
                 transaction,
                 @"INSERT INTO activity_log_types (name)
                   VALUES (@name)
-                  ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                  ON CONFLICT (name) DO NOTHING
                   RETURNING type_id",
                 cancellationToken,
-                new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = name ?? string.Empty }).ConfigureAwait(false);
+                new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = key }).ConfigureAwait(false);
 
-            return Convert.ToInt32(result);
+            if (inserted != null && inserted != DBNull.Value)
+            {
+                return CacheActivityLogType(cacheKey, Convert.ToInt32(inserted));
+            }
+
+            // 慢路径 3：并发下别人先插了（DO NOTHING 不返回行）→ 回查胜者的 id
+            var afterConflict = await ExecuteScalarAsync(
+                connection,
+                transaction,
+                "SELECT type_id FROM activity_log_types WHERE name = @name LIMIT 1",
+                cancellationToken,
+                new NpgsqlParameter("name", NpgsqlDbType.Text) { Value = key }).ConfigureAwait(false);
+
+            if (afterConflict == null || afterConflict == DBNull.Value)
+            {
+                throw new InvalidOperationException($"activity_log_types 缺少 type: {key}");
+            }
+
+            return CacheActivityLogType(cacheKey, Convert.ToInt32(afterConflict));
+        }
+
+        /// <summary>
+        /// 缓存键：search_path + type 名。集成测试的独立 schema 各自有独立序列，
+        /// 必须按 schema 分桶，否则会拿到另一个 schema 的 type_id（外键不存在的脏值）。
+        /// </summary>
+        private static string BuildActivityLogTypeCacheKey(NpgsqlConnection connection, string name)
+        {
+            var searchPath = string.Empty;
+
+            try
+            {
+                searchPath = new NpgsqlConnectionStringBuilder(connection.ConnectionString).SearchPath ?? string.Empty;
+            }
+            catch (NpgsqlException)
+            {
+                // 连接串解析失败（不应发生）：退化为空桶，生产默认 public
+            }
+
+            return searchPath + "|" + name;
+        }
+
+        /// <summary>写入缓存；超过上限则不缓存（异常输入防膨胀），直接返回 type_id。</summary>
+        private static int CacheActivityLogType(string cacheKey, int typeId)
+        {
+            if (_activityLogTypeCache.Count < ActivityLogTypeCacheLimit)
+            {
+                _activityLogTypeCache[cacheKey] = typeId;
+            }
+
+            return typeId;
         }
 
         /// <summary>
