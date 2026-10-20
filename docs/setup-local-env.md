@@ -123,12 +123,16 @@ powershell -File tests\setup-media.ps1 -Ffmpeg $ff
   本机已统一到 5432；`docker-compose.yml` 相应只保留 `5432:5432`。
 - `tests/perf/` 下脚本的默认 `-PgPort` 已于 2026-10-20 统一为 `5432`；
   仍留历史值 `15432` 的只剩 `tests/cleanup-byname-duplicates.ps1`，跑它时显式加 `-PgPort 5432`。
-- PG 默认 `max_connections=100`，而应用连接池上限默认也是 100
-  （`OPENMEDIA_PG_MAX_POOL_SIZE`）——**两者相等，零余量**。并发认证等负载下服务端会报
-  `53300 sorry, too many clients`（表现为零星 500）。应用启动时会打一条
-  `Error PostgreSQL 连接预算不足：应用连接池上限 100 ≥ 服务端 max_connections 100`。
-  两种处置：把 `postgresql.conf` 的 `max_connections` 提到 250（需重启服务），
-  或把 `OPENMEDIA_PG_MAX_POOL_SIZE` 调小（如 50）留出余量。
-  若要复现 `docs/p8-analysis.md` 的连接池 200 压测，同样需要 `max_connections=250`。
+- ✅ **PG `max_connections` 已从 100 提到 250**（2026-10-20，方案 A）。
+  改的是 `C:\Program Files\PostgreSQL\18\data\postgresql.conf` 第 65 行，
+  改完需**重启服务**才生效（PG 非管理员权限无法重启，需 UAC 提权）：
+  ```powershell
+  Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-Command','Restart-Service postgresql-x64-18 -Force'
+  ```
+  备份在同目录 `postgresql.conf.bak-20261020`。
+  效果：应用池上限 100 与服务端 250 之间有 150 个连接的余量，
+  并发认证负载不再出现 `53300 too many clients`（实测 L4 档位 rps +49%、p95 -32%），
+  应用启动时的「连接预算不足」告警也不再出现。
+  若以后要恢复：`max_connections = 100` + 再次重启。
 - `pg_stat_statements` **已启用**（`shared_preload_libraries = pg_stat_statements`、
   `track=all`），可直接跑 `tests/perf/pg-stat-statements-top20.ps1`。

@@ -390,6 +390,12 @@ powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
 默认值**——连接池容量是容量承诺的一部分（`docs/p8-analysis.md` ①），改默认等于替所有部署
 改容量口径。处置见 ADR 0018 的 D3。
 
+> **处置结果（2026-10-20，方案 A）**：本机 PG `max_connections` 已 100 → **250**
+> （改 `postgresql.conf` + UAC 提权重启服务，与 `docker-compose.yml` 的 250 对齐）。
+> 并发认证档位（L4，20 并发）实测：rps **167.6 → 250.5**（+49%）、
+> p95 **262.7ms → 178.1ms**（-32%）、错误率保持 0%；
+> 启动时的「连接预算不足」告警随之消失。告警机制保留给其它部署。
+
 > §8.5 的 explain/负载数字取自 195k 库，但 `explain-matrix.out` 历史文件是 **10k 口径**
 > （见 §2 与 §8.1），两者不可直接比较——规模差 19.5× 且相关子查询是超线性的。
 > 本轮 195k 的 50 分支实测：中位 27.4ms / 均值 80.7ms / 最慢 BRANCH-25（Genres 相关子查询）415ms。

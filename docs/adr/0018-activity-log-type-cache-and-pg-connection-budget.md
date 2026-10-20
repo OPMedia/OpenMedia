@@ -84,6 +84,13 @@ A schema 先插一个 `OtherType` 把 `UserActivity` 的 id 顶到 2，B schema 
 改容量口径。该决策属部署侧（上调 PG `max_connections` 或下调
 `OPENMEDIA_PG_MAX_POOL_SIZE`），代码侧只负责把问题喊出来。
 
+> **处置结果（2026-10-20，方案 A）**：本机 PG `max_connections` 已从 100 提到 **250**
+> （改 `C:\Program Files\PostgreSQL\18\data\postgresql.conf`，改后需 UAC 提权重启服务），
+> 与 `docker-compose.yml` 的 `max_connections=250` 对齐。实测效果：并发认证档位
+> （L4，20 并发）rps **167.6 → 250.5**、p95 **262.7ms → 178.1ms**、错误率保持 0%；
+> 应用启动的「连接预算不足」告警随之消失。
+> 告警机制保留——其它部署若沿用 `max_connections=100`，仍会被立即点名。
+
 ### D4：`/Items` 的 Guid Empty → null 字段不改
 
 `contract-check.ps1` 长期报 `/Items` 返回含 `ChannelId/ParentId/SeriesId/...` 的 null 字段。

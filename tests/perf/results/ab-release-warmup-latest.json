@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-20 14:00:33",
+  "runAt": "2026-10-20 14:16:34",
   "tag": "release-warmup",
   "user": "perf-user-001",
   "tool": "load-ab.py (A/B 同口径短版)",
@@ -9,10 +9,10 @@
       "label": "L1-Items分页-10rps",
       "requests": 470,
       "durationS": 5.0,
-      "rps": 93.2,
-      "p50Ms": 18.3,
-      "p95Ms": 25.5,
-      "p99Ms": 368.9,
+      "rps": 93.4,
+      "p50Ms": 20.2,
+      "p95Ms": 26.0,
+      "p99Ms": 383.6,
       "errorRate": 0.0,
       "codes": {
         "200": 470
@@ -20,28 +20,28 @@
     },
     {
       "label": "L1-Items分页-50rps",
-      "requests": 2516,
+      "requests": 2434,
       "durationS": 5.0,
-      "rps": 499.2,
-      "p50Ms": 55.5,
-      "p95Ms": 110.0,
-      "p99Ms": 180.4,
+      "rps": 482.5,
+      "p50Ms": 58.6,
+      "p95Ms": 116.4,
+      "p99Ms": 196.3,
       "errorRate": 0.0,
       "codes": {
-        "200": 2516
+        "200": 2434
       }
     },
     {
       "label": "L1b-Items递归-50rps",
-      "requests": 3341,
+      "requests": 3356,
       "durationS": 5.0,
-      "rps": 663.6,
-      "p50Ms": 44.7,
-      "p95Ms": 80.4,
-      "p99Ms": 102.1,
+      "rps": 667.4,
+      "p50Ms": 44.8,
+      "p95Ms": 78.7,
+      "p99Ms": 95.5,
       "errorRate": 0.0,
       "codes": {
-        "200": 3341
+        "200": 3356
       }
     },
     {
@@ -55,19 +55,19 @@
       "errorRate": 100.0,
       "codes": {},
       "skipped": true,
-      "reason": "库为合成数据，媒体文件不存在（D:\\perf-tree\\perf-lib-023\\Movie-008881.mkv）——静态流档位不适用"
+      "reason": "库为合成数据，媒体文件不存在（D:\\perf-tree\\perf-lib-001\\Movie-000001.mkv）——静态流档位不适用"
     },
     {
       "label": "L4-认证-并发20",
-      "requests": 3159,
+      "requests": 3130,
       "durationS": 5.0,
-      "rps": 630.6,
-      "p50Ms": 28.7,
-      "p95Ms": 61.0,
-      "p99Ms": 79.8,
+      "rps": 623.0,
+      "p50Ms": 28.9,
+      "p95Ms": 60.6,
+      "p99Ms": 76.9,
       "errorRate": 0.0,
       "codes": {
-        "200": 3159
+        "200": 3130
       }
     }
   ]
