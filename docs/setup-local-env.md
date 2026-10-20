@@ -123,7 +123,12 @@ powershell -File tests\setup-media.ps1 -Ffmpeg $ff
   本机已统一到 5432；`docker-compose.yml` 相应只保留 `5432:5432`。
 - `tests/perf/` 下脚本的默认 `-PgPort` 已于 2026-10-20 统一为 `5432`；
   仍留历史值 `15432` 的只剩 `tests/cleanup-byname-duplicates.ps1`，跑它时显式加 `-PgPort 5432`。
-- PG 默认 `max_connections=100`：本地开发够用；若要复现 `docs/p8-analysis.md` 的
-  连接池 200 压测，先改 `postgresql.conf` 的 `max_connections=250` 并重启服务。
+- PG 默认 `max_connections=100`，而应用连接池上限默认也是 100
+  （`OPENMEDIA_PG_MAX_POOL_SIZE`）——**两者相等，零余量**。并发认证等负载下服务端会报
+  `53300 sorry, too many clients`（表现为零星 500）。应用启动时会打一条
+  `Error PostgreSQL 连接预算不足：应用连接池上限 100 ≥ 服务端 max_connections 100`。
+  两种处置：把 `postgresql.conf` 的 `max_connections` 提到 250（需重启服务），
+  或把 `OPENMEDIA_PG_MAX_POOL_SIZE` 调小（如 50）留出余量。
+  若要复现 `docs/p8-analysis.md` 的连接池 200 压测，同样需要 `max_connections=250`。
 - `pg_stat_statements` **已启用**（`shared_preload_libraries = pg_stat_statements`、
   `track=all`），可直接跑 `tests/perf/pg-stat-statements-top20.ps1`。

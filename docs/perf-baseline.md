@@ -364,3 +364,32 @@ powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
   镜像里 web 只放备用路径 `/opt/openmedia/web` 并标注"待人接线"，根路径仍是旧 dashboard-ui。
   详见 ADR D5
 - 本机无 docker，所以镜像构建 job 本机不可跑；CI 其余 3 个 job 本机可等价复现（清单见 ci.yml 末尾）
+
+### 8.8 活动日志类型字典热点修复（ADR 0018，分支 `fix/activity-log-type-cache`）
+
+§8.5.1 的 #2（`INSERT INTO activity_log_types ... ON CONFLICT DO UPDATE`）在本轮全量回归里
+被独立复现并放大：60s 负载下 **36567 calls / mean 77.19ms / max 8715.3ms / 累计 2822.7s**，
+而同批 `INSERT INTO activity_log` 本身只有 mean 0.27ms —— 时间全花在取类型 id 这一步。
+
+根因：`DO UPDATE` 对冲突行取**排他更新锁**，所有事务写同一个类型名 → 串行排队。
+而类型是低基数枚举（全库仅 4 种），`type_id` 终身不变，本可缓存。
+
+修法与实测（ADR 0018 详述）：进程内缓存 name→type_id（按 `search_path` 分桶，避免
+集成测试的独立 schema 串味），未命中时走无锁 SELECT + `ON CONFLICT DO NOTHING`。
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| UPSERT 调用数 | 36567 | **0**（缓存全命中） |
+| 该语句累计耗时 | 2822.7s | **0.055s**（2 次冷启动 SELECT，mean 0.027ms） |
+| `INSERT INTO activity_log` mean | 0.27ms | 0.24ms（写入路径未变慢） |
+| `activity_log` 累计行数 | — | 90604（日志未丢） |
+| L4 认证 20 并发的 500 | 4 / 10077 | **0** |
+
+同时加了连接预算自检（`BasePgRepository`）：应用池上限 ≥ PG `max_connections` 时启动打
+`Error`（本机 100 vs 100 正是此情形，并发下会 `53300 too many clients`）。**只告警不改
+默认值**——连接池容量是容量承诺的一部分（`docs/p8-analysis.md` ①），改默认等于替所有部署
+改容量口径。处置见 ADR 0018 的 D3。
+
+> §8.5 的 explain/负载数字取自 195k 库，但 `explain-matrix.out` 历史文件是 **10k 口径**
+> （见 §2 与 §8.1），两者不可直接比较——规模差 19.5× 且相关子查询是超线性的。
+> 本轮 195k 的 50 分支实测：中位 27.4ms / 均值 80.7ms / 最慢 BRANCH-25（Genres 相关子查询）415ms。

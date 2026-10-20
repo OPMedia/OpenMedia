@@ -205,7 +205,64 @@ namespace Emby.Server.PgData
                     // 长事务/慢查询保护：单条命令 30s 上限，防止连接被无限期占用
                     CommandTimeout = CommandTimeoutSecondsSetting
                 };
-                return NpgsqlDataSource.Create(builder.ConnectionString);
+                var dataSource = NpgsqlDataSource.Create(builder.ConnectionString);
+                WarnIfPoolBudgetExceedsServerLimit(dataSource);
+                return dataSource;
+            });
+        }
+
+        /// <summary>
+        /// 连接预算自检：应用池上限（MaxPoolSize，默认 100）vs PG 服务端 max_connections。
+        ///
+        /// 背景（2026-10-20 全量回归取证）：本机 PG max_connections=100、应用池默认上限也是 100，
+        /// 两者相等时没有任何余量留给 psql / 其它客户端；并发认证负载下服务端直接报
+        ///   Npgsql.PostgresException 53300: sorry, too many clients already
+        /// 表现为零星 500（本轮 L4 档位 10077 请求里 4 个 500，日志里就是这条）。
+        ///
+        /// 这里只告警不改默认值——池容量是容量承诺的一部分（docs/p8-analysis.md ① 记录
+        /// MaxPoolSize=100 的依据），要不要下调/上调 PG max_connections 属于部署决策，
+        /// 由运维按实际并发定。改代码默认值会惄惄改掉所有部署的容量口径。
+        ///
+        /// 异步探测：失败只记 Debug，不影响启动。
+        /// </summary>
+        private void WarnIfPoolBudgetExceedsServerLimit(NpgsqlDataSource dataSource)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var conn = await dataSource.OpenConnectionAsync().ConfigureAwait(false);
+                    await using var cmd = new NpgsqlCommand("SELECT current_setting('max_connections')::int", conn);
+                    var maxConnections = Convert.ToInt32(await cmd.ExecuteScalarAsync().ConfigureAwait(false));
+
+                    // PG 还需给 superuser 保留连接（superuser_reserved_connections，默认 3）
+                    // 以及 psql / 监控 / 其它客户端留余量，这里按 10 个连接当安全垫。
+                    const int ReservedForOtherClients = 10;
+                    const int SuperuserReserved = 3;
+
+                    if (MaxPoolSizeSetting >= maxConnections)
+                    {
+                        Logger.Error(
+                            "PostgreSQL 连接预算不足：应用连接池上限 {0} ≥ 服务端 max_connections {1}，并发下必然出现 53300 (too many clients)。建议：下调 OPENMEDIA_PG_MAX_POOL_SIZE 或上调 PG max_connections（推荐 ≥ {2}）。",
+                            MaxPoolSizeSetting,
+                            maxConnections,
+                            MaxPoolSizeSetting + ReservedForOtherClients + SuperuserReserved);
+                    }
+                    else if (MaxPoolSizeSetting + ReservedForOtherClients + SuperuserReserved > maxConnections)
+                    {
+                        Logger.Warn(
+                            "PostgreSQL 连接预算偏紧：应用连接池上限 {0}，服务端 max_connections {1}（含保留 {2} + 其它客户端垫 {3}），余量不足。建议上调 PG max_connections 至 {4} 或下调 OPENMEDIA_PG_MAX_POOL_SIZE。",
+                            MaxPoolSizeSetting,
+                            maxConnections,
+                            SuperuserReserved,
+                            ReservedForOtherClients,
+                            MaxPoolSizeSetting + ReservedForOtherClients + SuperuserReserved);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Debug("PostgreSQL 连接预算自检失败（忽略）: {0}", ex.Message);
+                }
             });
         }
 
