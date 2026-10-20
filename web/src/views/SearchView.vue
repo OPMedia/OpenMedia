@@ -7,18 +7,20 @@
  * 于是"搜索页"退化成一个"推荐列表页" —— 标题「推荐」，内容是 /Items/Latest 的最新条目）：
  * - 本页顶部一个**可见**的搜索输入框，进页面自动聚焦；输入即搜（debounce 300ms），回车立即搜；
  * - 无查询词时只显示**搜索历史**（可点击重搜 / 单条删除 / 清空）；
- * - 有查询词时显示结果列表（listItem 行 markup 与 rowArt() 缩略图逻辑沿用上一版，那部分是对的）；
+ * - 有查询词时显示**海报卡网格**（用户 2026-10-20 第二轮："搜索出来的候选结果和结果都要用卡片式
+ *   不要用条式 很难看 标题过长就省略"）—— 复用 @/components/EmbyCard.vue，与库页/首页同一套卡片语言；
  * - 「推荐」列表与它的 getLatestItems 请求整条删除 —— 用户要的是"简简单单的一个搜索页"。
  *
  * 历史存储：localStorage['serata.searchHistory'] = string[]，最多 10 条、最近的在前、
  * 大小写不敏感去重（同一份数据在 App.vue 之外没有别的读写方）。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { getItems, cardArtUrl } from '@/api/endpoints'
+import { getItems } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
+import EmbyCard from '@/components/EmbyCard.vue'
 
 const HISTORY_KEY = 'serata.searchHistory'
 const HISTORY_MAX = 10
@@ -26,11 +28,8 @@ const HISTORY_MAX = 10
 const DEBOUNCE_MS = 300
 
 const auth = useAuthStore()
-const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
-
-const ICON_MORE = '\uE5D3'
 
 const inputEl = ref<HTMLInputElement | null>(null)
 /** 搜索词：来源 = 本页输入框 / 侧栏搜索框写入的 ?q= / 点击历史条目 */
@@ -179,34 +178,20 @@ onBeforeUnmount(() => {
   clearTimeout(debounceTimer)
 })
 
-// ---------- 结果行 ----------
-
-const itemTypeName = (item: BaseItemDto): string => {
-  switch (item.Type) {
-    case 'Movie': return t('search.typeMovie')
-    case 'Series': return t('search.typeSeries')
-    case 'Episode': return t('search.typeEpisode')
-    default: return item.Type
-  }
-}
-
-function go(item: BaseItemDto) {
-  router.push({ name: 'item', params: { id: item.Id } })
-}
-
-/**
- * 搜索结果行缩略图（2:3 竖版）。
- *
- * 原实现无条件拼 Primary（tag 传 undefined 也照拼），真机 Emby 4.9.5.0 对没有 Primary 的条目
- * `/Items/{id}/Images/Primary` 返回 **HTTP 500**（不是 404）。改走 `cardArtUrl`：
- * 没有 tag 返回 undefined → Vue 去掉 src 属性 → 不发请求、不出现碎图图标。
- */
-function rowArt(item: BaseItemDto): string | undefined {
-  return cardArtUrl(item, 'portrait', { maxWidth: 120, maxHeight: 180, quality: 90 }) || undefined
-}
+// 结果行时代的 itemTypeName() / go() / rowArt() / ICON_MORE 已随 listItem 行一起删除：
+// 卡片自己负责跳转（EmbyCard 的 .cardContent-button @click=open）、图源（cardArtUrl 内建）与副标题。
+// 这里不再持有任何"行"相关的渲染逻辑，避免死代码被 noUnusedLocals 抓出来。
 </script>
 
 <template>
+  <!--
+    本页 `<main>` 只挂 `viewScroller scrollFrameY`，这两个类在 vendor CSS 里 0 定义 ——
+    它们**能不能滚由 styles/serata/emby-bridge.css 的 `.scrollFrameY:not(.scrollY):not(.overflowYScroll)` 统一兜底**
+    （该规则同时修掉 ItemDetailView / AdminUsersView 两处同源缺陷，详见那里的注释）。
+    这里不再加 page-scoped 的 `scrollY`：有全局定义就不留局部 hack，否则同一缺陷会被抄到第四个页面。
+    实测（真实滚轮 deltaY=400 ×10 @1600）：main 是唯一滚动容器，scrollTop 0→776 = maxScroll，
+    最后一张结果卡完整进视口（见 scratch/lead5/scroll-audit-after.json）。
+  -->
   <main class="viewScroller scrollFrameY view flex flex-direction-row page page-withFullDrawer page-withDockedDrawer focuscontainer-x">
     <div class="scrollSlider flex-grow padded-top-page padded-left padded-left-page padded-right scrollSliderY focuscontainer-y navout-up">
       <div class="searchFields padded-bottom">
@@ -264,33 +249,21 @@ function rowArt(item: BaseItemDto): string | undefined {
             </ul>
           </div>
 
-          <!-- 有查询词：结果列表 -->
+          <!-- 有查询词：结果卡片网格（用户："候选结果和结果都要用卡片式 不要用条式"） -->
           <div v-else class="verticalSection searchSuggestions padded-top">
             <div>
               <h2 class="sectionTitle suggestionsTitle">{{ t('search.results') }}</h2>
             </div>
             <div v-if="searching" class="page-loading">{{ t('common.loading') }}</div>
             <div v-else-if="!results.length" class="secondaryText padded-left padded-right">{{ t('search.noResults') }}</div>
-            <div class="itemsContainer suggestionsItemsContainer vertical-list">
-              <div
-                v-for="item in results" :key="item.Id"
-                class="listItem listItem-autoactive itemAction listItemCursor listItem-hoverable"
-                data-action="link"
-                @click="go(item)"
-              >
-                <div class="listItem-content listItem-content-margin listItem-content-bg listItemContent-touchzoom listItem-border listItem-border-offset listItem-border-offset-portrait listItem-border-offset-smaller listItem-border-offset-portrait-smaller">
-                  <div class="listItemImageContainer listItemImageContainer-smaller itemAction listItemImageContainer-portrait">
-                    <img draggable="false" class="listItemImage listItemImage-smaller listItemImage-portrait coveredImage coveredImage-noScale" :src="rowArt(item)" loading="lazy" decoding="async" />
-                  </div>
-                  <div class="listItemBody itemAction listItemBody-reduceypadding listItemBody-3-lines">
-                    <div class="listItemBodyText listItemBodyText-lf">{{ item.Name }}</div>
-                    <div class="listItemBodyText listItemBodyText-lf listItemBodyText-secondary secondaryText">{{ itemTypeName(item) }}</div>
-                  </div>
-                  <button type="button" :title="t('ui.more')" class="listItemButton listItemContextMenuButton itemAction md-icon paper-icon-button-light emby-button-focusscale" data-action="menu" @click.stop>
-                    <i class="md-icon">{{ ICON_MORE }}</i>
-                  </button>
-                </div>
-              </div>
+            <!--
+              网格容器 = 库页同款 `itemsContainer vertical-wrap padded-bottom-page`（LibraryView 网格分支），
+              卡片尺寸由 vendor 的 .portraitCard（100% / max(--portrait-cards, 3)）给出：
+              1600 视口下容器 1265px、--portrait-cards=8 → 单卡 ≈158px（库页实测 156.3px，同一套语言）。
+              searchResultsGrid 只是本页的 scoped 钩子（撑满宽度），不写任何卡片内部样式。
+            -->
+            <div class="itemsContainer vertical-wrap padded-bottom-page searchResultsGrid">
+              <EmbyCard v-for="item in results" :key="item.Id" :item="item" shape="portrait" />
             </div>
           </div>
         </div>
@@ -467,9 +440,12 @@ function rowArt(item: BaseItemDto): string | undefined {
   stroke-linejoin: round;
 }
 
-/* 行尺寸（真实站实测：listItem 105.3 / content 96.6 br 8.65 margin 4.33 0 / 图 64.4×96.6 br 6.06） */
-.suggestionsItemsContainer .listItem-content { border-radius: 8.6544px; margin: 4.3272px 0; }
-.suggestionsItemsContainer .listItemImageContainer,
-.suggestionsItemsContainer .listItemImage { border-radius: 6.05808px; }
-.suggestionsItemsContainer .listItemBody { padding: 3.46176px 10.818px 3.46176px 14.424px; }
+/* ---------- 搜索结果网格 ----------
+   不写任何卡片内部样式（片名单行/省略号、海报圆角、悬停位移全归 EmbyCard）；
+   这里只负责"让网格铺满可用宽度"，卡片宽高由 vendor 的 .portraitCard 按 --portrait-cards 计算。
+   width:100% 是必须的：父级 .searchFieldsInner 是 align-items:center 的纵向 flex，
+   不写就会收缩成 fit-content，卡片宽度算出来是一堆碎值。 */
+.searchResultsGrid {
+  width: 100%;
+}
 </style>

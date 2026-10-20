@@ -112,3 +112,57 @@ html.theme-light .skinHeader-withBackground {
   max-width: 100%;
   overflow: hidden;
 }
+
+/* ============================================================================
+   页面级纵向滚动容器：补 `.scrollFrameY` / `.viewScroller` 的缺失定义
+   ============================================================================
+
+   背景（不是玄学，是四次 grep + 真实滚轮实测的结论）：
+
+   1. `scrollFrameY` 与 `viewScroller` 这两个类在**本项目 CSS 里 0 定义** ——
+      styles/serata/*.css、src/assets/*.css、src/assets/emby495/*.css 全都命中 0。
+      它们是抄 Emby 老 markup 时带过来的"看起来应该能滚"的装饰名。
+   2. 真正让老页面能滚的是 vendor 的**真类**（modules__scroller__scroller.css）：
+        .scrollY { overflow-y: auto; overflow-x: hidden }
+        .overflowYScroll { overflow-y: scroll }
+   3. 所以规律是：**同一元素上另外挂了 scrollY / overflowYScroll 的页面能滚，只挂 scrollFrameY 的一律滚动不了**
+      （计算值 overflow-y: visible，既不是滚动容器，滚轮也完全没反应）。
+   4. 逐个核对 src/views/** 与 App.vue 里带 scrollFrameY 的 19 处，**缺真类的恰好 3 处，且都是 <main>**：
+        · views/ItemDetailView.vue         <main class="itemView … scrollFrameY …">     → 实测内容 1603px / 视口 900px，
+                                                                                          滚轮 ×10 零位移，「演职人员」整排被切
+        · views/admin/AdminUsersView.vue   <main class="view viewScroller scrollFrameY …"> → 潜伏（当前内容不溢出，一旦用户变多就截断）
+        · views/SearchView.vue             <main class="viewScroller scrollFrameY …">     → 40 条结果 1600 只能看到 8 条
+      其余 16 处（首页 s-home / 库页内层 div / 设置 5 页 / 计划任务 / 人物 / 登录 / 5 个后台 tab / 5 个 actionSheet）
+      都另外带了 scrollY 或 overflowYScroll → 本来就没问题，本规则**不会碰到它们**。
+
+   为什么要 `:not(.scrollY):not(.overflowYScroll)` 这个安全阀：
+      给已经有真滚动容器的元素再加一层 overflow-y 会产生**双滚动条 / 滚动链断掉**。
+      加了这两个 :not 之后，已有真滚动容器的元素一个都匹配不到，它们的滚动元素与 scrollTop max
+      与改前**逐字节相同**（task-12 用同一份滚轮脚本对 10 条路由改前/改后逐页 diff 验证过）。
+
+   为什么 `overflow-x: hidden`（而不是只写 overflow-y / 不写 / 写 clip）：
+      · 只写 overflow-y 时，CSS Overflow 规范会把另一轴的 visible 计算成 auto → 一旦有 1px 横向溢出就冒出横向滚动条；
+      · 写 `clip` **没有用**：当一个轴是 auto 时，另一轴的 `clip` 会被规范强制计算成 `hidden`
+        （task-12 实测 getComputedStyle(main).overflowX 回报 `"hidden"`，不是 `"clip"`）。
+        既然反正落到 hidden，就直接写 hidden，别在代码里留一个看起来更"高级"但实际会被降级的假承诺；
+      · hidden 不会显示横向滚动条，也不让用户横向滚走，是这里唯一需要的效果。
+      实测（1600 宽，main 边界 248–1600、纵向滚动条占 15px，裁剪线 1585）：
+        · 页面级横向溢出 0 处：documentElement.scrollWidth == clientWidth，无横向滚动条；
+        · 唯一"被裁剪线切到"的 11 个元素是横向轮播（相似推荐/演职人员）末尾那张露半张的海报 ——
+          它们的右边本来就画到视口外（1698px），裁剪线正好落在纵向滚动条内沿（1585），
+          即"内容压到滚动条底下"，与库页/首页这些本来就有滚动条的页面行为完全一致，不是本次引入的损失；
+        · 横向轮播自身不受影响：scrollLeft 0→300 正常（max 654），因为裁剪发生在外层 main，轮播是独立滚动容器；
+        · `.card:focus` 的 scale(1.18) 在本项目根本不生效（EmbyCard 根 `.card` 的 tabIndex = -1，
+          键盘焦点落在内部 button 上，`.card:focus > .cardBox-focustransform` 匹配不到；实测 transform 恒为 none），
+          且 vendor 的 `.card` 自带 `contain: layout style paint` 本来就会夹住子元素溢出，所以与此处无关。
+
+   为什么 `min-height: 0`：
+      这三处 <main> 在部分断点下是 flex 项，flex 项默认 min-height:auto = 内容高度，
+      会让它撑出父容器而永远不产生可滚距离。置 0 是让它能被压缩成"容器高"、内容才溢出去交给 overflow-y。
+   ============================================================================ */
+.scrollFrameY:not(.scrollY):not(.overflowYScroll),
+.viewScroller:not(.scrollY):not(.overflowYScroll) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}

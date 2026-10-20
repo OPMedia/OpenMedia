@@ -32,12 +32,41 @@ const listFlip = computed(() => flipConfig(reducedMotion.value))
  * （实测面板只有 SSheet 自己的 data-v-3843251c，没有视图的 data-v-7d745af8），
  * 所以视图里的 `.dialog {...}` 是死代码；content-style 走 :style 内联，天然最高优先级。
  *
- * ① center 变体是 inset:0 + margin:auto：对 width/height:auto 的弹层会把它拉伸成 92vw×84vh
- *    （实测 1327×758），给 fit-content 才是「按内容尺寸居中」（旧实现：筛选 877×535、视图设置 509×179）。
- * ② 排序 actionSheet 旧实现是水平居中（1440 视口下 x=651、宽 137），而 pop 变体是右上角（x=1289）；
- *    左右 inset 归零 + margin-inline:auto 拉回居中，纵向 top:58px 与旧 4em 等价、不动。
+ * ⚠️ 旧值是 `{ width:'fit-content', height:'fit-content' }`，两个 center 弹层都被它压坏（实测 @1600×900）：
+ *   · 设置弹层 509.4×179.2 —— vendor `.formDialogFooter{position:absolute;bottom:0;z-index:1}` 不占文档流，
+ *     面板高度又按内容收缩，于是 footer 直接盖在内容区上：内容区 108.1 高、**只有 24.2px 露在 footer 之上**；
+ *     「视图」select（bottom 488.1 > footer.top 454.7）被 footer 盖住，图像大小滑条（bottom 540.1）
+ *     整个被面板 overflow 裁掉 —— 用户看到的就是"只剩被裁的「视图」两个字"。
+ *   · 筛选弹层 509.4×399.5 —— 内容区 scrollHeight 328 === clientHeight 328（**滚不动**），
+ *     footer 从 y=564.9 起压住内容区，最后一个分组「年份」（bottom 617）6 个 chip 全部点不到。
+ *
+ * 所以面板级几何在这里一次给全：显式宽度 + `height:auto` + `max-height`，
+ * 再配合下方 scoped 样式把 `.formDialogFooter` 拉回文档流、内容区 `flex:1 1 auto; min-height:0` —— 三段式互不重叠。
+ *   · `minWidth:0` 必须显式写：vendor `.formDialog{min-width:clamp(20%,60ch,50%)}` 在 1600 视口下算出 ≈432px，
+ *     不归零就会把我给的 width 顶掉（旧实现 509.4 宽就是这么来的）。
+ *   · `maxHeight` 取 `min(84vh,720px)`：内容再长也不高出视口，超出部分由内容区自己滚。
+ *   · 宽度必须显式给：center 变体是 inset:0 + margin:auto，width:auto 会被拉伸成 92vw（实测 1327×758）。
+ *
+ * 排序 actionSheet 旧实现是水平居中（1440 视口下 x=651、宽 137），而 pop 变体是右上角（x=1289）；
+ * 左右 inset 归零 + margin-inline:auto 拉回居中，纵向 top:58px 与旧 4em 等价、不动。
  */
-const CENTER_PANEL_STYLE = { width: 'fit-content', height: 'fit-content' }
+const SHEET_PANEL_BASE = {
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: '0',
+  // ⚠️ 必须是 fit-content，**不能写 auto**：center 变体是 `inset:0; margin:auto`，
+  // 绝对定位元素四边归零 + height:auto 时高度会撑满包含块（实测两个弹层都被拉成 720px 高，
+  // 内容只有 250px 也是 720）。fit-content 才是"按内容收缩、居中"，再由 max-height 封顶；
+  // 封顶后内容区靠 flex:1 1 auto + min-height:0 收缩并自己滚。
+  height: 'fit-content',
+  maxHeight: 'min(84vh, 720px)',
+  maxWidth: '92vw',
+  overflow: 'hidden',
+}
+/** 筛选弹层：分组多（播放状态/收藏/类型/年份/工作室），给宽一点 */
+const FILTER_PANEL_STYLE = { ...SHEET_PANEL_BASE, width: '560px' }
+/** 视图设置弹层：只有「视图」select + 图像大小滑条，窄一些 */
+const SETTINGS_PANEL_STYLE = { ...SHEET_PANEL_BASE, width: '420px' }
 const SORT_PANEL_STYLE = {
   insetInlineStart: '0',
   insetInlineEnd: '0',
@@ -189,10 +218,9 @@ async function load() {
       StartIndex: (page.value - 1) * PAGE_SIZE,
       Limit: PAGE_SIZE,
       Fields: 'PrimaryImageAspectRatio,ProductionYear',
-      ...(sectionFilter ? { Filters: sectionFilter } : {}),
       ...(genre ? { Genres: genre } : {}),
       ...(studio ? { Studios: studio } : {}),
-      ...filterQuery(),
+      ...filterQuery(sectionFilter),
     })
     items.value = r.Items
     total.value = r.TotalRecordCount
@@ -265,14 +293,65 @@ function applyFilter() {
 
 /** 视图设置 → dialog(真实站:视图 + 图像大小 + 完成) */
 const viewSettingsOpen = ref(false)
-const viewMode = ref<'grid' | 'list'>('grid')
-const imageSize = ref(0) // -1 小 / 0 中 / 1 大(真实站滑条三档)
+
+/**
+ * 视图模式 / 图像大小 —— **持久化到 localStorage**（验收要求：刷新、切库后保持）。
+ * 键名沿用本仓既有的 `serata.*` 约定（serata.token / serata.deviceId）。
+ * 读取时做形状校验：localStorage 里可能是旧版本或手改的脏值（'grid2' / 'NaN' / '5'），
+ * 非法一律回落默认 —— 否则滑条会变成一个"拖到边界也不动"的死控件（本次要修的正是这个）。
+ */
+const VIEW_MODE_KEY = 'serata.library.viewMode'
+const IMAGE_SIZE_KEY = 'serata.library.imageSize'
+function readStoredViewMode(): 'grid' | 'list' {
+  return localStorage.getItem(VIEW_MODE_KEY) === 'list' ? 'list' : 'grid'
+}
+function readStoredImageSize(): -1 | 0 | 1 {
+  const n = Number(localStorage.getItem(IMAGE_SIZE_KEY))
+  return n === -1 || n === 1 ? n : 0
+}
+const viewMode = ref<'grid' | 'list'>(readStoredViewMode())
+/** 滑条三档：-1 小 / 0 中 / +1 大（真实站滑条方向：往右更大） */
+const imageSize = ref<-1 | 0 | 1>(readStoredImageSize())
+watch(viewMode, (v) => localStorage.setItem(VIEW_MODE_KEY, v))
+watch(imageSize, (v) => localStorage.setItem(IMAGE_SIZE_KEY, String(v)))
+
+/** 三档的文字标签（复用既有 i18n 键 settings.optSmall/optNormal/optLarge —— 本任务只许改两个文件，不新增语言包） */
+const SIZE_STOPS: { v: -1 | 0 | 1; key: string }[] = [
+  { v: -1, key: 'settings.optSmall' },
+  { v: 0, key: 'settings.optNormal' },
+  { v: 1, key: 'settings.optLarge' },
+]
+
+/**
+ * 图像大小 → vendor 的卡宽变量（缺陷 5「死控件」的修法）。
+ *
+ * 机制（实测 @1600×900）：卡宽来自
+ *   `.portraitCard{width:calc(100% / max((var(--portrait-cards) + var(--user-cards-size-adjust) + var(--app-cards-size-adjust)), 3))}`
+ * （原版 modules__cardbuilder__card_sizes_varcalcmax.css；本仓在 assets/emby495-overrides.css 里按原样重写）
+ * 实测 `--portrait-cards:8`、`--app-cards-size-adjust:0`、`--user-cards-size-adjust:0`
+ * （后两个定义在 modules__cardbuilder__card.css 的 `:root` 里），容器 1250.5px → 8 列、卡宽 156.3px。
+ *
+ * ⚠️ 方向是**反的**：滑条 +1 表示"大"，而 vendor 的 adjust 是**列数增量** ——
+ *   adjust -1 → 8+(-1)=7 列 → 卡片更大；adjust +1 → 9 列 → 卡片更小。所以这里取负号。
+ * 三档实测：7 列 / 8 列 / 9 列（数字见 task-11 报告）。
+ *
+ * 变量写在 `<main>` 的内联 style 上：自定义属性会继承到卡片，而内联声明比 `:root` 那份更近；
+ * 不必、也不该去改 vendor 的 css 文件（链路里没有别的元素再声明这个变量，
+ * 唯一的例外 `.itemsContainer-defaultCardSize` 本页没用 —— 见 modules__cardbuilder__card.css）。
+ */
+const cardSizeStyle = computed(() => ({ '--user-cards-size-adjust': String(-imageSize.value) }))
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const page = ref(1)
 
 watch([sortKey, sortDesc], () => { page.value = 1; void load() })
-watch(() => route.params.id, () => { lib.value = null; page.value = 1; clearFilter(); void load() })
+/**
+ * 切库时把类型列表一起清掉。
+ * 旧实现只在 `genresList.length === 0` 时才去拉（见 load() 里的 `if (!lib.value || lib.value.Id !== libId)`），
+ * 于是从库 A 切到库 B 时**沿用了 A 的类型**：筛选弹层里点一个 B 里根本不存在的类型，
+ * 结果列表直接空 —— 用户会以为"这个库坏了"。清空后 load() 会按新 libId 重拉（配合 getGenres 的降级重试）。
+ */
+watch(() => route.params.id, () => { lib.value = null; genresList.value = []; page.value = 1; clearFilter(); void load() })
 // query 变化(genre/studio/sectionId/tab)必须重载 —— 之前只监听 params,导致箭头跳转后列表不刷新
 watch(() => JSON.stringify(route.query), () => { page.value = 1; void load() })
 watch(page, () => void load())
@@ -290,13 +369,35 @@ const PLAYED_OPTIONS = [
   { value: 'resumable' as const, label: '继续观看' },
 ]
 
-/** 筛选参数拼接(真实站 filterMenuDialog → 查询参数) */
-function filterQuery(): Record<string, string> {
+/**
+ * 筛选参数拼接(真实站 filterMenuDialog → 查询参数)。
+ *
+ * ⚠️ `Filters` 必须把「分节筛选」和「弹层筛选」**合并成一个串再去重**。
+ * 旧实现是两处分别写 `Filters`，而调用点是
+ *   `{ ...(sectionFilter ? {Filters: sectionFilter} : {}), ...filterQuery() }`
+ * —— 展开顺序在后的一方**整个覆盖**前者：收藏分节（tab=favorites → `IsFavorite`）或
+ * 继续观看分节（sectionId=resume → `IsResumable,IsUnplayed`）一旦与弹层筛选同时用，
+ * 分节条件就静默消失（用户看到的是"选了收藏，列表却混进了没收藏的"）。
+ * 现在由本函数统一产出唯一的 `Filters`，并按出现顺序去重（`IsUnplayed` 不会出现两次）。
+ *
+ * @param sectionFilter 来自路由的分节条件（sectionId/tab），由 load() 传进来一起合并
+ */
+function filterQuery(sectionFilter?: string): Record<string, string> {
+  const parts: string[] = []
+  const push = (raw?: string) => {
+    for (const t of (raw ?? '').split(',')) {
+      const v = t.trim()
+      if (v && !parts.includes(v)) parts.push(v)
+    }
+  }
+  push(sectionFilter)
+  if (filterPlayed.value === 'played') push('IsPlayed')
+  else if (filterPlayed.value === 'unplayed') push('IsUnplayed')
+  else if (filterPlayed.value === 'resumable') push('IsResumable')
+  if (filterFavorite.value) push('IsFavorite')
+
   const q: Record<string, string> = {}
-  if (filterPlayed.value === 'played') q.Filters = 'IsPlayed'
-  else if (filterPlayed.value === 'unplayed') q.Filters = 'IsUnplayed'
-  else if (filterPlayed.value === 'resumable') q.Filters = 'IsResumable'
-  if (filterFavorite.value) q.Filters = q.Filters ? `${q.Filters},IsFavorite` : 'IsFavorite'
+  if (parts.length) q.Filters = parts.join(',')
   if (filterGenres.value.length) q.Genres = filterGenres.value.join('|')
   if (filterStudios.value.length) q.Studios = filterStudios.value.join('|')
   if (filterYears.value.length) q.Years = filterYears.value.join(',')
@@ -318,7 +419,7 @@ function rowArt(item: BaseItemDto): string | undefined {
 </script>
 
 <template>
-  <main class="view flex flex-direction-column withTabs page page-withFullDrawer page-withDockedDrawer focuscontainer-x">
+  <main class="view flex flex-direction-column withTabs page page-withFullDrawer page-withDockedDrawer focuscontainer-x" :style="cardSizeStyle">
     <div class="scrollFrameY flex flex-grow tabContent tabContent-positioned itemsTab emby-scroller scrollY overflowYScroll flex-direction-column is-active focuscontainer-y navout-up">
       <div class="scrollSlider flex-grow padded-top-page padded-left padded-left-page padded-right scrollSliderY focuscontainer-y navout-up">
 
@@ -330,7 +431,10 @@ function rowArt(item: BaseItemDto): string | undefined {
             <span class="emby-button-text btnSortText">{{ SORT_LABELS[sortKey] ?? '标题' }}</span>
             <i class="md-icon btnSortIcon button-icon button-icon-right">{{ sortDesc ? SORT_ICON.desc : SORT_ICON.asc }}</i>
           </button>
-          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnFilter s-press fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="过滤器" @click="filterOpen = true">
+          <!-- 有筛选时带可见态（accent 描边 + 图标转 accent）并暴露 aria-pressed：
+               旧实现里 hasFilter 只在弹层内部用，按钮本身没有任何"已筛选"提示，
+               用户关掉弹层后完全看不出列表为什么少了内容。 -->
+          <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnFilter s-press fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" :class="{ 'btnFilter-on': hasFilter }" :title="hasFilter ? t('library.clearFilter') : t('library.filterTitle')" :aria-pressed="hasFilter ? 'true' : 'false'" @click="filterOpen = true">
             <i class="md-icon button-icon">{{ ICON_FILTER }}</i>
           </button>
           <button type="button" is="emby-button" class="itemsViewSettingsContainer-button btnViewSettings s-press fab fab-mini listTextButton-autohide emby-button emby-button-focusscale" title="设置" @click="viewSettingsOpen = true">
@@ -462,7 +566,7 @@ function rowArt(item: BaseItemDto): string | undefined {
       variant="center"
       :title="t('library.filterTitle')"
       panel-class="dialog formDialog filterMenuDialog"
-      :content-style="CENTER_PANEL_STYLE"
+      :content-style="FILTER_PANEL_STYLE"
       @close="filterOpen = false"
     >
           <div class="formDialogHeader">
@@ -533,8 +637,8 @@ function rowArt(item: BaseItemDto): string | undefined {
       :open="viewSettingsOpen"
       variant="center"
       :title="t('library.viewSettings')"
-      panel-class="dialog formDialog"
-      :content-style="CENTER_PANEL_STYLE"
+      panel-class="dialog formDialog viewSettingsDialog"
+      :content-style="SETTINGS_PANEL_STYLE"
       @close="viewSettingsOpen = false"
     >
           <div class="formDialogHeader">
@@ -558,7 +662,22 @@ function rowArt(item: BaseItemDto): string | undefined {
             </div>
             <div class="fieldset-field">
               <div class="selectLabelText">{{ t('library.imageSize') }}</div>
-              <input v-model.number="imageSize" type="range" min="-1" max="1" step="1" class="emby-slider" />
+              <!-- 滑条三档 + 文字标签：光有一根滑条用户不知道"哪头是大"。
+                   标签复用既有 i18n 键（小/正常/大），并给 range 一个 aria-valuetext，
+                   读屏用户听到的是"小/正常/大"而不是裸数字 -1/0/1。 -->
+              <input
+                v-model.number="imageSize"
+                type="range" min="-1" max="1" step="1"
+                class="emby-slider"
+                :aria-valuetext="t(SIZE_STOPS.find((s) => s.v === imageSize)?.key ?? 'settings.optNormal')"
+              />
+              <div class="sizeStops">
+                <span
+                  v-for="s in SIZE_STOPS" :key="s.v"
+                  class="sizeStop"
+                  :class="{ 'sizeStop-on': imageSize === s.v }"
+                >{{ t(s.key) }}</span>
+              </div>
             </div>
           </div>
           <div class="formDialogFooter">
@@ -579,14 +698,132 @@ function rowArt(item: BaseItemDto): string | undefined {
 .pager button:disabled { opacity: .4; cursor: default; }
 .pager .cur { color: var(--s-text-2); font-size: 14px; }
 
-/* 弹层的遮罩/底色/圆角/层级/进出动效已统一交给 SSheet(tokens + motion.css 取类名)，
-   本地只保留原 .dialogScrim 规则里属于「长相」的部分：formDialog 内容区的内距与滚动。
-   注意：面板本身（.dialog）的几何不能写在这里——它是 SSheet 渲染的 fragment 根，
-   拿不到本视图的 scoped data-v，面板级样式请走 :content-style（见 script 里的常量说明） */
-.dialog .formDialogContent { padding: 0 1.5em 1em; overflow-y: auto; }
+/* ============================================================
+   弹层三段式（缺陷 1 的另一半）
+   面板级几何走 :content-style（见 script 里 FILTER_PANEL_STYLE / SETTINGS_PANEL_STYLE）：
+   面板是 SSheet 的 fragment 根，拿不到本视图的 scoped data-v，写在这里是死代码。
+   但**插槽内容**拿得到 data-v（实测 `.dialog .formDialogContent` 的 padding 生效），
+   所以内部布局写在这里 —— 选择器保留 `.formDialog .xxx` 这种带祖先类名的形式。
+   vendor 的病灶是 `.formDialogFooter{position:absolute;bottom:0;z-index:1}`：它不占文档流，
+   于是直接盖在内容区上（实测设置弹层内容区只剩 24.2px 可见、筛选弹层最后一个分组点不到）。
+   这里把 footer 拉回文档流，让内容区吃掉剩余高度并自己滚 —— header 固定 / 内容滚动 / footer 固定。
+   ============================================================ */
+.dialog .formDialogContent { padding: 0 1.5em 1em; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.dialog .formDialogFooter { position: static; flex: 0 0 auto; }
 
 /* 排序 actionSheet 的横向居中：已改为 :content-style（见 script 里 SORT_PANEL_STYLE 的说明）——
    面板拿不到本视图的 scoped data-v，写在这里是死代码 */
+
+/* 「筛选已生效」的可见态（缺陷 4）：accent 描边 + 图标转 accent 文字色。
+   旧实现 btnFilter 在有无筛选时长得一模一样，用户关掉弹层后完全看不出列表为什么变短。
+   ⚠️ 用 box-shadow 画环，不用 outline：老 emby CSS 里 `.emby-button{outline:0!important}`
+   会把 outline **静默吃掉**（本仓 serata/README.md 铁律 11 记过这个坑，实测这里 outline 果然被吃成 none）。
+   inset 环不吃盒模型、不引起重排。 */
+.btnFilter-on { box-shadow: inset 0 0 0 2px var(--s-accent); }
+.btnFilter-on .button-icon { color: var(--s-accent-text); }
+
+/* ---------- 单选（缺陷 3）----------
+   全站**没有任何 .emby-radio 的基样式**（assets/emby495 里只有 checkbox/toggle/slider/select/input；
+   主题文件里那几条 .emby-radio-* 都是给 Emby 自己的 label 结构用的）。
+   实测 4 个单选 computed = `appearance:auto` / 13×13 / `accent-color:auto` → 系统蓝点，深色下与界面完全不搭。
+   这里用令牌自己画，但**保留原生 input 的可访问性**：不改 role、不用 div 假装单选，
+   键盘 Tab/方向键、读屏语义全部照旧，只把绘制层换成 appearance:none + ::after 圆点。 */
+.filterMenuDialog .emby-radio {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  /* 未选中态：--s-line 在深色下只有 8% 白，1.5px 圆环实测几乎看不见，
+     所以取同族的强档 --s-line-strong（发丝边家族，不是新颜色） */
+  border: 1.5px solid var(--s-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  position: relative;
+  cursor: pointer;
+  transition: border-color var(--s-transition), background-color var(--s-transition);
+}
+.filterMenuDialog .emby-radio::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--s-accent-ink);
+  transform: scale(0);
+  transition: transform var(--s-transition);
+}
+.filterMenuDialog .emby-radio:checked { border-color: var(--s-accent); background: var(--s-accent); }
+.filterMenuDialog .emby-radio:checked::after { transform: scale(1); }
+.filterMenuDialog .emby-radio:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+
+/* ---------- 收藏开关（缺陷 3）----------
+   vendor 的 .toggleSwitch 背景来自主题变量，实测"关"态是硬编码深灰 `rgb(69,69,74)`（浅色模式下同样一块灰）。
+   结构保持 vendor 原样（input.emby-toggle + 兄弟 div.toggleSwitch + ::before 圆点），只把两态换成令牌：
+   关 = 抬升面 + 发丝边，开 = accent 填充。 */
+.filterMenuDialog .toggleSwitch { background: var(--s-hover); box-shadow: inset 0 0 0 1px var(--s-line); }
+.filterMenuDialog .emby-toggle:checked ~ .toggleSwitch { background: var(--s-accent); box-shadow: none; }
+.filterMenuDialog .toggleSwitch::before { background: var(--s-cream); }
+
+/* ---------- 「图像大小」滑条（缺陷 5 的可见性部分）----------
+   vendor `.emby-slider` 是 Emby 自家 JS 组件的一半，**两个独立原因**让裸 input 完全看不见：
+   ① 基础规则里就写着 `opacity:0`（`.emby-slider{...height:100%;...opacity:0}`）——
+      整根 input（含下面我自己画的轨与滑块）一起透明，这是主因；
+   ② 原生轨背景被设成透明（`::-webkit-slider-runnable-track{background:0 0}`）、thumb `opacity:0`，
+      可见部分靠 JS 另外插入的 `.emby-slider-background` / `.emby-slider-thumb` 元素。
+   本仓没有那套 JS，所以这里把 opacity 与原生轨/滑块都用令牌画回来（只在本弹层内覆盖，不动 vendor 文件）。
+   另：vendor 还给 .emby-slider 留了 `padding:1em 0` + `box-sizing:border-box`，不归零的话
+   我给的 height 会被 padding 顶成 2em（实测 24px → 28.84px），所以一并把 padding 归零。 */
+.viewSettingsDialog .emby-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  opacity: 1;
+  margin: 4px 0 0;
+  background: transparent;
+  cursor: pointer;
+}
+.viewSettingsDialog .emby-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--s-r-pill);
+  background: var(--s-hover);
+  box-shadow: inset 0 0 0 1px var(--s-line);
+}
+.viewSettingsDialog .emby-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--s-accent);
+  opacity: 1;
+}
+.viewSettingsDialog .emby-slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--s-r-pill);
+  background: var(--s-hover);
+}
+.viewSettingsDialog .emby-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--s-accent);
+  opacity: 1;
+}
+.viewSettingsDialog .emby-slider:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+
+/* 三档文字标签：与轨道两端对齐（小 ←→ 大），当前档位转 accent 文字色 */
+.sizeStops { display: flex; justify-content: space-between; margin-top: 2px; }
+.sizeStop { font-size: var(--s-fs-xs); color: var(--s-text-2); }
+.sizeStop-on { color: var(--s-accent-text); font-weight: var(--s-fw-semibold); }
 
 .filterGroup { margin-bottom: 1.2em; }
 .filterRow { display: flex; align-items: center; gap: .6em; padding: .35em 0; }

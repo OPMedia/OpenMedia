@@ -7,7 +7,8 @@
  *       .cardContent-bxsborder-fv.coveredImage.coveredImage-noScale.cardPadder-{backdrop|portrait}
  *       > img.cardImage(+进度条 itemProgressBar)(+countIndicator)
  *     > .cardOverlayContainer.itemAction.cardPadder-*
- *       > 多选 label + .cardOverlayButton-br.buttonItems(内容卡:播放/已看/更多;库卡:仅更多)
+ *       > 居中大播放 + .cardOverlayButton-br.buttonItems(已播/收藏/更多)
+ *       （多选 label 已按用户要求整体移除，见 .cardOverlayContainer 处的注释）
  *     > .cardText.cardText-first.cardText-first-padded(+ .cardText.cardText-secondary)
  */
 import { ref, computed, onMounted } from 'vue'
@@ -18,7 +19,6 @@ import { cardArtUrl, markPlayed, markFavorite, getItems } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import ItemMenuSheet from '@/components/ItemMenuSheet.vue'
 import { showToast } from '@/api/toast'
-import { isMultiSelected, multiSelectActive, toggleMultiSelected } from '@/stores/multiselect'
 import markWhite from '@/assets/brand/mark-white.svg'
 
 const props = withDefaults(defineProps<{ item: BaseItemDto; shape?: 'portrait' | 'backdrop' | 'portrait-horiz' }>(), { shape: 'portrait' })
@@ -141,24 +141,23 @@ const subtitle = computed(() => {
 })
 const isLibrary = computed(() => props.item.Type === 'CollectionFolder')
 
+/**
+ * 长按弹菜单后，浏览器还会补发一次 click（`touchend` → `click`）。
+ * 不吞掉它的话，长按会「先弹菜单、再跳详情页」——触屏上菜单根本来不及看。
+ * 只吞长按那一次（500ms 内），正常轻点卡片照常跳转。
+ */
+let suppressClickUntil = 0
+
 function open() {
-  // 多选态下点卡片 = 勾选/取消(真实站 multiselect 行为),不跳转
-  if (multiSelectActive.value) {
-    toggleMultiSelected(props.item.Id)
-    return
-  }
+  // 多选已按用户要求整体下线（「我们现在没有多选 卡片左上角的多选按钮不需要了」）：
+  // 点卡片恒定 = 跳转，不存在「先勾选不跳转」的中间态。
+  if (Date.now() < suppressClickUntil) return
   // 库卡 → 浏览页(真实站 CollectionFolder 的 data-action=link 走 /list);条目卡 → 详情
   if (props.item.Type === 'CollectionFolder') {
     router.push({ name: 'library', params: { id: props.item.Id } })
     return
   }
   router.push({ name: 'item', params: { id: props.item.Id } })
-}
-
-// ---- 多选(真实站 multiselect:<html>.multi-select-active + 卡 .item-multiselected) ----
-const multiSelected = computed(() => isMultiSelected(props.item.Id))
-function toggleMultiSelect() {
-  toggleMultiSelected(props.item.Id)
 }
 
 // ---- 悬浮按钮可用性(严格按真实 4.9.5 cardbuilder.js + playbackmanager.canPlay + itemmanager.canMarkPlayed/canRate) ----
@@ -217,8 +216,31 @@ async function toggleFavorite() {
   props.item.UserData = { ...props.item.UserData, IsFavorite: next }
 }
 
-// ---- 右键/长按菜单(真实站 data-action="menu" 的 actionSheet) ----
+// ---- 右键/长按/更多按钮菜单(真实站 data-action="menu" 的 actionSheet) ----
+/**
+ * 菜单锚点（视口坐标）。
+ *   · 更多按钮 → 该按钮的 rect（w/h > 0，菜单贴按钮展开）
+ *   · 卡片右键 / 触屏长按 → 该点（w = h = 0，菜单以该点为左上角展开，标准右键菜单行为）
+ * ItemMenuSheet 用它在 --s-* 之内算 top/left/翻转/夹取；这里只负责「从哪来」。
+ */
+const menuAnchor = ref<{ x: number; y: number; w: number; h: number } | null>(null)
 const menuOpen = ref(false)
+
+function openMenuFromButton(event: MouseEvent) {
+  const el = event.currentTarget
+  if (el instanceof HTMLElement) {
+    const r = el.getBoundingClientRect()
+    menuAnchor.value = { x: r.left, y: r.top, w: r.width, h: r.height }
+  } else {
+    menuAnchor.value = null
+  }
+  menuOpen.value = true
+}
+
+function openMenuAtPoint(x: number, y: number) {
+  menuAnchor.value = { x, y, w: 0, h: 0 }
+  menuOpen.value = true
+}
 
 async function togglePlayedFromMenu() {
   await togglePlayed()
@@ -233,12 +255,19 @@ function onMenuCommand(id: string) { showToast(id + ' — v1 mock') }
 let pressTimer: ReturnType<typeof setTimeout> | undefined
 function onCtxMenu(e: MouseEvent) {
   e.preventDefault()
-  menuOpen.value = true
+  // 右键保留（用户：卡片的任意位置右键也会弹出），但必须锚在鼠标点
+  openMenuAtPoint(e.clientX, e.clientY)
 }
 function onTouchStart(e: TouchEvent) {
   const t = e.touches[0]
   if (!t) return
-  pressTimer = setTimeout(() => { menuOpen.value = true }, 500)
+  // 移动端 .cardOverlayContainer 是 display:none → 长按是触屏唯一入口，必须锚在触摸点
+  const x = t.clientX
+  const y = t.clientY
+  pressTimer = setTimeout(() => {
+    suppressClickUntil = Date.now() + 600
+    openMenuAtPoint(x, y)
+  }, 500)
 }
 function onTouchEnd() {
   clearTimeout(pressTimer)
@@ -252,7 +281,6 @@ function onTouchEnd() {
       isBackdrop ? 'backdropCard' : 'portraitCard',
       isHoriz ? 'card-horiz portraitCard-horiz' : '',
       'card-hoverable card-autoactive',
-      { 'item-multiselected': multiSelected },
     ]"
     @contextmenu="onCtxMenu"
     @touchstart.passive="onTouchStart"
@@ -282,19 +310,11 @@ function onTouchEnd() {
              role="img" :title="t('card.unwatchedEpisodes', { n: count })"
              :aria-label="t('card.unwatchedEpisodes', { n: count })">{{ count }}</div>
       </button>
-      <!-- 悬浮层:1:1 对齐真实 4.9.5 cardbuilder.js 的 getHtml 输出
-           顺序 = 多选 label → 居中大播放(cardOverlayFab-primary) → .cardOverlayButton-br.buttonItems(已播/收藏/更多) -->
+      <!-- 悬浮层:对齐真实 4.9.5 cardbuilder.js 的 getHtml 输出
+           顺序 = 居中大播放(cardOverlayFab-primary) → .cardOverlayButton-br.buttonItems(已播/收藏/更多)
+           多选 label(.chkItemSelectContainer)已整体删除：用户明确「我们现在没有多选 卡片左上角的多选按钮不需要了」，
+           对应的 stores/multiselect.ts 一并下线（全库唯一消费者就是这里）。 -->
       <div class="cardOverlayContainer itemAction" :class="padderCls" :data-action="isLibrary ? 'link' : 'play'" @click="open">
-        <label tabindex="-1" :title="t('card.multiSelect')" :aria-label="t('card.multiSelect')" data-action="multiselect"
-               class="chkItemSelectContainer chkCardSelectContainer cardOverlayButton itemAction emby-checkbox-label"
-               @click.stop="toggleMultiSelect">
-          <!-- 真实 CSS 里 .emby-checkbox 是 z-index:-1 的 1px 覆盖层,永远不被命中;
-               label 的默认行为会把点击转发给 input,所以这里吞掉转发的那一次,避免一次点击切换两次 -->
-          <input tabindex="-1" class="chkItemSelect chkCardSelect emby-checkbox emby-checkbox-notext" type="checkbox"
-                 :checked="multiSelected" data-classes="true" @click.stop.prevent />
-          <span class="checkboxLabel chkCardSelect-checkboxLabel"></span>
-        </label>
-
         <!-- 居中大播放按钮(cardOverlayFab-primary:font-size 280%,绝对居中) -->
         <button v-if="canPlay" tabindex="-1" type="button" :title="t('card.play')" :aria-label="t('card.play')"
                 class="fab cardOverlayButton-fab buttonItems-item itemAction cardOverlayFab-primary button-hoveraccent md-icon md-icon-fill autortl"
@@ -317,10 +337,10 @@ function onTouchEnd() {
                   :class="{ 'ratingbutton-icon-withrating md-icon-fill': isFavorite }"
                   :data-isfavorite="isFavorite" @click.stop="toggleFavorite">&#xe87d;</button>
 
-          <!-- 更多(真实站 md-icon + menuClass,图标 &#xe5d3;) -->
+          <!-- 更多(真实站 md-icon + menuClass,图标 &#xe5d3;) —— 菜单锚在这个按钮的 rect 上 -->
           <button tabindex="-1" type="button" :title="t('card.more')" :aria-label="t('card.more')"
                   class="md-icon fab cardOverlayButton-fab buttonItems-item itemAction" data-action="menu"
-                  @click.stop="menuOpen = true">&#xe5d3;</button>
+                  @click.stop="openMenuFromButton">&#xe5d3;</button>
         </div>
       </div>
       <div class="cardText cardText-first cardText-first-padded s-card-info">
@@ -338,6 +358,7 @@ function onTouchEnd() {
       v-if="!isLibrary"
       :item="item"
       :open="menuOpen"
+      :anchor="menuAnchor"
       @close="menuOpen = false"
       @toggle-played="togglePlayedFromMenu"
       @toggle-favorite="toggleFavoriteFromMenu"
@@ -346,9 +367,6 @@ function onTouchEnd() {
   </div>
 </template>
 <style scoped>
-/* 多选勾选框的视觉与命中都走真实站原版 CSS(.emby-checkbox z-index:-1、label::before 画方块),
-   这里不做任何覆盖,只保证 label 上的点击只切换一次(见模板注释) */
-
 /* ---------- 动效层（只碰 transform / opacity / filter；props/emits 与交互语义未改） ---------- */
 
 /* 图片「模糊 → 清晰」淡入：初始态由 .s-img(base.css,opacity 0 + 占位底色)+ 本类(blur 12px)共同给出 */
@@ -416,8 +434,34 @@ function onTouchEnd() {
   box-shadow: var(--s-badge-shadow);
   backdrop-filter: blur(6px);
 }
+/* ---------- 悬浮按钮的边框复位（用户：「悬浮之后显示出来的按钮的右半都会有黑色的描线…还会让人觉得自己的观看进度到那了」） ----------
+ * 根因：这 4 个按钮的 class 里**没有 `emby-button`**，而 vendor 只在 `.emby-button{…border:0…}` /
+ * `.button-link{…border:0…}` 里清边框。于是它们落回浏览器 UA 默认的 `border: 2px outset`：
+ * outset 的**上/左是亮色、下/右被压暗**，圆角按钮上就变成右下小半圈深色弧 —— 用户读成「观看进度环」。
+ * 实测（1600×900 库页）：410 个 button 里 212 个带 `2px outset`，正好 53 张卡 × 4 个悬浮按钮。
+ * 这里只补 `border: 0`（vendor 的 `.emby-button` 也是这个值），不动 background/color/font ——
+ * 实测底色本来就是 `rgba(29, 35, 69, .7)`（来自 .cardOverlayButton 一族），不是 UA 的 buttonface。
+ * 副作用：按钮盒子 34.3px → 30.3px（少的就是这 2px×2 边框），与真实站 `.emby-button` 几何一致。 */
 .s-card .cardOverlayButton-fab {
+  border: 0;
   transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+
+/* ---------- 卡片标题：单行 + 省略号钉死（用户：「标题过长就省略」） ----------
+ * vendor 的 .cardText 已有 nowrap/overflow:hidden/ellipsis，但标题按钮是 `display:inline-block` 且宽度靠内容撑，
+ * 只靠 `max-width:100%` 的 shrink-to-fit 兜底 —— 一旦宿主的 .cardText 变宽（横向卡/搜索页），就会退化成撑宽或硬裁。
+ * 这里把宽度钉成 100%（显式宽度，不再依赖 shrink-to-fit），配合 nowrap + overflow:hidden + ellipsis：
+ * 任何长度都只能单行省略，撑不宽卡片、不会换行、不是硬裁。
+ * 刻意保留 inline-block：实测 block 会把 .cardText 的行盒从 24.8/19.9px 压到 17.6/13.3px、卡片高度 268.5 → 254.6px，
+ * 那是与本次反馈无关的几何改动（block 在搜索页长标题上的截断效果与 inline-block 完全相同：cw 135 / ov 254）。
+ * 不用 JS 截断字符串（保留完整片名给 title/搜索/读屏）。 */
+.s-card-info .cardTextActionButton {
+  display: inline-block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* 悬停编排（只在真悬停设备上做）：抬升 4px + 海报放大提亮 + 信息层上浮 + 角标/悬浮按钮微放大。

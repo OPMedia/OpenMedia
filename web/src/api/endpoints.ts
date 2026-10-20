@@ -134,9 +134,53 @@ export function getSimilarItems(itemId: string, userId: string, limit = 12): Pro
   return request<QueryResult>(`/Items/${itemId}/Similar`, { query: { UserId: userId, Limit: limit } })
 }
 
-/** GET /Genres */
-export function getGenres(userId: string, parentId?: string): Promise<QueryResult<{ Name: string; Id: string }>> {
-  return request<QueryResult<{ Name: string; Id: string }>>('/Genres', { query: { UserId: userId, ParentId: parentId } })
+/**
+ * GET /Genres —— 类型列表（库页筛选弹层的「类型」分组）。
+ *
+ * ⚠️ 这个端点**不是** openapi 里那种"参数越多越精确"的形状：真机 Emby 4.9.5.0 上
+ * `UserId + ParentId` 一起传会返回 **200 但空集**，把 UserId 去掉反而正常。
+ * 直连真机 A/B（2026-10-20，库 `2000000002`，证据 scratch/lead5/probe-genres3.mjs）：
+ *   · `GET /Genres`                            → 200，64 条
+ *   · `GET /Genres?ParentId=L`                 → 200，64 条   ← 降级用的就是这条
+ *   · `GET /Genres?UserId=U&ParentId=L`        → 200，**0 条** ← 旧实现打的形状（所以「类型」永远不出现）
+ *   · `GET /Genres?UserId=U`                   → 200，64 条
+ *   · `GET /Genres?UserId=deadbeef&ParentId=L` → **500**（UserId 非法时整条查询炸掉）
+ * 结论：`ParentId` 是有效的收敛条件，`UserId` 在这台服务器上是**反向**的（带它 + ParentId 就空）。
+ *
+ * 所以这里做**降级重试**：先按标准形状带 UserId 请求（保住"用户可见类型"的语义）；
+ * 只要 `Items` 为空、且调用方给了 parentId，就再打一次**不带 UserId**的；
+ * 第一次抛错（如 UserId 非法 → 500）时同样降级，两次都失败才把**原始错误**抛出去（不静默吞）。
+ * 两次都成功但都为空 → 返回空集（那是真的没有类型，不是我们没查）。
+ */
+export async function getGenres(
+  userId: string,
+  parentId?: string,
+): Promise<QueryResult<{ Name: string; Id: string }>> {
+  const withUser = (): Promise<QueryResult<{ Name: string; Id: string }>> =>
+    request<QueryResult<{ Name: string; Id: string }>>('/Genres', { query: { UserId: userId, ParentId: parentId } })
+  const withoutUser = (): Promise<QueryResult<{ Name: string; Id: string }>> =>
+    request<QueryResult<{ Name: string; Id: string }>>('/Genres', { query: { ParentId: parentId } })
+
+  let first: QueryResult<{ Name: string; Id: string }> | null = null
+  let firstError: unknown = null
+  try {
+    first = await withUser()
+  } catch (e) {
+    firstError = e
+  }
+  if (first && (first.Items?.length ?? 0) > 0) return first
+  // 到这里只有两种情况：带 UserId 空集了，或者它直接报错了。没给 parentId 就没有降级空间。
+  if (!parentId) {
+    if (first) return first
+    throw firstError
+  }
+  try {
+    return await withoutUser()
+  } catch {
+    // 降级也失败 → 抛出**第一次**的错误，保留最原始的信号（第二次的失败没有新增信息）
+    if (firstError) throw firstError
+    throw new Error(`getGenres: /Genres 带/不带 UserId 两次请求都拿不到数据（userId=${userId}, parentId=${parentId}）`)
+  }
 }
 
 /** GET /Items/Counts(管理/看板) */

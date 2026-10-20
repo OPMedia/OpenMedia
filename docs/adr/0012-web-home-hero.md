@@ -380,3 +380,178 @@ Emby 网页端的布局与交互对齐已推进到"可验证"阶段（ADR-0011 �
 > 其余 7 个文件（`HomeHero.vue` / `useHomeHero.ts` / `HomeView.vue` / `AdminSettingsView.vue` /
 > `router/index.ts` / `zh-CN.json` / `en.json`）本轮**一个字节没动**，哈希与上一节相同。
 
+## 修订 2026-10-20（五 · 用户第四轮实测反馈，五条）
+
+原话：
+
+1. 「优化搜索页 搜索出来的候选结果和结果都要用卡片式 不要用条式 很难看 标题过长就省略」
+2. 「我们现在没有多选 卡片左上角的多选按钮不需要了」
+3. 「媒体库右上角的两个 一个过滤器 一个设置 这两个都没做好」
+4. 「为什么每个卡片悬浮鼠标之后显示出来的按钮的右半都会有黑色的描线 看起来很丑啊 还会让人觉得自己的观看进度到那了 误导人了」
+5. 「卡片的右下角的更多按钮 点击之后弹出的列表不是按照位置出现的 这个弹出的列表 在卡片的任意位置右键也会在右键卡片的位置弹出继续优化吧」
+
+### 1. 搜索页：行式列表整体换成卡片网格
+
+改前 `/search?q=沙` 是 40 条 `listItem` 行（每条宽 1000+px、高 ~105px），行内是「小缩略图 + 标题 + 类型/年份 + ⋯」。
+改成与库页同一套 `EmbyCard`（`shape="portrait"`，2:3 海报），容器 `.itemsContainer.vertical-wrap.padded-bottom-page.searchResultsGrid`。
+
+同时删掉的死代码：行标记、行内那个 `⋯` 按钮、`rowArt()`、`ICON_MORE`、`itemTypeName()`、`go()`、`useRouter/router`、`cardArtUrl` 引入。
+
+标题省略号：`.s-card-info .cardTextActionButton` 上
+`display:inline-block; inline-size:100%; max-inline-size:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis`。
+实测最长标题「从球场到商场：沙奎尔·奥尼尔的品牌经营路」：`scrollWidth 277 / clientWidth 135`，
+仍单行省略、卡宽不变（156.3px）。
+
+> 顺带作废：`search.typeMovie` / `search.typeSeries` / `search.typeEpisode` 三个 key 随 `itemTypeName()`
+> 一起失去全部消费者（`src/**` 全量 grep：除两份 locale 的定义处外 0 引用）。
+> 本轮**故意不动 locale 文件**，留待下次清理。
+
+### 2. 多选入口整体下线
+
+`.chkItemSelectContainer` label（卡片左上角那个圆勾）、`item-multiselected` 类、
+`multiSelected` / `toggleMultiSelect`、以及 `open()` 里的多选分支全部删除；
+`web/src/stores/multiselect.ts`（37 行，全库唯一消费者就是这里）**整个文件删除**。
+
+`open()` 现在恒定 = 跳转，不存在"先勾选不跳转"的中间态。实测库页
+`.chkItemSelectContainer` / 卡内 checkbox / `.item-multiselected` 合计 **53 → 0**；
+点卡片左上角仍进详情（`/item/1310342`）。
+
+### 3. 过滤器 / 设置两个弹层：四个独立缺陷
+
+改前实测：设置面板 **509.4×179.2**，内容区被压到只剩 **24.2px** 可见（滑条/下拉几乎看不见）；
+过滤器内容 328/328 完全不可滚，6 个控件压在**绝对定位的 footer** 底下。逐条根因：
+
+| # | 现象 | 根因 | 修法 |
+|---|---|---|---|
+| a | 面板高度失控 | 中心变体是 `inset:0; margin:auto`，我最初按"内容自适应"写成 `height:auto` → 等于撑满包含块（720px） | `:content-style` 传 `height:fit-content` + `max-height:min(84vh,720px)` + **显式 `minWidth:0`** |
+| b | 内容区不可滚 | footer 绝对定位、内容区没有 `min-height:0`，flex 子项默认 `min-height:auto` 拒绝收缩 | `.formDialogFooter{position:static}`、`.formDialogContent{flex:1 1 auto; min-height:0; overflow-y:auto}` |
+| c | 单选/开关是原生控件 | 从未 token 化 | `appearance:none` + 18×18 + `--s-accent`；开关做两态 |
+| d | 「图像大小」滑条拖了没反应 | vendor `.emby-slider` 让它 `opacity:0`（主因），而且**根本没有消费者** | 恢复可见 + 把 `--user-cards-size-adjust` 绑到 imageSize |
+
+`minWidth:0` 不是可选项：vendor `.formDialog{min-width:clamp(20%,60ch,50%)}` ≈ 432px 会赢过内容宽度。
+
+「图像大小」三档实测卡宽 **138.9 / 156.3 / 178.6px**（7 / 8 / 9 列），
+`--user-cards-size-adjust` = `1 / 0 / -1`；`serata.library.viewMode` 与 `serata.library.imageSize`
+落 localStorage，刷新后仍在（视图=列表 → 53 行；imageSize=1 保持）。
+
+筛选态按钮用 **inset box-shadow** 而不是 `outline` —— `.emby-button{outline:0!important}` 会把 outline 吃掉。
+
+### 4. 悬浮按钮的"黑色描线"：UA 默认边框，不是我们的样式
+
+根因：这批悬浮按钮**没有 `emby-button` 类**，于是吃浏览器 UA 的默认 `border: 2px outset`。
+outset 会把右下两条边画深 → 看起来就像一条"看到一半的进度弧"。实测库页 403 个可见按钮里 **212 个**中招。
+
+修法：`.s-card .cardOverlayButton-fab { border: 0 }`（带根因注释）。
+改后库页 + 首页 + 搜索页可见按钮带 `outset/inset/ridge/groove/double` 的 = **0**。
+按钮盒子 34.3 → **30.3px**（正好等于 vendor `.emby-button` 的几何），底色 `rgba(29,35,69,.7)` 与行高不变。
+
+### 5. 更多菜单：锚到触发点，而不是固定在左上角
+
+改前用 `SSheet variant="pop-start"`，面板被钉在 `left:8px / top:115px`，与触发点无关：
+按钮在 (1493,843) 时面板离它 **1163.1px**；右键点离面板 **315.7px**。
+
+修法（`ItemMenuSheet.vue` 新增 `anchor` prop + `panelStyle` 计算）：
+`PANEL_W=320`、`ANCHOR_GAP=8`、`VIEWPORT_EDGE=8`、`MIN_SPACE_BELOW=240`。
+下方放不下就向上翻（`bottom = vh - aTop + 8`），右边放不下就向左展开（`left = aRight - PANEL_W`）。
+锚点来源三处：按钮 `getBoundingClientRect()`、右键 `e.clientX/clientY`、触屏长按点。
+
+实测间隙：首卡按钮 **8.4 → 7.7px**、底部卡向上翻 **8.0px**、右键点 **7.7px**、
+右边缘向左展开 7.2px、长按 8px；900×600 与 700×500 也在视口内。
+
+> 决策留档：桌面右键**保留**（用户抱怨的是位置，不是存在；说「不需要了」时才删）；
+> 移动端长按保留 —— `.cardOverlayContainer` 在 `@media not all and (pointer:fine)` 下是 `display:none`，
+> 长按是触屏唯一的菜单路径。
+
+### 附带修掉：`.viewScroller` / `.scrollFrameY` 全项目 0 定义
+
+搜索页卡片化后暴露出一个**行式列表时代就存在**的缺陷：`/search` 完全不能纵向滚动
+（1600×900 下内容 1676px 只露 900px）。审计后确认是单根因：
+这两个类在**全项目 CSS 里 0 定义**，能滚的页面都是同一元素上另挂了 vendor 真类 `scrollY` / `overflowYScroll`。
+19 处带 `scrollFrameY` 的元素里，缺真类的**恰好 3 处，且都是 `<main>`**：
+`ItemDetailView.vue:492`、`admin/AdminUsersView.vue:71`、`SearchView.vue:195`。
+
+修法（`emby-bridge.css`，1 条规则 + 注释）：
+
+```css
+.scrollFrameY:not(.scrollY):not(.overflowYScroll),
+.viewScroller:not(.scrollY):not(.overflowYScroll) { overflow-y: auto; overflow-x: hidden; min-height: 0 }
+```
+
+`:not()` 是安全阀——已有真滚动容器的元素一个都匹配不到，**双滚动条在结构上不可能发生**。
+逐页 diff（同脚本 A/B，改前用 `!important` 中和新规则）：`/search` — → **776**、`/item/319159` — → **700**、
+`/dashboard/users` — → **50197** 三页 FAIL→PASS；其余 7 页（`/`、`/library/2000000002`、`/person`、
+`/settings/display`、`/dashboard`、`/dashboard/tasks`、`/login`）滚动元素与 `scrollTop max` **逐字相同**。
+`SearchView.vue` 里 task-10 的临时 `scrollY` 已删，交回全局。
+
+`overflow-x` 写 `hidden` 而不是 `clip`：一个轴为 `auto` 时规范强制把另一轴 `clip` 算成 `hidden`
+（实测 `getComputedStyle(main).overflowX` 回报 `"hidden"`），写 `clip` 是假承诺。
+
+### 第五轮验收锚点
+
+| 锚点 | 判据（实测值） |
+|---|---|
+| 搜索页卡片化 | `.listItem` = **0**（改前 40）；`.s-card` = **40**；卡宽 **156.3×268.5**（2:3）；`scrollWidth == clientWidth` |
+| 标题省略号 | `white-space:nowrap` / `text-overflow:ellipsis` / `overflow:hidden`；最长标题 `sw 277 / cw 135` 仍单行 |
+| 多选入口 | `.chkItemSelectContainer` + 卡内 checkbox + `.item-multiselected` = **0**；点卡片左上角 → `/item/1310342` |
+| 过滤器弹层 | **562×676.5** @(519,111.8)；内容控件 **41/41** 可见、零尺寸 0、被 footer 覆盖 **0**；内容区底 703.3 ≤ footer 顶 703.3 |
+| 过滤数据 | 分组 = 播放状态 / 收藏 / **类型(30 chips)** / 年份；单选 `appearance:none` **18×18**；勾选后发出 `Genres=惊悚`，`aria-pressed=true` + `.btnFilter-on` |
+| 设置弹层 | **422×298.2** @(589,300.9)；控件 **4/4** 可见、覆盖 0；内容区底 514.2 ≤ footer 顶 514.2；下拉 1 + 滑条 1 |
+| 图像大小 | 三档卡宽 **138.9 / 156.3 / 178.6**（去重 3） |
+| 持久化 | 刷新后 `serata.library.viewMode=list` + `imageSize=1` 都在，列表渲染 **53 行** |
+| UA 黑边 | 库页 403 个可见按钮带 `outset/inset/ridge/groove/double` = **0**（改前 212）；首页 32 个 = 0；搜索页 0 个 = 0 |
+| 悬浮按钮几何 | 四个按钮 `border-width 0px / border-style none / 圆角 50% / 30.3px` |
+| 菜单定位 | 首卡间隙 **7.7px**、底部卡向上翻 **8.0px**、右键点 **7.7px**；面板均在视口内 |
+| 滚动修复 | 10 条路由真实滚轮审计：改后 **0/10 失败**；7 页 `scrollTop max` 逐字不变；`/item` 滚轮 0→**700**（=max）、搜索页 →**776**；Tab 70 次「焦点落在视口外」**0 次**；浅色主题两页均正常 |
+
+### 第五轮冻结哈希
+
+| 文件 | sha256 |
+|---|---|
+| `web/src/components/EmbyCard.vue` | `95389AA9FB474B37BEE070E5C7E597596344B99AB916210E13A29F6DB5576900` |
+| `web/src/components/ItemMenuSheet.vue` | `353B25EB273C1EEDE48D7B0B61845C1C5D7C480CECE1DA9225C1991FD0E6FCAE` |
+| `web/src/views/SearchView.vue` | `7906766573DCBB7ED6215DDC6919AC87E11AD01ECAEDE9E18FE43DCF7A259544` |
+| `web/src/views/LibraryView.vue` | `3C17EDABD68F936FAEAE06116BDA6C76400A6B9012D8D790080A9D09DBD7C112` |
+| `web/src/api/endpoints.ts` | `7E4813646C33265FD6D25D7F259B2C0AAB144D9B782A0AD50A01E6E5E2F3E4B4` |
+| `web/src/styles/serata/emby-bridge.css` | `D2B0636D71D276BD523202E267BDBBC4C17A5DFB9DC5883B224B504A89EB4907` |
+| `web/src/stores/multiselect.ts` | **已删除**（37 行） |
+
+`pnpm type-check` exit 0；`pnpm build` exit 0（897ms）。
+
+### 本轮暴露的两件事，必须留档
+
+**一、`getGenres` 在这台夹具上是"假成功"，不是我们的 bug。**
+`/Genres?UserId={uid}&ParentId={lib}` 返回 **200 但 Items 为空**，`/Genres?ParentId={lib}` 返回 **64 条**，
+`/Genres?UserId=deadbeef&ParentId` 返回 **500**。已让 `endpoints.ts` 在"带 UserId 为空"时去掉 UserId 重试
+（A/B 数据写在代码注释里）。更严重的是**夹具整台忽略 `Genres`**：直连 `tv.wenjian.de` 实测
+`Genres=惊悚` → 仍 53 条、`Genres=绝对不存在的类型XYZ` → 仍 53 条、`TotalRecordCount` 恒 **53**
+（而 `Limit=5`→5、`StartIndex=50`→3、`SortBy=ProductionYear`→顺序变化、`Filters=IsUnplayed`→53→**50** 都正常）。
+⇒ **筛选结果集的变化在夹具上无法证明**，前端只证明了"参数正确发出"。
+最终验收必须在自有后端 `MediaBrowser.Api` 上重做一遍（可复跑 `scratch/lead5/probe-genre-ab-run.mjs`、`probe-param-ab.mjs`）。
+
+**二、验收探针自己错了 4 次，全部由我方自查抓出并纠正。**
+① 把 footer **自己的按钮**算进"内容控件"，于是 `lastControlBottom > footer.top` 必然成立 → 假 FAIL
+（改成 `footer.contains()` 排除整棵子树后：41/41 可见、0 覆盖）；
+② 写死 `.scrollSlider` 当滚动容器，而库页真正滚的是内层 `div.scrollFrameY` → 点击落空 → 假 FAIL；
+③ 按"上一档卡宽"断言持久化，但视图切到列表后根本没有 `.s-card` → 假 FAIL（改成断言 localStorage + 列表行数）；
+④ 详情页滚轮连发不给事件间隔 → `scrollTop` 恒 0 → 假 FAIL（补 120ms 间隔后 4 个落点全部 0→960=max）。
+**度量错了，结论就会假** —— 这条比这一轮的 5 个修复更值得记住。
+
+### 第五轮遗留风险（未验证 / 已知缺陷，不许含糊）
+
+1. **首次点击卡片偶发不跳转（1 次观测，8 次受控复测无法复现）**：`probe-diag2.mjs` 抓到一次完整
+   `pointerdown/mousedown/pointerup/click` 都落在 `.cardOverlayContainer`、`defaultPrevented=false`，
+   但 `history.pushState` **一次都没被调用**（即 `open()` 没走到 `router.push`）；紧接第二次点击即正常。
+   随后 `probe-diag3.mjs` 在"卡片出现后稳 0.6s / 3.5s"两档各 4 次全部 PASS（8/8）。
+   仅出现在**冷启动后第一次点击 + 探针连续猛击**的语境，**未在真实设备上确认**，本轮不盲改。
+2. **移动端逐页滚动审计缺失**：10 条路由的滚动审计全在 1600×900；详情页移动端未测
+   （搜索页在 390 单独验过：40 张卡、无横向滚动）。
+3. **`/dashboard/users` 一次渲染 835 行（51097px）**：能滚到底，滚动性能未测。
+4. **`overflow-x:hidden` 让内容压在纵向滚动条内沿 15px**（与全站一致），后续往这几页塞跨边界元素需注意。
+5. `ItemMenuSheet` **不跟随窗口 resize** 重算位置（改窗口大小后面板可能偏出）。
+6. RTL 未测；<336px 视口未测；真实手指长按未测（本机 `Input.dispatchTouchEvent` 45s 超时）。
+7. 库页仍可能同时出现「0 个条目」与「加载中…」；移动端 `/search` 输入框旁仍有底栏「搜索」tab。
+8. `HomeView` 的边框普查**没有改前基线数字**（只有改后 0）。
+9. 遗留死 i18n key：`search.typeMovie` / `search.typeSeries` / `search.typeEpisode`（本轮故意不删）。
+10. `web/tools/probe-multi-body.mjs`、`probe-content-card.mjs`、`probe-home3.mjs`、`probe-home4.mjs`、
+    `probe-card-hover.mjs` 仍在断言**已删除的多选 DOM**（无 npm script 引用，未清理）。
+
