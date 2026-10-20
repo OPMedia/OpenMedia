@@ -258,54 +258,6 @@ jobs:
           if-no-files-found: warn
 
 # ============================================================
-# 独立 workflow：Docker 镜像构建（amd64/arm64 单镜像）
-#
-# **默认不自动跑**（只 workflow_dispatch）：
-#   1. 本机没有 docker，本机无法等价复现任何一步；自动跑等于把不可复现的
-#      东西塞进每次 PR
-#   2. buildx 双架构 + ffmpeg 静态下载每次 20+ 分钟，PR 上跑纯浪费
-#   3. docs/spec/core.md 第 38 行把"amd64/arm64 镜像"归到"发布"环节，
-#      不是每次 CI 都要出
-#
-# 本机等价：**无**。本机 docker 命令不存在。
-#   验证只能在 GitHub runner 上做（见 Dockerfile 注释里的验证步骤），
-#   或 push 后在 runner 上 docker run 起来 curl 一遍。
-# ============================================================
-name: docker
-
-on:
-  workflow_dispatch:
-    inputs:
-      push_image:
-        description: "推镜像到 registry（默认只 build 不 push）"
-        required: false
-        default: "false"
-
-jobs:
-  build-image:
-    name: build amd64+arm64 单镜像
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup QEMU（arm64 交叉构建）
-        uses: docker/setup-qemu-action@v3
-
-      - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build 双架构镜像（默认不 push）
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event.inputs.push_image == 'true' }}
-          tags: openmedia:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-# ============================================================
 # 本机等价复现清单（Reviewer 照这个逐条跑）
 #
 # 前置（一次性）：
