@@ -1,4 +1,4 @@
-# OpenMedia 性能基线（二期 T2 交付）
+﻿# OpenMedia 性能基线（二期 T2 交付）
 
 > 测量日期：2026-10-14 23:20　受测实例：PID 6748（D:\OpenMedia 部署实例，8096）
 > 环境：本机 16 核 / PostgreSQL 18.6（localhost:5432）/ .NET 10 Debug 构建
@@ -184,3 +184,183 @@ scale-user-00001..10000，空密码，user_datas 1M 就绪）。跑法：`python
 | 单请求语句数 | 未测 | 464 行 | **~14 条**（6 视图文件夹水合+3 count+5 认证/token） | Developer 的 3=条目路径口径（其实例视图文件夹更少），分歧为范围非对错 |
 
 **规模化轨道性能侧全部收口**。U1 高并发复跑待 S8 拉起 scale 实例（8098 已被 D2 收工带走）。
+---
+
+## 8. Release 口径复测（2026-10-20，Architect / Codex）
+
+> 本章替代 §1-§7 作为**唯一可引用的口径**。历史 Debug 数字保留作审计轨迹，
+> 但**不再作为任何容量承诺的依据**。完整决策论证见 `docs/adr/0017-perf-calibration-ci-docker.md`。
+
+### 8.1 历史口径作废原因（三条，缺一不可）
+
+| # | 问题 | 证据 | 后果 |
+|---|---|---|---|
+| 1 | 测于 Debug 构建 | §0 自证 `.NET 10 Debug 构建` | 无 ReadyToRun、分层编译未预热，JIT 成本全额计入请求延迟 |
+| 2 | 库规模口径断裂 | §7 基于 147 条目；现在共享库 `openmedia` 仅 1 条目 | §7.2 已栽过：库 64→147（+2.3×）就让 L1 P50 40.8→363ms（9×），规模是主导变量 |
+| 3 | `pg_stat_statements` 未启用 | §1 自证"阻塞"、§6 挂"待排期" | §1/§6 承诺的慢查询 Top-20 从未补做，缺 DB 侧取证 |
+
+### 8.2 本轮已修的口径问题
+
+- **端口漂移**：`tests/perf/` 下 6 个脚本硬编码 `15432` → 改为 `-PgPort` 参数（默认 `5432`），本机 PG 已在 5432
+- **`pg_stat_statements` 已启用**：`postgresql.conf:814` 改 `shared_preload_libraries = 'pg_stat_statements'`，重启 `postgresql-x64-18`，`postgres` 与 `openmedia_perf` 两库 `CREATE EXTENSION`。Top-20 见 §8.5
+- **树形 fixture**：`tests/perf/fixture-100k-tree.ps1` 根治 BR-45 祖先分布失真，fixture 尾部自带"每库子孙数"断言
+- **独立对比库**：`tests/perf/setup-compare-db.ps1` 建 `openmedia_compare`（库名白名单硬断言，共享库零污染）
+
+**PG 重启影响（用户要求记录）**：重启前确认 `pg_stat_activity` 无外部连接。
+2026-10-20 10:53-10:54 首次重启后服务因 UTF-8 BOM 混入 conf 起不来（详见 ADR D3），
+服务不可用窗口约 8 分钟（10:54-11:02），期间 `openmedia_perf`（195,251 条目）与
+共享库 `openmedia`（1 条目）均无写入，数据无损。11:02 去 BOM 后恢复 Running。
+
+### 8.3 Debug vs Release 同口径对比（471 条目树形库，**这是本节核心**）
+
+口径：库 `openmedia_compare`（471 条目：150 电影 + 15 系列 + 45 季 + 225 集 + 5 库 + 30 人物 + 1 根），
+同一用户 `ab-user-001`（Id `412dba26bbfe4509aa8bbb144cf4c7c8`），同一负载脚本
+`tests/perf/load-ab.py`，每档 15s，各 2 轮干净数据（已剔除 warmup 轮）。
+**唯一变量是构建配置。**
+
+| 场景 | Debug 轮1 | Debug 轮2 | Release 轮1 | Release 轮2 | 结论 |
+|---|---|---|---|---|---|
+| L1 `/Users/{uid}/Items` 分页 P50 @10rps | 22.7ms | 23.1ms | 27.5ms | 26.4ms | Release 慢 3-4ms（噪声量级） |
+| L1 同 P95 @10rps | 30.9ms | 115.4ms | 38.4ms | 51.1ms | Debug 轮2 的 115ms 是离群点；Release 更稳 |
+| L1 分页 P50 @50rps | 82.1ms | 79.8ms | 79.3ms | 66.0ms | 持平，Release 略优 |
+| L1 分页 P95 @50rps | 147.1ms | 163.1ms | 133.7ms | 177.5ms | 持平（方差重叠） |
+| L1b `/Items?Recursive` P50 @50rps | 25.4ms | 32.1ms | 25.8ms | 25.0ms | 持平 |
+| L1b P95 @50rps | 51.4ms | 71.1ms | 49.0ms | 52.7ms | Release 略优 |
+| L3 静态流 P95 并发10 ⚠️ | 13.3ms | 28.0ms | 16.0ms | 18.2ms | **两侧均 100% 500**（对比库无真实视频文件），测的是错误路径开销，非流式吞吐 |
+| L4 认证 P50 并发20 | 49.1ms | 49.2ms | 48.8ms | 44.5ms | 持平 |
+| L4 认证 P95 并发20 | 243.2ms | 268.9ms | 154.6ms | 198.6ms | Release 优 20-45% |
+
+**结论：471 条目规模下该服务不是 JIT/R2R 敏感的**——耗时主要花在等 PG 与 I/O，
+不在 CPU 密集的 JIT 代码上。老 Debug 口径的"失真"主要体现在大规模 + 高并发档。
+
+### 8.4 全量 195k 口径（Release，`openmedia_perf` 树形 fixture）
+
+fixture 规模：195,251 条目（150 库 + 60,000 电影 + 3,000 系列 + 12,000 季 + 120,000 集 +
+100 人物 + 1 根），`ancestor_ids` 447,000，每库子孙数均 1300（祖先分布真实），
+`user_datas` 5,400,000，avg data blob 1,038B。灌库耗时 5.58 分钟。
+
+| 场景 | 471 条目库（同上） | 195k 条目库 | 规模效应 |
+|---|---|---|---|
+| L1 `/Users/{uid}/Items` P50 @10rps | 26.4ms | **2,780.5ms** | **105×** |
+| L1 同 P95 @10rps | 38.4ms | **3,339.8ms** | **87×** |
+| L1 分页 P50 @50rps | 66.0ms | **7,089.1ms** | **107×** |
+| L1 分页 P95 @50rps | 133.7ms | **9,524.4ms** | **71×** |
+| L1b `/Items?Recursive` P50 @50rps | 25.0ms | 42.8ms | 1.7× |
+| L1b P95 @50rps | 52.7ms | 85.6ms | 1.6× |
+| L3 静态流 P95 并发10 ⚠️ | 16.0ms（500） | 24.1ms（500） | 均为错误路径 |
+| L4 认证 P50 并发20 | 44.5ms | 63.8ms | 1.4× |
+| L4 认证 P95 并发20 | 198.6ms | 280.1ms | 1.4× |
+
+**这是本节最重要的发现**：`/Users/{uid}/Items?Recursive=true`（无类型过滤的用户列表）
+随库规模**超线性劣化**（105×），而同 RPS 的 `/Items?Recursive&IncludeItemTypes=Movie` 只 1.7×。
+差异指向"用户视图解析 + 无类型全库水合"这条路径，不是 PG 单条查询的问题
+（PG 侧证据见 §8.5 第 1 名）。这条路径是下一个迭代的首要优化对象。
+
+### 8.5 pg_stat_statements Top-20（欠账 4 天，已补）
+
+取证环境：`openmedia_perf`（195,251 条目树形），Release 构建，跑 §8.4 那轮负载后取数。
+总量口径：**74 条被跟踪语句 / 408,179 calls / 2,266,288.3ms 总执行时间**。
+原始输出：`tests/perf/results/pgss-{total,top20-total,top20-mean,top20-calls,top1-explain}.out`。
+复现脚本：`tests/perf/pg-stat-statements-top20.ps1`（含扩展前置断言）。
+
+#### 8.5.1 Top-10 by `total_exec_time`（"谁最烧"）
+
+| # | 查询 | calls | mean(ms) | total(ms) | 占比 |
+|---|---|---|---|---|---|
+| 1 | `SELECT count(DISTINCT A.presentation_unique_key) FROM media_items A` | 236 | **5,485.98** | **1,294,690.1** | **57.1%** |
+| 2 | `INSERT INTO activity_log_types (name) VALUES ($1) ON CONFLICT ... RETURNING type_id` | 14,750 | 46.89 | 691,692.9 | 30.5% |
+| 3 | `SELECT count(*) FROM media_items A WHERE A.type IN ($1)` | 16,948 | 11.42 | 193,612.0 | 8.5% |
+| 4 | `SELECT A.id,A.guid,A.type,... (列表水合)` | 16,948 | 3.44 | 58,376.0 | 2.6% |
+| 5 | `UPDATE local_users SET data = $1 WHERE id = $2` | 7,376 | 0.81 | 5,996.2 | 0.3% |
+| 6 | `INSERT INTO activity_log (...) VALUES (...)` | 14,750 | 0.25 | 3,651.5 | 0.2% |
+| 7 | `SELECT EXISTS (SELECT $1 FROM media_items WHERE presentation_unique_key IS NOT NULL GROUP BY ... HAVING count(*) > $2 ...)` | 10 | 344.65 | 3,446.5 | 0.2% |
+| 8 | `SELECT id FROM local_users WHERE guid = $1` | 22,123 | 0.11 | 2,471.7 | 0.1% |
+| 9 | `SELECT t.id, t.access_token, d.reported_device_id, ... (token 认证)` | 36,752 | 0.07 | 2,468.1 | 0.1% |
+| 10 | `SELECT A.id,A.guid,...,A.data::text,... (全量水合)` | 19,612 | 0.12 | 2,421.3 | 0.1% |
+
+#### 8.5.2 Top-5 by `mean_exec_time`（"单次最慢"）
+
+| # | 查询 | calls | mean(ms) |
+|---|---|---|---|
+| 1 | `SELECT count(DISTINCT A.presentation_unique_key) FROM media_items A` | 236 | **5,485.98** |
+| 2 | `SELECT EXISTS (SELECT $1 FROM media_items WHERE presentation_unique_key IS NOT NULL GROUP BY presentation_unique_key HAVING count(*) > $2 LIMIT $3)` | 10 | 344.65 |
+| 3 | `INSERT INTO activity_log_types (name) VALUES ($1) ON CONFLICT ...` | 14,750 | 46.89 |
+| 4 | `SELECT count(*) FROM media_items A WHERE A.type IN ($1)` | 16,948 | 11.42 |
+| 5 | `INSERT INTO media_items (guid, type, type_name, data, parent_id, ...)` | 1 | 5.48 |
+
+#### 8.5.3 Top-5 by `calls`（"调用最频"，抓 N+1 与连接层）
+
+| # | 查询 | calls | total(ms) |
+|---|---|---|---|
+| 1 | `DISCARD ALL` | 125,430 | 1,947.8 |
+| 2 | `SELECT t.id, t.access_token, d.reported_device_id, ... (token 认证)` | 36,752 | 2,468.1 |
+| 3 | `SELECT count(*) FROM tokens t LEFT JOIN devices d ON d.id = t.device_id WHERE t.access_token = $1` | 36,752 | 869.8 |
+| 4 | `BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED` | 22,129 | 96.8 |
+| 5 | `SELECT id FROM local_users WHERE guid = $1` | 22,123 | 2,471.7 |
+
+#### 8.5.4 头号慢查询执行计划（`pgss-top1-explain.out` 要点）
+
+```
+EXPLAIN (ANALYZE, BUFFERS, COSTS OFF, TIMING OFF)
+SELECT count(DISTINCT A.presentation_unique_key) FROM media_items A;
+
+ Aggregate (actual rows=1.00 loops=1)
+   Buffers: shared hit=14190 read=47339, temp read=406 written=407
+   ->  Sort (actual rows=195252.00 loops=1)
+         Sort Key: a.presentation_unique_key
+         Sort Method: external merge  Disk: 3248kB     <-- 落盘排序
+         ->  Append (actual rows=195252.00 loops=1)
+               ->  Seq Scan on media_items_folders  a_1 (actual rows=150.00)
+               ->  Seq Scan on media_items_movies   a_2 (actual rows=60000.00)
+               ->  Seq Scan on media_items_series   a_3 (actual rows=3000.00)
+               ->  Seq Scan on media_items_seasons  a_4 (actual rows=12000.00)
+               ->  Seq Scan on media_items_episodes a_5 (actual rows=120000.00)
+               ->  Seq Scan on media_items_audio    a_6 (actual rows=0.00)
+               ->  Seq Scan on media_items_books    a_7 (actual rows=0.00)
+               ->  Seq Scan on media_items_other    a_8 (actual rows=102.00)
+ Planning Time: 12.301 ms
+ Execution Time: 1174.540 ms
+```
+
+**8 个分区全 Seq Scan + 195,252 行 external merge 落盘排序**，只为了数一遍不同的
+presentation_unique_key。这条查询 §2 的 EXPLAIN 矩阵（50 分支 / 10k 数据）没覆盖到，
+量级远超当年任何分支（当年最慢 118.5ms，且后来证明是 fixture 假象）。
+
+#### 8.5.5 新优化候选（超出本任务范围，登记待办）
+
+| # | 候选 | 依据 | 备注 |
+|---|---|---|---|
+| N1 | `count(DISTINCT presentation_unique_key)` 消除全表扫+落盘排序 | §8.5.4 | 236 calls 吃掉 57% PG 时间。若能缓存或改用近似/索引，收益最大 |
+| N2 | `activity_log_types` INSERT..ON CONFLICT 高频化 | §8.5.1 #2 | 14,750 calls / 691ms。看着像每条日志都重查一次类型表，应缓存 |
+| N3 | `count(*) WHERE A.type IN` 调用 16,948 次 | §8.5.1 #3 | 与 §7.5 的 count-per-folder TTL 是同一族，TTL 可能没覆盖到这个调用点 |
+| N4 | `DISCARD ALL` 125,430 次 | §8.5.3 #1 | 连接层开销，绝对时间小（1.9s）但次数异常，值得查是否有连接未复用 |
+
+### 8.6 复现步骤（Release 口径）
+
+```powershell
+# 0. 前置（一次性）
+$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
+# PG 18 已在 localhost:5432，pg_stat_statements 已启用
+
+# 1. 小规模 A/B 对比库（471 条目，秒级）
+powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1
+powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag debug   -Seconds 15
+powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag release -Seconds 15
+
+# 2. 全量口径库（195k 条目，灌库 ~5.6 分钟）
+powershell -ExecutionPolicy Bypass -File tests\perf\setup-perf-db.ps1 -Fixture tree-100k
+powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag release -Db openmedia_perf -User perf-user-001 -Seconds 20
+
+# 3. 慢查询 Top-20（三口径 + 头号 EXPLAIN）
+powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
+```
+
+### 8.7 CI 与容器化（首次建立）
+
+- `.github/workflows/ci.yml`：`build(Release, 含 VSTHRD 门禁)` → `test(unit + 3 PG 集成)` → `web(pnpm type-check + build-only)` → `perf-smoke(471 条目 fixture + 冒烟负载, **无硬阈值门禁**, P95 上 job summary)`
+- `.github/workflows/ci.yml` 内独立 `docker` workflow：`workflow_dispatch` 手动触发，buildx amd64+arm64
+- `Dockerfile`：四阶段（node:24 构建 web/dist → 锁版本静态 ffmpeg → dotnet sdk:10.0 publish → aspnet:10.0 运行时）
+- ⚠️ **web/dist 托管缺口**：`MediaBrowser.Server.csproj` 无任何引用 `web/dist` 逻辑（已 grep），
+  镜像里 web 只放备用路径 `/opt/openmedia/web` 并标注"待人接线"，根路径仍是旧 dashboard-ui。
+  详见 ADR D5
+- 本机无 docker，所以镜像构建 job 本机不可跑；CI 其余 3 个 job 本机可等价复现（清单见 ci.yml 末尾）
