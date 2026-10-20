@@ -70,13 +70,22 @@ const isAdminContext = computed(() => {
 /** 库页：老页面 page-withFullDrawer 语境（docked 侧栏） */
 const hasFullDrawer = computed(() => router.currentRoute.value.name === 'library')
 /**
- * docked 语境 = 页面根节点带 page-withFullDrawer 的那些页：库页 / 详情 / 搜索 / 设置 / 后台。
+ * docked 语境 = 页面根节点带 page-withFullDrawer 的那些页：库页 / 搜索 / 设置 / 后台。
  * 这些页在 ≥60em 被老 CSS 固定左偏移，侧栏必须常驻，否则左边空一条；
- * 首页（HomeView 已换成全出血的 .s-home）与人物页（无 page-withFullDrawer）走覆盖式抽屉。
+ * 首页（HomeView 已换成全出血的 .s-home）、人物页（无 page-withFullDrawer）与**详情页**走覆盖式抽屉。
+ *
+ * 详情页（/item/:id，电影/剧集/分集同一个路由）曾经也在 docked 名单里，是照抄 Emby 的保真行为。
+ * 产品决策明确覆盖它 —— 用户原话：
+ *   「虽然 Emby 是常驻的 但是我觉得 你都进入详情页和集详情页了 侧边栏应该收起的 不然没有沉浸感」
+ * 所以 `name === 'item'` 已从这里摘除：进详情页侧栏收起，改由顶栏汉堡打开覆盖式抽屉。
+ * 同时生效的还有 ItemDetailView 侧（三个 <main> 去掉 page-withFullDrawer / page-withDockedDrawer）——
+ * 两处必须同时落地，否则会出现「侧栏不常驻、但页面仍给侧栏留了 248px」的空沟。
+ * 连带效果（都是期望内的）：html 不再挂 withFullDrawer、抽屉关闭时 inert、
+ * 顶栏 `.s-header.is-docked .s-header__menu{display:none}` 失效 → 汉堡在详情页变得可见。
  */
 const isDocked = computed(() => {
   const name = String(router.currentRoute.value.name ?? '')
-  return hasFullDrawer.value || name === 'item' || name === 'search' || isAdminContext.value
+  return hasFullDrawer.value || name === 'search' || isAdminContext.value
 })
 
 /**

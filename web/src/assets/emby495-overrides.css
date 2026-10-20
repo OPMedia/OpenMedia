@@ -61,3 +61,120 @@
     width: calc(93vw / max((var(--backdrop-cards) + var(--user-cards-size-adjust)), 1));
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ③ 横向行「左右滑动」圆钮 —— 压比例 + 换中性玻璃配色
+   ─────────────────────────────────────────────────────────────────────────────
+   vendor 原样(modules__emby-elements__emby-scrollbuttons__emby-scrollbuttons.css,
+   @media (pointer:fine) 块内):
+     .emby-scrollbuttons{font-size:1.9em}
+     .emby-scrollbuttons-scrollbutton{background:#fff!important;color:#000!important;
+       border-radius:100em;padding:.2em;box-shadow:0 4px 5px…!important;margin:0 .25em}
+     .paper-icon-button-light>.md-icon{font-size:1.66956521739130434em}   ← 内层图标
+   实测(1600×900,/item/1310342 的 .seriesItemsSection,hover 后):
+     圆 57×57px、内层 .md-icon 45.7554px、墨迹 46×46 → icon/circle = 0.80,纯白底 + 巨大黑箭头。
+   这里压成 40px 中性玻璃圆 + 20px 图标(icon/circle = 0.50),配色走 --s-badge-* 令牌
+   (与 .s-badge 同源:两套主题下都是深色玻璃底 + 暖白墨,深浅主题都可读)。
+   vendor 的 background/color 带 !important,本层同样带 !important 覆盖
+   —— 已实测 getComputedStyle 确认生效,不是"写了就算"。
+   ⚠️ 不动 .scrollbuttoncontainer 的定位(bottom:15% / height:80% / align-items:center),
+      横向行的垂直居中来自它。
+   ⚠️ 这个类**不是"全站横向行共用"**(第一版注释写错了,已由独立验收实测更正):
+      `.emby-scrollbuttons-scrollbutton` 精确匹配在整个 app 里只出现在 /item/* 上
+      —— /item/1310342 有 4 个(剧集行 + 人物行各 back/fwd)、/item/1310344 与 /item/319159 各 2 个;
+      库页 **0 个**(/library/2000000002 的 53 张卡、/library/163982 的 60 张卡,横向行只有 .emby-scroller 容器)、
+      首页 **0 个**(首页用自有 .s-arrow 组件 ×8)、10 个演员页 **0 个**。
+      (坑:用宽松选择器 [class*="scrollbutton"] 会在演员页命中 2 个,那是
+       .emby-scrollbuttons-scroller 滚动容器包装,子按钮数为 0 —— 子串误命中,别被它骗。)
+      所以这条改动的影响面就是详情页这 8 颗,不存在"改一处全站变"的回归面。
+      对照:真机 Emby 首页该类有 54 个在用,first 实测 bg=rgb(255,255,255)/color=rgb(0,0,0)
+      /radius=2740.56px —— 厂商原始外观确实是"纯白底 + 黑箭头",与改动前一致。 */
+.emby-scrollbuttons-scrollbutton {
+  font-size: .73em; /* 父级 1.9em(27.4056px) → 20px 基准;下面 2em = 40px 圆 */
+  box-sizing: border-box;
+  width: 2em;
+  height: 2em;
+  padding: 0; /* vendor 的 .2em 内边距会把 40px 圆撑成 57px,必须压掉 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--s-badge-bg) !important;
+  color: var(--s-badge-ink) !important;
+  box-shadow: var(--s-shadow-card) !important;
+  border: 1px solid var(--s-line);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  /* hover 的 scale(1.1,1.1) 由 vendor 的 .emby-scrollbuttons-scrollbutton:hover 提供(特异性更高),此处只接管过渡 */
+  transition: transform var(--s-dur-fast) var(--s-ease-std);
+}
+
+/* 内层图标:1.66956521739130434em 来自 .paper-icon-button-light>.md-icon 与 .md-icon 基类,
+   而 .md-icon 自带的 .333em padding + .17em margin 会把墨迹盒撑到接近 2em、顶满整个圆。
+   这里连 padding/margin 一起归零,让墨迹 ≈ 1em ≈ 20px(该箭头字形墨迹实测 ≈ 1.0×font-size)。
+   选择器写到 (0,3,0),稳压 vendor 的 .paper-icon-button-light>.md-icon (0,2,0)。 */
+.emby-scrollbuttons .emby-scrollbuttons-scrollbutton > .md-icon {
+  font-size: 1em;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ④ 卡片悬浮「收藏」爱心墨迹居中(只动收藏钮,不碰 check/more/play)
+   ─────────────────────────────────────────────────────────────────────────────
+   根因(实测,非猜测):Material Symbols Rounded 的 favorite(U+E87D)墨迹整段坐在基线上方
+   (inkAscent 18 / inkDescent −3 @20.19px),而 .md-icon 是 line-height:1、.fab 是 align-items:center
+   —— 居中的是**行盒**而不是墨迹,所以爱心比同排图标高。
+   改前差分实测(库页卡 30.3px 按钮):墨迹盒中心偏高 0.50px、亮度质心偏高 1.66px;
+   同排 check(e86c)/more(e5d3)/play(e037) 实测偏差 0.00px —— 它们墨迹本来对称,**不能一起动**。
+   修法(第二版,第一版已被独立验收判为 no-op,过程留档见下):把字形包进一个
+   **不承载背景**的内层 span(.s-fabGlyph),transform 打在这个 span 上。
+   为什么第一版无效(⚠️ 重要教训,别重犯):
+     第一版写的是 .cardOverlayButton-fab[data-isfavorite]{transform:translateY(.5px)}。
+     这颗按钮的**圆形底就是它自己的 background**(实测 bg rgba(29,35,69,.7) + border-radius:50%,
+     不是在 .cardOverlayContainer 上 —— 当时写错了这个前提)。transform 作用于元素整体,
+     圆底和墨迹被**一起**搬走 → 墨迹相对圆心纹丝不动,一个像素都没改善。
+     更糟的是当时用 getBoundingClientRect() 当"按钮中心"做验收基准,而 rect **含 transform**
+     —— 拿移动后的框量移动后的墨迹,恒得 0,于是误判为"修好了"。
+     独立验收方用第三张"隐字形+隐背景"图独立定位圆心做 A/B 差分:实测 A−B = [0,0]。
+     **结论:给 transform 类修法做验收,基准必须是不随 transform 移动的东西。**
+   为什么也不走 padding / position(实测扫描 scratch/lead7/sweep-mechanisms.json:同一颗爱心、
+   同一 8× 裁剪框逐像素差分):padding +0.25/+0.5/+0.75px 三档的 on 图与 vendor 基线**逐字节相同**
+   (sha256 前缀 2ebf587f),墨迹中心纹丝不动;+1.0/+1.25px 才跳到另一档(39595c66),
+   中心从 −0.5px 直接翻到 +0.5px。即 Chromium 把文本基线吸附到整数 CSS px,可达值只有 ±0.5 两档,
+   永远进不了 ±0.25px。position:relative;top:.5px 同样被吸附(与 pad+1.0 逐字节相同)
+   → 布局手段全废,只有绘制期(transform)能给出亚像素位移。
+   真机同源:真实 Emby 4.9.5 同一字形实测 y = −0.5px,结构也一样(圆底挂在按钮自身、
+   border-radius:50%、padding .25em、line-height 1)——这是字体基线问题,不是本仓 CSS 写错;
+   但用户看着偏上,就按用户口径修到居中。
+   配套模板改动(只加一层不承载样式的包裹,各一行):
+     EmbyCard.vue        卡片悬浮层收藏钮   → <span class="s-fabGlyph">&#xe87d;</span>
+     ItemDetailView.vue  分集卡悬浮层收藏钮 → <span class="s-fabGlyph">{{ ICON_FAV }}</span>
+   代价与边界:布局盒、computed padding(.25em)、computed height(30.2812px) 全部不变,
+     按钮自身的 getBoundingClientRect() **不再移动**(第一版会让 rect.y 与命中区下移 0.5px,这版没有);
+     只有内层 span 的绘制位置下移 0.5px。
+   实测(8× 裁剪 + Pillow 差分,基准 = 按钮自身 rect,已不含 transform):
+     空心 dy = 0.00px;实心(FILL 1,只改 DOM 不写服务器)dy = 0.00px → 两态都居中;
+     反向 check / more / play 与本轮改动前 A/B 差分为 0,零误伤。
+     (play e037 的 x 方向 +1.9px 是 Material Symbols 对三角形的光学居中惯例,
+      真机 Emby 同一数值,与本轮无关,不动。)
+   选择器只命中带 data-isfavorite 的 .cardOverlayButton-fab 内的 .s-fabGlyph
+   (EmbyCard.vue 卡片爱心、ItemDetailView.vue 分集爱心);
+   详情页头部那颗 .btnUserRating 走的是另一套 DOM(.mainDetailButtons .btnUserRating .md-icon,
+   本来就有内层 <i>,直接对 <i> 做 transform 即可,不需要改模板),不受这条影响。 */
+.cardOverlayButton-fab[data-isfavorite] > .s-fabGlyph {
+  display: block;
+  /* 用 em 而不是写死 px:这个按钮族的几何全部按 font-size 等比缩放
+     (1.5em 见方 + .25em padding + line-height 1),墨迹相对行盒的偏移也必然等比。
+     .0195em = 0.3938px @20.1936px 字号。
+     定值依据(独立验收方 12 案例扫掠实测,scratch/lead7/verify7-heart3.json):
+       关掉位移时两处上下文(库页卡 30.3px / 详情页分集卡 34.3px)的固有偏移**都是 −0.5px**,
+       施加 0.3938px 后两处残余**都是 −0.125px** —— 唯一取值,
+       跨 6 个滚动位置(0/300/700/1200 × 400)零波动,12/12 通过。
+     ⚠️ 这里**不是锯齿**:transform 是绘制期位移、不参与布局,所以不受 Chromium
+        「文本基线吸附到整数 CSS px」影响 —— 而第一版用布局手段(padding / position:relative;top)
+        时正是被这个吸附吃掉的(见下)。因此单一常数是稳的,不会随滚动位置漂移。
+     ⚠️ −0.125px 恰好是一个测量量子(8× 裁剪 → 1/8 css px),真值落在 (−0.25, 0] 之间,
+        与 0 在测量分辨率下不可区分。取 0.5px(≈.0248em)残余会更贴近 0,但没有必要:
+        判据是 |dy| ≤ 0.25px,现值已稳稳在内,再动一次就要重跑一轮验收。 */
+  transform: translateY(.0195em);
+}

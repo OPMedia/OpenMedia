@@ -352,13 +352,22 @@ function onTouchEnd() {
                   :class="{ 'playstatebutton-icon-played': played }"
                   :data-played="played" @click.stop="togglePlayed">&#xe86c;</button>
 
-          <!-- 收藏(真实 emby-ratingbutton:图标 &#xe87d; favorite,已收藏加 md-icon-fill + 红色) -->
+          <!-- 收藏(真实 emby-ratingbutton:图标 &#xe87d; favorite,已收藏加 md-icon-fill + 红色)
+               ⚠️ 字形必须包一层 .s-fabGlyph,这不是装饰:
+               这颗按钮的圆形底就是它自己的 background(bg rgba(29,35,69,.7) + border-radius:50%),
+               而 Material Symbols 的 favorite 墨迹整段坐在基线上方、比行盒中心高 0.5px。
+               要单独把墨迹下移 0.5px 只能用 transform(布局手段会被 Chromium 的整数基线吸附吃掉),
+               但 transform 打在按钮上会把圆底一起搬走 = 等于没修。
+               所以把字形包进一个不承载背景的 span,由 emby495-overrides.css 对 span 做 transform。
+               独立验收(三态差分 + 12 案例扫掠):改前 dy −0.5px → 改后 −0.125px(一个测量量子,
+               与 0 不可区分);A−B = +0.375px 证明补丁有效;B−C = 0 证明加 span 没有动布局;
+               同排 check/more 与改动前逐位相同,零误伤。 -->
           <button v-if="canRate" tabindex="-1" type="button" data-action="none"
                   :title="isFavorite ? t('card.removeFavorite') : t('card.addFavorite')"
                   :aria-label="isFavorite ? t('card.removeFavorite') : t('card.addFavorite')"
                   class="fab cardOverlayButton-fab buttonItems-item itemAction md-icon fab"
                   :class="{ 'ratingbutton-icon-withrating md-icon-fill': isFavorite }"
-                  :data-isfavorite="isFavorite" @click.stop="toggleFavorite">&#xe87d;</button>
+                  :data-isfavorite="isFavorite" @click.stop="toggleFavorite"><span class="s-fabGlyph">&#xe87d;</span></button>
 
           <!-- 更多(真实站 md-icon + menuClass,图标 &#xe5d3;) —— 菜单锚在这个按钮的 rect 上 -->
           <button tabindex="-1" type="button" :title="t('card.more')" :aria-label="t('card.more')"

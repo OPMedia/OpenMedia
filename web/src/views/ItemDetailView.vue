@@ -8,7 +8,7 @@
 import { ref, computed, onMounted, nextTick, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import type { BaseItemDto, BaseItemPerson } from '@/api/types'
+import type { BaseItemDto, BaseItemPerson, MediaSourceInfo, MediaStream } from '@/api/types'
 import { getItem, getSeasons, getEpisodes, getSimilarItems, markPlayed, markFavorite, imageUrl, cardArtUrl, personArtUrl, backdropUrl, updateItem, uploadItemImage, deleteItemImage } from '@/api/endpoints'
 import { showToast } from '@/api/toast'
 import { useAuthStore } from '@/stores/auth'
@@ -156,8 +156,28 @@ onMounted(() => void load())
  * （不是 404；全站 13739 条真实条目里 1931 条没有 Primary）。
  * `cardArtUrl` 没有 tag 时返回空串，模板据此不渲染 <img>，绝不发这次必然 5xx 的请求。
  */
+/**
+ * 封面槽形状 —— 由**条目自己的图片比例**决定，绝不能对全类型写死。
+ *
+ * 真机 4.9.5.0 字段实测（`/emby/Users/{uid}/Items/{id}?Fields=PrimaryImageAspectRatio`）：
+ *   · 分集 6/6 = **1.7777777777777777**（16:9，视频截帧）
+ *   · 剧集 / 电影 = **0.6666666666666666**（2:3 海报）
+ * 改前这里对所有类型写死 `detailImageContainer-portrait` + `cardPadder-portrait`，
+ * 于是分集的 16:9 封面被 `coveredImage` 硬裁进 2:3 的框：容器实测 **339×492（0.688）**，
+ * 而 `<img>` 本体 `naturalWidth/Height = 375×211（1.777）`
+ * —— 这就是用户报的「集封面图不是横图，还是海报的竖图比例」。
+ *
+ * 阈值 1.1：真机只出现过 0.6667 / 1.7778 两个值，取中间值对噪声最宽容。
+ */
+const heroWide = computed(() => (item.value?.PrimaryImageAspectRatio ?? 0) > 1.1)
+/** vendor 的两套槽位类名后缀：portrait = 2:3 竖版卡，backdrop = 16:9 横版卡 */
+const heroShape = computed(() => (heroWide.value ? 'backdrop' : 'portrait'))
+
 const posterSrc = computed(() =>
-  cardArtUrl(item.value, 'portrait', { maxWidth: 375, maxHeight: 563, quality: 90 }))
+  heroWide.value
+    // 横版槽位：图源也换 backdrop 回退链（分集自己没 Primary 时退父级剧照，而不是硬塞系列海报）
+    ? cardArtUrl(item.value, 'backdrop', { maxWidth: 640, maxHeight: 360, quality: 90 })
+    : cardArtUrl(item.value, 'portrait', { maxWidth: 375, maxHeight: 563, quality: 90 }))
 
 /**
  * 分集卡（16:9 横版）图源。原实现无条件拼 `ep.Id` 的 Primary —— 真机上这是最大的 5xx 来源：
@@ -177,6 +197,129 @@ function personArt(p: BaseItemPerson): string | undefined {
 // （真实 Emby：BackdropImageTags 为空数组，另有 ParentBackdropItemId/ParentBackdropImageTags）。
 // backdropUrl 内部已处理这条回退链，没有大图时返回空串。
 const backdropSrc = computed(() => backdropUrl(item.value, { maxWidth: 1600 }))
+
+// ---------- 「媒体信息」区：媒体源规格 ----------
+/**
+ * 真机 `MediaStream` 上确实带 `Profile` / `VideoRange` / `RealFrameRate` / `Bitrate`
+ * （4.9.5 实测分集 1310344：`hevc` `Main 10` `SDR` `25` `15736639`），
+ * 但 `types.ts` 的 `MediaStream` 尚未声明这几个字段。
+ * 沿用 `endpoints.ts` 里 `ItemWithSeriesPoster` 的同一手法：结构化窄化读取，
+ * 不用 `any`，也不去改别人的文件。
+ */
+type StreamProbe = MediaStream & {
+  Profile?: string
+  VideoRange?: string
+  RealFrameRate?: number
+  Bitrate?: number
+}
+
+/**
+ * 「媒体信息」区改前只有 `ms.Path` + `Container` + `Size` + 添加时间，而且容器名直接
+ * 拼在路径后面渲染成 `…S01E01.mp4MP4  2.8 GB`；真机分集 1310344 有 **7 个 MediaSource**，
+ * 每个都带完整 `MediaStreams`（Video hevc 3840×1776 Main 10 SDR 25fps 15.7Mbps /
+ * Audio aac LC 2ch chi），这些字段一个都没用上 —— 用户说的「媒体信息没有做好」就是这里。
+ */
+interface MsSpec { label: string; value: string }
+
+/** 分辨率档位：按**宽边**归类。真机分集 1310344 实测 3840×1776（4K 宽银幕），
+ *  若按短边算会被归成 1080p —— 与同一条目自己的 `ms.Name`（"4K · 25fps · SDR"）自相矛盾。 */
+function resTier(w?: number, h?: number): string {
+  const width = w ?? 0
+  if (!width) return h ? `${h}p` : ''
+  if (width >= 3400) return '4K'
+  if (width >= 2400) return '2K'
+  if (width >= 1800) return '1080p'
+  if (width >= 1200) return '720p'
+  if (width >= 800) return '480p'
+  return `${width}p`
+}
+
+/** 码率 → `15.7 Mbps`（Bitrate / BitRate 都是 bit/s） */
+function bitrateText(bps?: number | null): string {
+  if (!bps || bps <= 0) return ''
+  return bps >= 1_000_000 ? `${(bps / 1_000_000).toFixed(1)} Mbps` : `${Math.round(bps / 1000)} kbps`
+}
+
+/** 语言码 → 中文名（只覆盖真机上见得到的；认不出原样返回，不吞信息） */
+const LANG_NAMES: Record<string, string> = {
+  chi: '中文', zho: '中文', eng: '英语', jpn: '日语', kor: '韩语',
+  fra: '法语', deu: '德语', spa: '西班牙语', rus: '俄语',
+}
+/** `und`（未定义）不渲染成"未标注"——那是噪声，不是信息 */
+function langText(code?: string): string {
+  if (!code || code.toLowerCase() === 'und') return ''
+  return LANG_NAMES[code.toLowerCase()] ?? code
+}
+
+/** 声道数 → `2.0` / `5.1`（Emby 的 Channels 是声道总数） */
+function channelText(ch?: number): string {
+  if (!ch || ch <= 0) return ''
+  if (ch === 1) return '1.0'
+  if (ch === 2) return '2.0'
+  if (ch === 6) return '5.1'
+  if (ch === 8) return '7.1'
+  return `${ch}ch`
+}
+
+function streamsOf(ms: MediaSourceInfo): StreamProbe[] {
+  return (ms.MediaStreams ?? []) as StreamProbe[]
+}
+function videoOf(ms: MediaSourceInfo): StreamProbe | undefined {
+  return streamsOf(ms).find((s) => s.Type === 'Video')
+}
+function audioOf(ms: MediaSourceInfo): StreamProbe | undefined {
+  const a = streamsOf(ms).filter((s) => s.Type === 'Audio')
+  return a.find((s) => s.IsDefault) ?? a[0]
+}
+function subtitleCount(ms: MediaSourceInfo): number {
+  return streamsOf(ms).filter((s) => s.Type === 'Subtitle').length
+}
+
+/**
+ * 一台媒体源的规格徽章。顺序 = 用户关心程度：
+ * 容器 → 分辨率 → 视频编码 → 动态范围 → 帧率 → 码率 → 音频 → 字幕 → 体积。
+ * `MediaStreams` 缺失时只出容器/码率/大小，绝不渲染 `undefined`。
+ */
+function msSpecs(ms: MediaSourceInfo): MsSpec[] {
+  const out: MsSpec[] = []
+  const v = videoOf(ms)
+  const a = audioOf(ms)
+  const c = (ms.Container ?? '').toUpperCase()
+  if (c) out.push({ label: '容器', value: c })
+  if (v?.Width && v.Height) {
+    const tier = resTier(v.Width, v.Height)
+    out.push({ label: '分辨率', value: `${v.Width}×${v.Height}${tier ? ` · ${tier}` : ''}` })
+  }
+  if (v?.Codec) out.push({ label: '视频', value: [v.Codec.toUpperCase(), v.Profile].filter(Boolean).join(' ') })
+  // SDR 也显式标出：否则「没有 HDR 标识」和「没解析到」看起来一模一样。
+  // 去内部空格：这台服务器把 HDR10 存成字面量 "HDR 10"（7 个源实测 3 个是 "HDR 10"），
+  // 而真实 Emby 网页端显示的是 "HDR10" —— 只做空格归一，不改写语义。
+  if (v?.VideoRange) out.push({ label: '动态范围', value: v.VideoRange.replace(/\s+/g, '').toUpperCase() })
+  if (v?.RealFrameRate) out.push({ label: '帧率', value: `${Math.round(v.RealFrameRate)}fps` })
+  const br = bitrateText(v?.Bitrate ?? ms.Bitrate)
+  if (br) out.push({ label: '码率', value: br })
+  if (a) {
+    const spec = [
+      langText(a.Language),
+      (a.Codec ?? '').toUpperCase(),
+      channelText(a.Channels),
+      a.IsDefault ? '默认' : '',
+    ].filter(Boolean).join(' ')
+    if (spec) out.push({ label: '音频', value: spec })
+  }
+  const subs = subtitleCount(ms)
+  out.push({ label: '字幕', value: subs ? `${subs} 条` : '无字幕' })
+  if (ms.Size) out.push({ label: '大小', value: formatSize(ms.Size) })
+  return out
+}
+
+/** 文件名（去掉目录与 query）；缺 Path 时回退版本名 —— 不要把完整 URL 当可见文本铺出来 */
+function fileNameOf(ms: MediaSourceInfo): string {
+  const p = (ms.Path ?? '').split('?')[0]
+  if (!p) return ms.Name ?? ''
+  const seg = p.split(/[\\/]/).filter(Boolean)
+  return seg[seg.length - 1] ?? p
+}
 
 /** 全局 backdrop 层(真实站详情页顶部暗背景由 body 级 backdropContainer 提供) */
 watchEffect(() => {
@@ -542,10 +685,15 @@ function libIcon(): string {
          壳上那一串 class 与正常态逐字相同，所以三种状态互相切换时布局零位移。 -->
     <main
       v-if="loading"
-      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x"
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page focuscontainer-x"
       aria-busy="true"
     >
       <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
+        <!-- 骨架屏的海报槽固定按 2:3 画（loading 态还拿不到 item，无从判断形状），
+             分集进来后会换成 16:9 的 detailImageContainer-backdrop。
+             这是本页唯一一处「形状会变」的地方：真机首屏关键路径只有 getItem 一个请求
+             （实测 630ms），所以这段占位通常只活半秒左右；换来的是电影/剧集（多数）零跳变。
+             三态（loading / notFound / item）的壳 class 逐字相同，跳变只发生在海报槽内部。 -->
         <div class="s-detailSkeleton" role="status">
           <div class="s-detailSkeleton-hero">
             <div class="s-detailSkeleton-poster"></div>
@@ -567,14 +715,14 @@ function libIcon(): string {
     </main>
     <main
       v-else-if="notFound"
-      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x"
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page focuscontainer-x"
     >
       <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
         <div class="page-error">{{ t('item.notFound') }}</div>
       </div>
     </main>
     <template v-else-if="item">
-      <main class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x">
+      <main class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page focuscontainer-x">
         <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
           <div class="topDetailsContainer flex flex-direction-row verticalSections-item">
             <div class="item-fixed-side padded-left padded-left-page hide flex flex-direction-column flex-shrink-zero">
@@ -587,10 +735,10 @@ function libIcon(): string {
               <div class="detailMainContainerParent verticalSections verticalSections-condensed detailMainContainerParent-fade">
                 <div class="padded-left padded-left-page padded-right verticalSection detailMainContainer flex flex-direction-row align-items-flex-start detailMainContainer-withbackdrop detailMainContainer-withitembackdrop">
                   <!-- 海报 -->
-                  <div class="detailImageContainer detailImageContainer-main flex flex-direction-column justify-content-center itemsContainer detailImageContainer-hidemobile detailImageContainer-portrait generalItemsContainer vertical-wrap">
-                    <div class="card portraitCard detailImageContainerCard card-hoverable">
+                  <div class="detailImageContainer detailImageContainer-main flex flex-direction-column justify-content-center itemsContainer detailImageContainer-hidemobile generalItemsContainer vertical-wrap" :class="'detailImageContainer-' + heroShape">
+                    <div class="card detailImageContainerCard card-hoverable" :class="heroWide ? 'backdropCard' : 'portraitCard'">
                       <div class="detailImageContainerCard-cardBox cardBox">
-                        <div data-action="none" class="itemAction cardContent cardImageContainer cardContent-background detailImage cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-portrait detailImage-transparent">
+                        <div data-action="none" class="itemAction cardContent cardImageContainer cardContent-background detailImage cardContent-bxsborder-fv coveredImage coveredImage-noScale detailImage-transparent" :class="'cardPadder-' + heroShape">
                           <!-- 没有图源时 posterSrc 为空串，用 v-if 整个不渲染 <img>：避免 src="" 让浏览器去请求页面本身。
                                但"不发请求"≠"没问题" —— 少了 <img> 之后这个 2:3 槽位里**什么都没有**，
                                实测变成一块纯色空白（不是品牌渐变）：
@@ -603,7 +751,7 @@ function libIcon(): string {
                           <div v-if="!posterSrc" class="s-card-fallback detailPosterFallback" aria-hidden="true"></div>
                           <img v-if="posterSrc" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="posterSrc" loading="lazy" decoding="async" />
                         </div>
-                        <div class="cardOverlayContainer itemAction cardPadder-portrait" data-action="none">
+                        <div class="cardOverlayContainer itemAction" :class="'cardPadder-' + heroShape" data-action="none">
                           <button tabindex="-1" type="button" title="播放" class="fab cardOverlayButton-fab buttonItems-item itemAction cardOverlayFab-primary button-hoveraccent md-icon md-icon-fill autortl" data-action="resume" @click="play()">{{ ICON_PLAY }}</button>
                           <div class="cardOverlayButton-br buttonItems"></div>
                         </div>
@@ -773,7 +921,11 @@ function libIcon(): string {
                         <button tabindex="-1" type="button" title="播放" class="fab cardOverlayButton-fab buttonItems-item itemAction cardOverlayFab-primary button-hoveraccent md-icon md-icon-fill autortl" data-action="play" @click.stop="play(ep.Id)">{{ ICON_PLAY }}</button>
                         <div class="cardOverlayButton-br buttonItems">
                           <button tabindex="-1" type="button" data-action="none" :title="ep.UserData?.Played ? '标记为未播放' : '标记为已播放'" class="fab cardOverlayButton-fab buttonItems-item itemAction md-icon fab playstatebutton-icon" :class="{ 'playstatebutton-icon-played': ep.UserData?.Played }" :data-played="String(!!ep.UserData?.Played)" @click.stop="toggleEpisodePlayed(ep)">{{ ICON_CIRCLE_CHECK }}</button>
-                          <button tabindex="-1" type="button" data-action="none" :title="ep.UserData?.IsFavorite ? '取消收藏' : '添加到收藏'" class="fab cardOverlayButton-fab buttonItems-item itemAction md-icon fab" :class="{ 'ratingbutton-icon-withrating md-icon-fill': ep.UserData?.IsFavorite }" :data-isfavorite="String(!!ep.UserData?.IsFavorite)" @click.stop="toggleEpisodeFavorite(ep)">{{ ICON_FAV }}</button>
+                          <!-- ⚠️ 字形包一层 .s-fabGlyph:圆底就在这颗按钮自身的 background 上,
+                               而 favorite 的墨迹比行盒中心高 0.5px;transform 打在按钮上会把圆底一起搬走
+                               (等于没修),只能打在不承载背景的内层 span 上。理由与实测见
+                               EmbyCard.vue 同一处注释与 emby495-overrides.css 的 ④ 段。 -->
+                          <button tabindex="-1" type="button" data-action="none" :title="ep.UserData?.IsFavorite ? '取消收藏' : '添加到收藏'" class="fab cardOverlayButton-fab buttonItems-item itemAction md-icon fab" :class="{ 'ratingbutton-icon-withrating md-icon-fill': ep.UserData?.IsFavorite }" :data-isfavorite="String(!!ep.UserData?.IsFavorite)" @click.stop="toggleEpisodeFavorite(ep)"><span class="s-fabGlyph">{{ ICON_FAV }}</span></button>
                           <button tabindex="-1" type="button" title="更多" class="md-icon fab cardOverlayButton-fab buttonItems-item itemAction" data-action="menu" @click.stop="openEpisodeMenu(ep)">{{ ICON_MORE }}</button>
                         </div>
                       </div>
@@ -855,17 +1007,26 @@ function libIcon(): string {
                   </div>
                 </div>
                 <div v-if="item.MediaSources?.length" class="verticalSection verticalSection-cards audioVideoMediaInfo">
-                  <h4 class="padded-left padded-left-page padded-right sectionTitle sectionTitle-cards mediaInfoHeader">{{ t('item.mediaInfo') }}</h4>
-                  <div class="mediaSources">
-                    <div v-for="ms in item.MediaSources" :key="ms.Id" class="mediaSource emby-scrollbuttons-scroller">
-                      <div class="padded-left padded-left-page padded-right">
-                        <div class="sectionTitle sectionTitle-cards secondaryText">
-                          <div>{{ ms.Path }}</div>
-                          <div class="mediaInfoItems">
-                            {{ (ms.Container ?? '').toUpperCase() }}<span class="mediaInfoItem">{{ formatSize(ms.Size) }}</span><span class="mediaInfoItem">{{ t('item.addedAt', { time: fmtDate(item.DateCreated) }) }}</span>
-                          </div>
-                        </div>
+                  <h4 class="padded-left padded-left-page padded-right sectionTitle sectionTitle-cards mediaInfoHeader">
+                    {{ t('item.mediaInfo') }}
+                    <span v-if="item.MediaSources.length > 1" class="s-msCount">共 {{ item.MediaSources.length }} 个版本</span>
+                  </h4>
+                  <div class="mediaSources s-msList padded-left padded-left-page padded-right">
+                    <div v-for="ms in item.MediaSources" :key="ms.Id" class="mediaSource s-msCard">
+                      <div class="s-msHead">
+                        <span class="s-msName">{{ ms.Name || fileNameOf(ms) }}</span>
+                        <span v-if="ms.Protocol === 'Http'" class="s-msChip">远程</span>
+                        <span v-else-if="ms.Protocol === 'Strm'" class="s-msChip">STRM</span>
                       </div>
+                      <!-- 完整路径只进 title：改前把整条 URL 当可见文本铺了 7 遍 -->
+                      <div class="s-msFile" :title="ms.Path || undefined">{{ fileNameOf(ms) }}</div>
+                      <div class="s-msSpecs">
+                        <span v-for="sp in msSpecs(ms)" :key="sp.label" class="s-msSpec">
+                          <span class="s-msSpecLabel">{{ sp.label }}</span>
+                          <span class="s-msSpecValue">{{ sp.value }}</span>
+                        </span>
+                      </div>
+                      <div class="s-msFoot">{{ t('item.addedAt', { time: fmtDate(item.DateCreated) }) }}</div>
                     </div>
                   </div>
                 </div>
@@ -1185,5 +1346,64 @@ function libIcon(): string {
   .s-detailSkeleton-main { padding-top: 0; }
   .s-detailSkeleton-row { flex-wrap: wrap; }
   .s-detailSkeleton-row span { flex: 0 0 calc((100% - 2 * var(--s-gutter-sm)) / 3); }
+}
+/* ============================================================================
+   「媒体信息」区（.audioVideoMediaInfo）
+   ============================================================================
+   改前实测（/item/1310344，7 个 MediaSource）：可见文本是一串
+   `http://127.0.0.1:8888/mp/…/….S01E01.mp4MP4  2.8 GB` ×7，分辨率 / 编码 / 码率 / 音频全无。
+   现在每个媒体源一张卡：版本名 + 文件名（完整路径进 title）+ 规格徽章 + 添加时间。 */
+.s-msCount {
+  margin-inline-start: 8px;
+  font-size: var(--s-fs-xs);
+  font-weight: var(--s-fw-regular);
+  color: var(--s-text-3);
+}
+.s-msList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.s-msCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-r-md);
+  background: var(--s-surface);
+}
+.s-msHead { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.s-msName { font-size: var(--s-fs-sm); font-weight: var(--s-fw-semibold); color: var(--s-text-1); }
+.s-msChip {
+  padding: 1px 6px;
+  border: 1px solid var(--s-line);
+  border-radius: var(--s-r-pill);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--s-text-3);
+}
+.s-msFile {
+  font-family: var(--s-font-mono);
+  font-size: var(--s-fs-xs);
+  color: var(--s-text-2);
+  overflow-wrap: anywhere;
+}
+.s-msSpecs { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.s-msSpec { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--s-fs-xs); color: var(--s-text-1); }
+.s-msSpecLabel { color: var(--s-text-3); }
+.s-msSpecValue { font-variant-numeric: tabular-nums; }
+.s-msFoot { font-size: var(--s-fs-xs); color: var(--s-text-3); }
+
+/* 收藏爱心（.btnUserRating）—— 字体墨迹并不等于行盒居中。
+   Material Symbols Rounded 的 favorite(U+E87D) 墨迹整段坐在基线上方
+   （实测 inkAscent 18 / inkDescent −3 @ font-size 20.19px），而 .md-icon 是
+   `line-height: 1` + 父级 `display:flex; align-items:center` ——
+   被居中的是**行盒**，不是**墨迹**，所以爱心看着偏上。
+   8 倍放大「隐藏字形前后取差」实测：墨迹盒中心比按钮中心高 1.44px（按钮 45.33px）、
+   亮度质心高 2.90px；同排 check(e86c) / more(e5d3) / play(e037) 实测 0.00px，
+   所以这里只下移收藏这一个图标，不碰其它。 */
+.mainDetailButtons .btnUserRating .md-icon {
+  transform: translateY(1.44px);
 }
 </style>
