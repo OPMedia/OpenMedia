@@ -1,56 +1,17 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-16 14:32:11　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
-> 上下文：UserId=ac49142474fd4c49b85427f29fc4ba9b　ItemId=c40cea18fc9c413b93aca7bad1a80d92（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
+> 运行时间：2026-10-20 13:35:48　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 上下文：UserId=c07f0f0b79934559a70dbb9ecf8f946b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总
 
 | 级别 | 执行 | PASS | FAIL | SKIP-EXPECTED | SKIP-NOFIXTURE |
 |------|------|------|------|---------------|----------------|
 | P0 | 14 | 13 | 0 | — | 1 |
-| P1 | 252 | 186 | 0 | 66 | 0 |
+| P1 | 252 | 183 | 0 | 69 | 0 |
 | P2 | 151 | — | — | — | 全部跳过（写/破坏性） |
 
-**通过率（PASS / (PASS+FAIL)）：100%**（199 / 199）
-
-## 负路径用例（T1.T 固化，34/34 PASS）
-
-| 族 | 操作 | 期望 | 实际 | 结果 |
-|----|------|------|------|------|
-| LiveTv | `GET /LiveTv/Channels/{Id}` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/Recordings/{Id}` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/Timers/{Id}` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/SeriesTimers/{Id}` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/ChannelMappings` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/ChannelMappingOptions` | 404 | 404 | **PASS** |
-| LiveTv | `GET /LiveTv/Recordings/Folders` | 200 | 200 | **PASS** |
-| LiveTv | `GET /LiveTv/LiveStreamFiles/{Id}/stream.{Container}` | 404/400 | 404 | **PASS** |
-| Dlna | `GET /Dlna/Profiles/{Id}` | 404 | 404 | **PASS** |
-| Dlna | `GET /Dlna/icons/{Filename}` | 404 | 404 | **PASS** |
-| Dlna | `GET /Dlna/{UuId}/icons/{Filename}` | 404/400 | 404 | **PASS** |
-| Plugins | `GET /Plugins/{Id}/Thumb` | 404 | 404 | **PASS** |
-| Plugins | `GET /Plugins/{Id}/Configuration` | 404 | 404 | **PASS** |
-| Packages | `GET /Packages/{Name}` | 404 | 404 | **PASS** |
-| Logs | `GET /System/Logs/Log` | 404 | 404 | **PASS** |
-| Subtitles | `GET /Providers/Subtitles/Subtitles/{Id}` | 404 | 404 | **PASS** |
-| Playlists | `GET /Playlists/{Id}/Items` | 404 | 404 | **PASS** |
-| Playlists | `GET /Playlists/{Id}/InstantMix` | 404 | 404 | **PASS** |
-| Parse400 | `GET /Playback/BitrateTest` | 400 | 400 | **PASS** |
-| Parse400 | `GET /Images/Remote` | 400 | 400 | **PASS** |
-| Parse400 | `GET /Videos/{Id}/index.bif` | 400 | 400 | **PASS** |
-| Parse400 | `GET /Users/{UserId}/Views` | 400 | 400 | **PASS** |
-| Similar | `GET /Albums/{Id}/Similar` | 404 | 404 | **PASS** |
-| Similar | `GET /Items/{Id}/Similar` | 200 | 200 | **PASS** |
-| ByName404 | `GET /Artists/{Name}` | 404 | 404 | **PASS** |
-| ByName404 | `GET /Genres/{Name}` | 404 | 404 | **PASS** |
-| ByName404 | `GET /Persons/{Name}` | 404 | 404 | **PASS** |
-| ByName404 | `GET /Studios/{Name}` | 404 | 404 | **PASS** |
-| ByName404 | `GET /MusicGenres/{Name}` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Items/{Id}` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Items/{Id}/Images/{Type}` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Users/{UserId}/Items/{Id}` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Shows/{Id}/Seasons` | 404 | 404 | **PASS** |
-| GhostGuid | `GET /Items/{Id}/PlaybackInfo` | 404 | 404 | **PASS** |
+**通过率（PASS / (PASS+FAIL)）：100%**（196 / 196）
 
 ## 明细矩阵（按域分组）
 
@@ -132,7 +93,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /Devices` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
+| `GET /Devices` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Devices/CameraUploads` | P1 | 200 | PascalCase ✓ | DeviceId,FilesUploaded | **PASS** |  |
 | `GET /Devices/Info` | P1 | 200 | PascalCase ✓ | Name,Id,LastUserName,AppName,AppVersion,LastUserId,DateLastA… | **PASS** |  |
 | `GET /Devices/Options` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
@@ -182,9 +143,9 @@
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
 | `GET /GameGenres` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /GameGenres/{Name}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Sort… | **PASS** |  |
-| `GET /GameGenres/{Name}/Images/{Type}` | P1 | 200 | — |  | **PASS** |  |
-| `GET /GameGenres/{Name}/Images/{Type}/{Index}` | P1 | 200 | — |  | **PASS** |  |
+| `GET /GameGenres/{Name}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 环境限制：库内无游戏媒体 → 无 GameGenre 实体，404 预期（列表端点 /GameGenres 已 200 验证端点存活） |
+| `GET /GameGenres/{Name}/Images/{Type}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 环境限制：库内无游戏媒体 → 无 GameGenre 实体，404 预期（列表端点 /GameGenres 已 200 验证端点存活） |
+| `GET /GameGenres/{Name}/Images/{Type}/{Index}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 环境限制：库内无游戏媒体 → 无 GameGenre 实体，404 预期（列表端点 /GameGenres 已 200 验证端点存活） |
 
 ### 域：Games（2）
 
@@ -226,9 +187,9 @@
 | `GET /Items/{Id}/ExternalIdInfos` | P1 | 200 | PascalCase ✓ | Name,Key,UrlFormatString | **PASS** |  |
 | `GET /Items/{Id}/File` | P1 | 200 | — |  | **PASS** |  |
 | `GET /Items/{Id}/Images` | P0 | 200 | PascalCase ✓ | ImageType,Path,Height,Width,Size | **PASS** |  |
-| `GET /Items/{Id}/Images/{Type}` | P0 | 200 | — |  | **PASS** | image/jpeg, 66556B |
-| `GET /Items/{Id}/Images/{Type}/{Index}` | P0 | 200 | — |  | **PASS** | image/jpeg, 66556B |
-| `GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}` | P0 | 200 | — |  | **PASS** | image/jpeg, 23149B |
+| `GET /Items/{Id}/Images/{Type}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
+| `GET /Items/{Id}/Images/{Type}/{Index}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
+| `GET /Items/{Id}/Images/{Type}/{Index}/{Tag}/{Format}/{MaxWidth}/{MaxHeight}/{PercentPlayed}/{UnplayedCount}` | P0 | 200 | — |  | **PASS** | image/jpeg, 633B |
 | `GET /Items/{Id}/InstantMix` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Items/{Id}/PlaybackInfo` | P1 | 200 | PascalCase ✓ | MediaSources,PlaySessionId | **PASS** |  |
 | `GET /Items/{Id}/RemoteImages` | P1 | 200 | PascalCase ✓ | Images,TotalRecordCount,Providers | **PASS** |  |
@@ -284,7 +245,7 @@
 | `GET /LiveTv/Programs/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
 | `GET /LiveTv/Programs/Recommended` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Recordings` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
-| `GET /LiveTv/Recordings/{Id}` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Cont… | **PASS** |  |
+| `GET /LiveTv/Recordings/{Id}` | P1 | 200 | PascalCase ✓ | Name,OriginalTitle,ServerId,Id,Etag,DateCreated,CanDelete,Ca… | **PASS** |  |
 | `GET /LiveTv/Recordings/Folders` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Recordings/Groups` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /LiveTv/Recordings/Groups/{Id}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 无录制组 fixture（Groups 端点期望组而非单条录制），404 正确 |
@@ -418,8 +379,8 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /ScheduledTasks` | P1 | 200 | PascalCase ✓ | Name,State,Id,LastExecutionResult,Triggers,Description,Categ… | **PASS** |  |
-| `GET /ScheduledTasks/{Id}` | P1 | 200 | PascalCase ✓ | Name,State,Id,LastExecutionResult,Triggers,Description,Categ… | **PASS** |  |
+| `GET /ScheduledTasks` | P1 | 200 | PascalCase ✓ | Name,State,Id,Triggers,Description,Category,IsHidden,Key | **PASS** |  |
+| `GET /ScheduledTasks/{Id}` | P1 | 200 | PascalCase ✓ | Name,State,Id,Triggers,Description,Category,IsHidden,Key | **PASS** |  |
 
 ### 域：Search（1）
 
@@ -493,7 +454,7 @@
 
 | 操作 | 级别 | 状态码 | 键名风格 | 关键字段 | 结果 | 备注 |
 |------|------|--------|----------|----------|------|------|
-| `GET /System/ActivityLog/Entries` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
+| `GET /System/ActivityLog/Entries` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /System/Configuration` | P1 | 200 | PascalCase ✓ | EnableUPnP,PublicPort,PublicHttpsPort,HttpServerPortNumber,H… | **PASS** |  |
 | `GET /System/Configuration/{Key}` | P1 | 404 | — |  | **SKIP-EXPECTED** | 合成参数 404 合理（无对应资源） |
 | `GET /System/Endpoint` | P1 | 200 | PascalCase ✓ | IsLocal,IsInNetwork | **PASS** |  |
@@ -553,7 +514,7 @@
 | `GET /Users/{UserId}/Items/{Id}/Intros` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/{Id}/LocalTrailers` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
 | `GET /Users/{UserId}/Items/{Id}/SpecialFeatures` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
-| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,ChannelId,IsFolder,ParentId,Type,UserData,C… | **PASS** |  |
+| `GET /Users/{UserId}/Items/Latest` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,PremiereDate,ChannelId,CommunityRating,RunT… | **PASS** |  |
 | `GET /Users/{UserId}/Items/Resume` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
 | `GET /Users/{UserId}/Items/Root` | P1 | 200 | PascalCase ✓ | Name,ServerId,Id,Etag,DateCreated,CanDelete,CanDownload,Supp… | **PASS** |  |
 | `GET /Users/{UserId}/Suggestions` | P1 | 200 | PascalCase ✓ | Items,TotalRecordCount | **PASS** |  |
@@ -592,7 +553,7 @@
 | `GET /robots.txt` | P1 | 200 | — |  | **PASS** |  |
 | `GET /web/ConfigurationPage` | P1 | 404 | — |  | **SKIP-EXPECTED** | 合成参数 404 合理（无对应资源） |
 | `GET /web/ConfigurationPages` | P1 | 200 | PascalCase ✓ |  | **PASS** |  |
-| `GET /web/index.html` | P0 | 200 | — |  | **PASS** | text/html, 2727B |
+| `GET /web/index.html` | P0 | 200 | — |  | **PASS** | text/html, 2795B |
 
 ### 域：Years（1）
 

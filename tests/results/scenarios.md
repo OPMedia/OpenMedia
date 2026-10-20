@@ -1,6 +1,6 @@
 ﻿# OpenMedia 功能场景测试报告
 
-> 运行时间：2026-10-15 22:00:01　基址：http://localhost:8096/emby　ServerId：980f922f49e84b8b8c7c9631964fa1c1　版本：3.5.3.0
+> 运行时间：2026-10-20 13:35:23　基址：http://localhost:8096/emby　ServerId：fd14d7a30f4d4ac1be068b8f9d9acdc8　版本：3.5.3.0
 
 **结果：PASS 21 / FAIL 0 / SKIP 1（共 22）**
 
@@ -8,7 +8,7 @@
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| GET /System/Info/Public | 200 + JSON | status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0 | **PASS** | Id 为 32 位无连字符 hex |
+| GET /System/Info/Public | 200 + JSON | status=200 id=fd14d7a30f4d4ac1be068b8f9d9acdc8 ver=3.5.3.0 | **PASS** | Id 为 32 位无连字符 hex |
 ## S1-启动向导
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
@@ -27,7 +27,7 @@
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
 | 测试媒体就绪（Movie1/Movie2 mkv+nfo+poster） | 文件存在 | 就绪 | **PASS** |  |
-| GET /Library/VirtualFolders | 200 | status=200 文件夹数=4（OpenMediaTests 存在=True） | **PASS** |  |
+| GET /Library/VirtualFolders | 200 | status=200 文件夹数=3（OpenMediaTests 存在=True） | **PASS** |  |
 | POST /Library/VirtualFolders（添加 OpenMediaTests） | — | 已存在，跳过（幂等） | **SKIP** |  |
 | POST /Library/Refresh（触发扫描） | 200/204 | status=204 | **PASS** |  |
 | 扫描出 2 部电影（轮询 /Items?Recursive=true） | ≥2 个 Movie 条目（≤120s） | count=2，耗时 0s | **PASS** |  |
@@ -43,8 +43,8 @@
 
 | 场景 | 期望 | 实际 | 结果 | 备注 |
 |------|------|------|------|------|
-| GET /web/index.html | 200 + text/html | status=200 type=text/html 2727B | **PASS** |  |
-| GET /web/index.html + Range: bytes=0-99 | 206 + Content-Range: bytes 0-99/N | status=206 content-range=bytes 0-99/2727 body=100B | **PASS** |  |
+| GET /web/index.html | 200 + text/html | status=200 type=text/html 2795B | **PASS** |  |
+| GET /web/index.html + Range: bytes=0-99 | 206 + Content-Range: bytes 0-99/N | status=206 content-range=bytes 0-99/2795 body=100B | **PASS** |  |
 | GET /emby/web/index.html（前缀克隆） | 200 + text/html | status=200 type=text/html | **PASS** |  |
 | GET /favicon.ico | 200 | status=200 type=image/vnd.microsoft.icon | **PASS** |  |
 | GET /robots.txt | 200 | status=200 type=text/plain | **PASS** |  |

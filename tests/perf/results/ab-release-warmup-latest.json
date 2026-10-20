@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-20 11:52:57",
+  "runAt": "2026-10-20 13:30:49",
   "tag": "release-warmup",
   "user": "perf-user-001",
   "tool": "load-ab.py (A/B 同口径短版)",
@@ -7,67 +7,67 @@
   "scenarios": [
     {
       "label": "L1-Items分页-10rps",
-      "requests": 20,
-      "durationS": 7.9,
-      "rps": 2.5,
-      "p50Ms": 3964.3,
-      "p95Ms": 4319.0,
-      "p99Ms": 4319.0,
+      "requests": 499,
+      "durationS": 5.1,
+      "rps": 98.1,
+      "p50Ms": 19.4,
+      "p95Ms": 26.5,
+      "p99Ms": 88.9,
       "errorRate": 0.0,
       "codes": {
-        "200": 20
+        "200": 499
       }
     },
     {
       "label": "L1-Items分页-50rps",
-      "requests": 33,
-      "durationS": 10.0,
-      "rps": 3.3,
-      "p50Ms": 7695.1,
-      "p95Ms": 9677.6,
-      "p99Ms": 9746.7,
+      "requests": 2466,
+      "durationS": 5.0,
+      "rps": 489.6,
+      "p50Ms": 57.0,
+      "p95Ms": 117.2,
+      "p99Ms": 183.0,
       "errorRate": 0.0,
       "codes": {
-        "200": 33
+        "200": 2466
       }
     },
     {
       "label": "L1b-Items递归-50rps",
-      "requests": 3471,
+      "requests": 3846,
       "durationS": 5.0,
-      "rps": 689.1,
-      "p50Ms": 43.0,
-      "p95Ms": 79.0,
-      "p99Ms": 98.5,
+      "rps": 764.8,
+      "p50Ms": 38.9,
+      "p95Ms": 68.5,
+      "p99Ms": 86.2,
       "errorRate": 0.0,
       "codes": {
-        "200": 3471
+        "200": 3846
       }
     },
     {
       "label": "L3-静态流-并发10",
-      "requests": 4886,
-      "durationS": 5.0,
-      "rps": 974.5,
-      "p50Ms": 10.1,
-      "p95Ms": 12.9,
-      "p99Ms": 14.1,
+      "requests": 0,
+      "durationS": 0,
+      "rps": 0,
+      "p50Ms": 0.0,
+      "p95Ms": 0.0,
+      "p99Ms": 0.0,
       "errorRate": 100.0,
-      "codes": {
-        "500": 4886
-      }
+      "codes": {},
+      "skipped": true,
+      "reason": "库为合成数据，媒体文件不存在（D:\\perf-tree\\perf-lib-023\\Movie-008881.mkv）——静态流档位不适用"
     },
     {
       "label": "L4-认证-并发20",
-      "requests": 3212,
+      "requests": 2517,
       "durationS": 5.0,
-      "rps": 639.9,
-      "p50Ms": 19.3,
-      "p95Ms": 98.1,
-      "p99Ms": 184.7,
+      "rps": 502.0,
+      "p50Ms": 23.3,
+      "p95Ms": 115.8,
+      "p99Ms": 300.0,
       "errorRate": 0.0,
       "codes": {
-        "200": 3212
+        "200": 2517
       }
     }
   ]

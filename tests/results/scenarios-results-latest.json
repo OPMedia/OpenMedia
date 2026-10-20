@@ -1,8 +1,8 @@
 ﻿{
-    "runAt":  "2026-10-15 22:00:01",
+    "runAt":  "2026-10-20 13:35:23",
     "baseUrl":  "http://localhost:8096",
     "apiBase":  "http://localhost:8096/emby",
-    "serverId":  "980f922f49e84b8b8c7c9631964fa1c1",
+    "serverId":  "fd14d7a30f4d4ac1be068b8f9d9acdc8",
     "serverVersion":  "3.5.3.0",
     "token":  "acquired",
     "summary":  {
@@ -16,7 +16,7 @@
                         "section":  "S0-预检",
                         "name":  "GET /System/Info/Public",
                         "expected":  "200 + JSON",
-                        "actual":  "status=200 id=980f922f49e84b8b8c7c9631964fa1c1 ver=3.5.3.0",
+                        "actual":  "status=200 id=fd14d7a30f4d4ac1be068b8f9d9acdc8 ver=3.5.3.0",
                         "status":  "PASS",
                         "notes":  "Id 为 32 位无连字符 hex"
                     },
@@ -72,7 +72,7 @@
                         "section":  "S3-媒体库",
                         "name":  "GET /Library/VirtualFolders",
                         "expected":  "200",
-                        "actual":  "status=200 文件夹数=4（OpenMediaTests 存在=True）",
+                        "actual":  "status=200 文件夹数=3（OpenMediaTests 存在=True）",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -136,7 +136,7 @@
                         "section":  "S5-静态资源",
                         "name":  "GET /web/index.html",
                         "expected":  "200 + text/html",
-                        "actual":  "status=200 type=text/html 2727B",
+                        "actual":  "status=200 type=text/html 2795B",
                         "status":  "PASS",
                         "notes":  ""
                     },
@@ -144,7 +144,7 @@
                         "section":  "S5-静态资源",
                         "name":  "GET /web/index.html + Range: bytes=0-99",
                         "expected":  "206 + Content-Range: bytes 0-99/N",
-                        "actual":  "status=206 content-range=bytes 0-99/2727 body=100B",
+                        "actual":  "status=206 content-range=bytes 0-99/2795 body=100B",
                         "status":  "PASS",
                         "notes":  ""
                     },
