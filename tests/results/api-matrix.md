@@ -1,6 +1,6 @@
 ﻿# OpenMedia API 矩阵测试报告
 
-> 运行时间：2026-10-20 13:35:48　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
+> 运行时间：2026-10-20 14:08:32　基址：http://localhost:8096/emby　认证：已认证（admin/空密码回退）
 > 上下文：UserId=c07f0f0b79934559a70dbb9ecf8f946b　ItemId=c3f6962891668fc8365e3dfaa24bb3ea（真实=True）　SessionId=29e9e0a447d57a2a7821b45e79ba36ed
 
 ## 汇总

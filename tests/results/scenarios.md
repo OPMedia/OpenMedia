@@ -1,6 +1,6 @@
 ﻿# OpenMedia 功能场景测试报告
 
-> 运行时间：2026-10-20 13:35:23　基址：http://localhost:8096/emby　ServerId：fd14d7a30f4d4ac1be068b8f9d9acdc8　版本：3.5.3.0
+> 运行时间：2026-10-20 14:06:33　基址：http://localhost:8096/emby　ServerId：fd14d7a30f4d4ac1be068b8f9d9acdc8　版本：3.5.3.0
 
 **结果：PASS 21 / FAIL 0 / SKIP 1（共 22）**
 
