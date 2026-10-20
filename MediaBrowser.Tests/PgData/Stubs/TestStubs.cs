@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -87,6 +87,69 @@ namespace MediaBrowser.Tests.PgData
             var p = Path.Combine(Path.GetTempPath(), "openmedia-test-" + Guid.NewGuid().ToString("N") + "-" + suffix);
             Directory.CreateDirectory(p);
             return p;
+        }
+    }
+
+    /// <summary>
+    /// 最小 ILocalizationManager：查询引擎的 GetCleanValue -> RemoveDiacritics 需要它。
+    /// 生产里由 ApplicationHost 注入 StringExtensions.LocalizationManager；测试里手工接上，
+    /// 否则 Tags/Genres/NameContains 分支直接 NullReferenceException。
+    /// </summary>
+    internal sealed class FakeLocalizationManager : MediaBrowser.Model.Globalization.ILocalizationManager
+    {
+        public MediaBrowser.Model.Globalization.CultureDto[] GetCultures()
+        {
+            return Array.Empty<MediaBrowser.Model.Globalization.CultureDto>();
+        }
+
+        public MediaBrowser.Model.Globalization.CountryInfo[] GetCountries()
+        {
+            return Array.Empty<MediaBrowser.Model.Globalization.CountryInfo>();
+        }
+
+        public MediaBrowser.Model.Entities.ParentalRating[] GetParentalRatings()
+        {
+            return Array.Empty<MediaBrowser.Model.Entities.ParentalRating>();
+        }
+
+        public int? GetRatingLevel(string rating)
+        {
+            return null;
+        }
+
+        public string GetLocalizedString(string phrase, string culture)
+        {
+            return phrase;
+        }
+
+        public string GetLocalizedString(string phrase)
+        {
+            return phrase;
+        }
+
+        public MediaBrowser.Model.Globalization.LocalizatonOption[] GetLocalizationOptions()
+        {
+            return Array.Empty<MediaBrowser.Model.Globalization.LocalizatonOption>();
+        }
+
+        public string RemoveDiacritics(string text)
+        {
+            return text ?? string.Empty;
+        }
+
+        public string NormalizeFormKD(string text)
+        {
+            return text ?? string.Empty;
+        }
+
+        public bool HasUnicodeCategory(string value, System.Globalization.UnicodeCategory category)
+        {
+            return false;
+        }
+
+        public MediaBrowser.Model.Globalization.CultureDto FindLanguageInfo(string language)
+        {
+            return null;
         }
     }
 }

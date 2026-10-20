@@ -29,7 +29,7 @@ namespace PgBatchWriteStress
     {
         private static readonly string ConnStr =
             Environment.GetEnvironmentVariable("OPENMEDIA_TEST_PGCONN")
-            ?? "Host=localhost;Port=15432;Database=openmedia;Username=postgres;Password=123456;" +
+            ?? "Host=localhost;Port=5432;Database=openmedia;Username=postgres;Password=123456;" +
                "Pooling=true;MaxPoolSize=100;CommandTimeout=30";
 
         private const string BatchSql = @"

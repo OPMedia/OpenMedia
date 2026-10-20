@@ -2353,6 +2353,75 @@ namespace Emby.Server.PgData
             return WithQueryGateAsync(ct => GetItemsCoreAsync(query, ct), cancellationToken);
         }
 
+        /// <summary>
+        /// 测试缝（Task B 差分 harness，ADR-0016）：生成 <see cref="GetItemsAsync"/> 会执行的
+        /// SQL 文本与绑定参数，但不打开任何连接、不打门、不查库。
+        ///
+        /// 为什么需要它：查询引擎有 130 个 where 分支，差分测试必须逐分支断言生成的
+        /// WHERE 谓词语义（而不是"跑一把看返回总数"）。没有这条缝，测试只能黑盒比对行集，
+        /// 无法定位是哪个分支翻译错。生产路径完全不走这里，语义零影响。
+        /// </summary>
+        internal async Task<(string Sql, IReadOnlyDictionary<string, object> Parameters)> BuildQuerySqlForTestAsync(
+            InternalItemsQuery query)
+        {
+            PrepareSimilarToQuery(query);
+
+            var selectText = BuildItemSelectText(query);
+            var fromText = " FROM media_items A";
+            var joinText = GetJoinUserDataText(query);
+
+            if (query.SimilarTo != null)
+            {
+                joinText += GetSimilarityJoinText();
+            }
+
+            // 注意：传入非 null command 才会真的绑参数（GetWhereClauses 的 cmd 参数控制 TryBind 是否执行）
+            var whereClauses = new List<string>();
+            var parameters = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            await using (var parameterCapture = new NpgsqlCommand())
+            {
+                whereClauses = GetWhereClauses(query, parameterCapture);
+                foreach (NpgsqlParameter p in parameterCapture.Parameters)
+                {
+                    parameters[p.ParameterName.TrimStart('@')] = p.Value;
+                }
+            }
+
+            var whereText = whereClauses.Count == 0
+                ? string.Empty
+                : " WHERE " + string.Join(" AND ", whereClauses.ToArray());
+
+            var orderByExpressions = GetOrderByExpressions(query);
+            var orderByText = BuildOrderByText(orderByExpressions);
+            var pagingText = BuildPagingText(query);
+
+            var distinctOnExpr = await GetDistinctOnExpressionAsync(query).ConfigureAwait(false);
+
+            var sql = distinctOnExpr == null
+                ? selectText + fromText + joinText + whereText + orderByText + pagingText
+                : BuildDistinctOnWrapper(
+                    selectText.Substring("SELECT ".Length),
+                    fromText + joinText + whereText,
+                    distinctOnExpr,
+                    orderByExpressions,
+                    pagingText,
+                    query);
+
+            // 查询级参数（UserId join + Similar + Search）在 GetWhereClauses 之外绑定，
+            // 差分 harness 需要看到全量绑定键，所以再走一次 BindQueryParameters 的纯 SQL 视图。
+            var bound = new Dictionary<string, object>(parameters, StringComparer.OrdinalIgnoreCase);
+            await using (var extra = new NpgsqlCommand(sql))
+            {
+                BindQueryParameters(extra, query);
+                foreach (NpgsqlParameter p in extra.Parameters)
+                {
+                    bound[p.ParameterName.TrimStart('@')] = p.Value;
+                }
+            }
+
+            return (sql, bound);
+        }
+
         private async Task<QueryResult<BaseItem>> GetItemsCoreAsync(InternalItemsQuery query, CancellationToken cancellationToken)
         {
             CheckDisposed();

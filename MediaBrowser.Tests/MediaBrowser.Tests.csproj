@@ -17,6 +17,11 @@
           CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Task B 查询引擎差分 fixture（query-diff-fixture.sql）以嵌入资源随程序集分发 -->
+  <ItemGroup>
+    <EmbeddedResource Include="PgData\QueryEngine\*.sql" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\src\MediaBrowser.Model\MediaBrowser.Model.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Common\MediaBrowser.Common.csproj" />
