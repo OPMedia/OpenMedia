@@ -86,7 +86,6 @@
     "playlists": "Playlists",
     "collections": "Collections",
     "me": "Me",
-    "searchPlaceholder": "Search movies, series…",
     "userMenu": "User menu",
     "theme": "Theme",
     "themeDark": "Dark",
@@ -210,9 +209,7 @@
     "serverGeneral": "General",
     "serverUsers": "Users",
     "serverLibraries": "Library",
-    "serverLiveTv": "Live TV",
     "serverNetwork": "Network",
-    "serverTranscode": "Transcoding",
     "serverDatabase": "Database",
     "serverSync": "Convert",
     "serverTasks": "Scheduled tasks",
@@ -390,7 +387,11 @@
     "typeSeries": "Series",
     "typeEpisode": "Episode",
     "empty": "No results found",
-    "title": "Search"
+    "title": "Search",
+    "history": "Search history",
+    "historyClear": "Clear history",
+    "historyEmpty": "No search history yet",
+    "historyRemove": "Remove this search entry"
   },
   "time": {
     "resumeAt": "{time}"

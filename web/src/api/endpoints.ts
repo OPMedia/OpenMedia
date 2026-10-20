@@ -100,9 +100,28 @@ export function getEpisodes(seriesId: string, userId: string, seasonId?: string)
   })
 }
 
-/** GET /Persons/{id}(人物页;真实站人物详情) */
-export function getPerson(personId: string, userId: string): Promise<BaseItemDto> {
-  return request<BaseItemDto>(`/Persons/${personId}`, { query: { UserId: userId } })
+/**
+ * GET /Persons/{name} —— 人物页详情。
+ *
+ * ⚠️ 真机 Emby 4.9.5.0 这个端点**只认 Name，不认 Id**（实测 2026-10-20，直连真机 A/B）：
+ *   · `GET /Persons/1257004?UserId=…` → **500** `Object reference not set to an instance of an object.`
+ *     （换 484617 / 480125 / 488310 / 1310342 同样 500，3 次重试一致）
+ *   · `GET /Persons/%E5%90%B3%E4%BD%B3%E7%8F%8AChia-Shan%20Wu?UserId=…` → **200**，
+ *     且响应里的 `Id` 与上一步传进去的 id 完全一致（1257004）
+ *   · `GET /Persons?Ids=1257004` → 200 但 **0 条**（这个查询参数在本服务器没用）
+ *
+ * 而 `PersonView` 的路由参数是 **id**，所以这里先用 `/Users/{uid}/Items/{id}` 换成 Name
+ * （实测 200，返回 `Type: "Person"` 且带 `ImageTags.Primary`），再用 Name 查详情。
+ * 调用方签名保持 `(personId, userId)` 不变，PersonView 不必知道这个转换；
+ * 多一次请求是有意的代价，换来人物页从"100% 打不开"变成能打开。
+ */
+export async function getPerson(personId: string, userId: string): Promise<BaseItemDto> {
+  const person = await getItem(userId, personId)
+  if (!person?.Name) {
+    // 不静默吞错：拿不到 Name 就无法按真机要求查询，必须让调用方看到
+    throw new Error(`getPerson: /Users/${userId}/Items/${personId} 未返回 Name，无法查询 /Persons/{name}`)
+  }
+  return request<BaseItemDto>(`/Persons/${encodeURIComponent(person.Name)}`, { query: { UserId: userId } })
 }
 
 /** POST /Items/{id}(编辑元数据;真实站 formdialog 保存动作) */
@@ -194,8 +213,23 @@ export function imageUrl(
   })
 }
 
-/** GET /Users/{id}/Images/Primary */
+/**
+ * GET /Users/{id}/Images/Primary —— 用户头像。
+ *
+ * ⚠️ 没有 `PrimaryImageTag` 时**返回空串，不拼 URL**（与 `backdropUrl` / `wideArtUrl` / `cardArtUrl` 同一范式）。
+ *
+ * 真机实测（Emby 4.9.5.0 + 本服务器账号 `zzz123`，2026-10-20）：
+ *   · 改前：`userImageUrl(uid, undefined)` 照样拼出 `/emby/Users/{uid}/Images/Primary?api_key=…`，
+ *     而本服务器账号**没有头像图** → 该请求恒定 **404**，并且它在**每一个页面**都会发一次
+ *     （首页 / 剧集库 / 详情页逐页各 1 条，逐页 `/Images/` 4xx+5xx 计数 = 1）。
+ *     404 会触发消费方的 `@error` → 仍然回落到 svg 占位，所以这次请求是纯浪费。
+ *   · 改后：逐页该请求 **0 条**、逐页 `/Images/` 4xx+5xx **0 条**，头像区仍显示 svg 占位（截图逐字节一致）。
+ *
+ * 调用方拿到空串时不要渲染 `src=""` 的 `<img>`（空 src 会对当前页面再发一次请求），走占位兜底。
+ * 全仓调用方只有 `App.vue` 的 `avatarSrc`（已确认）。
+ */
 export function userImageUrl(userId: string, tag?: string): string {
+  if (!tag) return ''
   return apiUrl(`/Users/${userId}/Images/Primary`, { tag })
 }
 
@@ -281,6 +315,87 @@ export function wideArtUrl(
 ): string {
   const a = wideArtOf(item)
   return a ? imageUrl(a.id, a.type, a.tag, opts) : ''
+}
+
+/**
+ * 卡片图源的真实归属 —— 卡片/列表缩略图的**唯一**入口。
+ *
+ * ⚠️ 为什么不能无条件请求 Primary（真机 Emby 4.9.5.0 实测，2026-10-20）：
+ * `/Items/{id}/Images/Primary` 在**条目没有 Primary 图**时返回 **HTTP 500**（不是 404），
+ * 对不存在的条目同样是 500。所以「先拼 URL，让 <img> 靠 onerror 兜底」这条思路在真机上不成立：
+ * 每一次这样的请求都是一条 5xx，而卡片只能显示渐变占位 —— 这就是真机数据下
+ * 「剧集库看着是空的」的直接根因。实测数字：
+ *   · 详情页「一个屋檐下」(Series 1256855)：100 集**全部没有 Primary**，改前进一次页面
+ *     打出 **99×500 + 1×502**，129 张卡里只有 29 张出图（22.5%）；
+ *   · 扫 80 个系列 / 2039 集：**1262 集（61.9%）没有 Primary**，而它们 100% 都能从
+ *     `SeriesPrimaryImageTag`（系列海报）或 `ParentBackdropImageTags`（父级剧照）拿到图；
+ *   · 全站 13739 条真实条目里 **1931 条没有 Primary**（1777 条有父级剧照可用）。
+ * 结论：**先看 tag，再拼 URL**。没有 tag 就返回 null / 空串，调用方走品牌渐变兜底，
+ * 绝不发这次必然 5xx 的请求。
+ *
+ * 回退链（顺序即优先级）：
+ *   · `backdrop`（16:9 横版卡）：自己的 Primary → 自己/父级 Backdrop → 系列海报
+ *   · `portrait` / `portrait-horiz`（2:3 竖版卡）：自己的 Primary → 系列海报
+ *     （竖版卡**不**退 Backdrop：16:9 剧照硬裁成 2:3 只剩中间一条，比占位图更难看）
+ * 都没有 → null。
+ */
+export interface CardArt {
+  /** 图片宿主条目 Id（剧集的海报挂在系列上，不等于 item.Id） */
+  id: string
+  type: 'Primary' | 'Backdrop'
+  tag?: string
+}
+
+/** 卡片形态（与 EmbyCard 的 shape prop 同一套取值，避免两边各写一份字符串字面量） */
+export type CardShape = 'portrait' | 'backdrop' | 'portrait-horiz'
+
+/**
+ * 真机 Episode DTO 上确实带 `SeriesPrimaryImageTag`（所属系列海报的 tag），
+ * 但 `types.ts` 的 `BaseItemDto` 尚未声明该字段（该文件不在本次改动范围）。
+ * 这里用结构化窄化读取：不用 `any`，也不去改别人的文件。
+ */
+type ItemWithSeriesPoster = BaseItemDto & { SeriesPrimaryImageTag?: string }
+
+export function cardArtOf(item: BaseItemDto | null | undefined, shape: CardShape = 'portrait'): CardArt | null {
+  if (!item) return null
+  // ① 自己的海报：有 tag 才请求
+  const ownPrimary = item.ImageTags?.Primary
+  if (ownPrimary) return { id: item.Id, type: 'Primary', tag: ownPrimary }
+  // ② 只有横版卡才退剧照：剧集/季自己的 BackdropImageTags 常是空数组，大图挂在父级系列上
+  if (shape === 'backdrop') {
+    const b = backdropOf(item)
+    if (b) return { id: b.id, type: 'Backdrop', tag: b.tag }
+  }
+  // ③ 再退系列海报：剧集自己没图时用所属系列的海报（tag 就在同一张 DTO 上，不需要额外请求）
+  const seriesTag = (item as ItemWithSeriesPoster).SeriesPrimaryImageTag
+  if (item.SeriesId && seriesTag) return { id: item.SeriesId, type: 'Primary', tag: seriesTag }
+  // ④ 真没有可用图源：返回 null，调用方走渐变兜底（不要请求）
+  return null
+}
+
+/** 卡片图 URL；没有可用图源时返回空串（调用方据此不渲染 <img>，绝不请求必然 5xx 的地址） */
+export function cardArtUrl(
+  item: BaseItemDto | null | undefined,
+  shape: CardShape = 'portrait',
+  opts: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+): string {
+  const a = cardArtOf(item, shape)
+  return a ? imageUrl(a.id, a.type, a.tag, opts) : ''
+}
+
+/**
+ * 人物头像 URL —— 同样遵守「没有 tag 就不请求」。
+ *
+ * 人物图的 tag 在 `BaseItemPerson.PrimaryImageTag` 上（**不在** `ImageTags` 里），
+ * 所以不能复用 cardArtOf。真机对没有头像的人物 `/Items/{id}/Images/Primary` 也是 500：
+ * 实测「一个屋檐下」16 位演员全部带 tag（全 200），缺 tag 就是 5xx —— 没有 tag 时返回空串走兜底。
+ */
+export function personArtUrl(
+  person: { Id: string; PrimaryImageTag?: string } | null | undefined,
+  opts: { maxWidth?: number; maxHeight?: number; quality?: number } = {},
+): string {
+  const tag = person?.PrimaryImageTag
+  return person && tag ? imageUrl(person.Id, 'Primary', tag, opts) : ''
 }
 // ---------- 管理后台(SPEC/api 管理面) ----------
 

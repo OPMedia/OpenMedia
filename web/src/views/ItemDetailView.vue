@@ -9,7 +9,7 @@ import { ref, computed, onMounted, nextTick, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto, BaseItemPerson } from '@/api/types'
-import { getItem, getSeasons, getEpisodes, getSimilarItems, markPlayed, markFavorite, imageUrl, backdropUrl, updateItem, uploadItemImage, deleteItemImage } from '@/api/endpoints'
+import { getItem, getSeasons, getEpisodes, getSimilarItems, markPlayed, markFavorite, imageUrl, cardArtUrl, personArtUrl, backdropUrl, updateItem, uploadItemImage, deleteItemImage } from '@/api/endpoints'
 import { showToast } from '@/api/toast'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
@@ -44,7 +44,12 @@ const loading = ref(true)
 const notFound = ref(false)
 const item = ref<BaseItemDto | null>(null)
 const similar = ref<BaseItemDto[]>([])
-const people = ref<{ Name: string; Role?: string; Id: string }[]>([])
+/**
+ * 人物列表。原声明是手写的窄类型 `{ Name; Role?; Id }`，把 `BaseItemPerson.PrimaryImageTag`
+ * 丢掉了 —— 而人物头像的 tag 恰恰只在这个字段上（不在 `ImageTags` 里）。
+ * 补回真实 DTO 类型，人物卡才能做到「没有 tag 就不请求」（见 personArtUrl 注释）。
+ */
+const people = ref<BaseItemPerson[]>([])
 
 // 剧集:季/分集(真实站形态:seasonTitle + 分集横排卡)
 const seasons = ref<BaseItemDto[]>([])
@@ -96,9 +101,30 @@ watch(currentSeasonId, () => void loadEpisodes())
 watch(() => route.params.id, () => void load())
 onMounted(() => void load())
 
+/**
+ * 海报图源 —— 走 `cardArtUrl`，**不能**无条件拼 Primary。
+ *
+ * 真机 Emby 4.9.5.0 对「没有 Primary 图」的条目 `/Items/{id}/Images/Primary` 返回 **HTTP 500**
+ * （不是 404；全站 13739 条真实条目里 1931 条没有 Primary）。
+ * `cardArtUrl` 没有 tag 时返回空串，模板据此不渲染 <img>，绝不发这次必然 5xx 的请求。
+ */
 const posterSrc = computed(() =>
-  item.value ? imageUrl(item.value.Id, 'Primary', item.value.ImageTags?.Primary, { maxWidth: 375, maxHeight: 563, quality: 90 }) : '',
-)
+  cardArtUrl(item.value, 'portrait', { maxWidth: 375, maxHeight: 563, quality: 90 }))
+
+/**
+ * 分集卡（16:9 横版）图源。原实现无条件拼 `ep.Id` 的 Primary —— 真机上这是最大的 5xx 来源：
+ * 详情页「一个屋檐下」100 集全部没有 Primary，改前一次进页 **99×500 + 1×502**。
+ * 走 `cardArtUrl(ep, 'backdrop')` 后退到父级剧照（ParentBackdropImageTags），100 集全部出图。
+ * 返回 undefined 而不是空串：Vue 会把 src 属性整个去掉，浏览器不会发任何请求，也不会画碎图图标。
+ */
+function epArt(ep: BaseItemDto): string | undefined {
+  return cardArtUrl(ep, 'backdrop', { maxWidth: 375, maxHeight: 212, quality: 90 }) || undefined
+}
+
+/** 人物卡图源：tag 在 `PrimaryImageTag` 上；没有 tag 就不请求（真机对无头像人物同样返回 500） */
+function personArt(p: BaseItemPerson): string | undefined {
+  return personArtUrl(p, { maxWidth: 300, maxHeight: 450, quality: 90 }) || undefined
+}
 // 背景大图不一定属于条目自己：剧集/季的 backdrop 挂在父级系列上
 // （真实 Emby：BackdropImageTags 为空数组，另有 ParentBackdropItemId/ParentBackdropImageTags）。
 // backdropUrl 内部已处理这条回退链，没有大图时返回空串。
@@ -340,6 +366,9 @@ function openPerson(p: BaseItemPerson) {
   router.push({ name: 'person', params: { id: p.Id }, query: p.Role ? { role: p.Role } : {} })
 }
 function openPersonMenu(p: BaseItemPerson) { personSheet.value = p }
+/** 人物面板头图（同上：没有 tag 就返回空串，模板不设 backgroundImage，不发那次必然 5xx 的请求） */
+const personSheetArt = computed(() =>
+  personSheet.value ? personArtUrl(personSheet.value, { maxWidth: 120, maxHeight: 180, quality: 90 }) : '')
 
 function filterByGenre(genre?: string) {
   if (!genre || !item.value) return
@@ -477,7 +506,17 @@ function libIcon(): string {
                     <div class="card portraitCard detailImageContainerCard card-hoverable">
                       <div class="detailImageContainerCard-cardBox cardBox">
                         <div data-action="none" class="itemAction cardContent cardImageContainer cardContent-background detailImage cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-portrait detailImage-transparent">
-                          <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="posterSrc" loading="lazy" decoding="async" />
+                          <!-- 没有图源时 posterSrc 为空串，用 v-if 整个不渲染 <img>：避免 src="" 让浏览器去请求页面本身。
+                               但"不发请求"≠"没问题" —— 少了 <img> 之后这个 2:3 槽位里**什么都没有**，
+                               实测变成一块纯色空白（不是品牌渐变）：
+                                 · /item/1142553、/item/1107398（自己无 Primary、父级无 Backdrop、无系列海报）
+                                   槽区 339×492，向下 4 层唯一带背景的是 .cardOverlayContainer 与 .fab 按钮，
+                                   容器本身 background-image: none / background-color: rgba(0,0,0,0)；
+                                   槽区逐像素 luma 标准差 0.49094、唯一颜色数 27（对照有图的 /item/1310342：70.12841 / 77520）。
+                               所以补一个同级占位层，用与 EmbyCard 缺图兜底**同一个令牌** --s-gradient-dusk。
+                               （不加 mark-white.svg：那会多一个网络请求，纯 CSS 渐变就够。） -->
+                          <div v-if="!posterSrc" class="s-card-fallback detailPosterFallback" aria-hidden="true"></div>
+                          <img v-if="posterSrc" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="posterSrc" loading="lazy" decoding="async" />
                         </div>
                         <div class="cardOverlayContainer itemAction cardPadder-portrait" data-action="none">
                           <button tabindex="-1" type="button" title="播放" class="fab cardOverlayButton-fab buttonItems-item itemAction cardOverlayFab-primary button-hoveraccent md-icon md-icon-fill autortl" data-action="resume" @click="play()">{{ ICON_PLAY }}</button>
@@ -642,7 +681,8 @@ function libIcon(): string {
                   <div v-for="ep in episodes" :key="ep.Id" class="card backdropCard card-horiz backdropCard-horiz card-hoverable card-autoactive" @click="goEpisode(ep)">
                     <div class="cardBox cardBox-touchzoom">
                       <button type="button" data-action="link" tabindex="-1" class="itemAction cardContent-button cardContent cardImageContainer cardContent-background cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-backdrop">
-                        <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="imageUrl(ep.Id, 'Primary', ep.ImageTags?.Primary, { maxWidth: 375, maxHeight: 212, quality: 90 })" loading="lazy" decoding="async" />
+                        <!-- 图源走 epArt（没图源就不请求，见其注释）；分集卡自己的 Primary 在真机上普遍缺失 -->
+                        <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="epArt(ep)" loading="lazy" decoding="async" />
                       </button>
                       <div class="cardOverlayContainer itemAction cardPadder-backdrop" data-action="link" @click.stop="goEpisode(ep)">
                         <button tabindex="-1" type="button" title="播放" class="fab cardOverlayButton-fab buttonItems-item itemAction cardOverlayFab-primary button-hoveraccent md-icon md-icon-fill autortl" data-action="play" @click.stop="play(ep.Id)">{{ ICON_PLAY }}</button>
@@ -691,7 +731,8 @@ function libIcon(): string {
                   <div v-for="p in people" :key="p.Id + p.Role" class="card portraitCard card-horiz portraitCard-horiz card-hoverable card-autoactive">
                     <div class="cardBox cardBox-touchzoom">
                       <button type="button" data-action="link" tabindex="-1" class="itemAction cardContent-button cardContent cardImageContainer cardContent-background cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-portrait" @click="openPerson(p)">
-                        <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="imageUrl(p.Id, 'Primary', undefined, { maxWidth: 300, maxHeight: 450, quality: 90 })" loading="lazy" decoding="async" />
+                        <!-- 图源走 personArt（tag 在 PrimaryImageTag 上；没 tag 就不请求，见其注释） -->
+                        <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="personArt(p)" loading="lazy" decoding="async" />
                       </button>
                       <div class="cardOverlayContainer itemAction cardPadder-portrait" data-action="link">
                         <div class="cardOverlayButton-br buttonItems">
@@ -879,7 +920,9 @@ function libIcon(): string {
         @close="personSheet = null"
       >
             <div class="actionsheetItemPreview flex flex-shrink-zero flex-direction-row">
-              <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="{ backgroundImage: personSheet ? `url(${imageUrl(personSheet.Id, 'Primary', undefined, { maxWidth: 120, maxHeight: 180, quality: 90 })})` : '' }"></div>
+              <!-- 人物面板头图：原实现无条件拼 Primary（tag 传 undefined）—— 真机对没有头像的人物返回 500。
+                   改走 personArtUrl：没 tag 返回空串，此时不设 backgroundImage，不发请求。 -->
+              <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="personSheetArt ? { backgroundImage: `url(${personSheetArt})` } : undefined"></div>
               <div class="actionsheetItemPreviewContent">
                 <div class="actionsheetItemPreviewText mediaInfoItems actionsheetItemPreviewText-main">
                   <div class="actionsheetPreviewTextItem mediaInfoItem">{{ personSheet?.Name }}</div>
@@ -906,6 +949,20 @@ function libIcon(): string {
 </template>
 
 <style scoped>
+/* 主海报缺图兜底。
+   `EmbyCard.vue` 里的 `.s-card-fallback` 是 **scoped** 样式（带 EmbyCard 的 data-v 属性），
+   到不了这个视图，所以这里的几何要自带一份；**渐变令牌共用** var(--s-gradient-dusk)，
+   与 .s-card-fallback / hero 的 .hero-brand / DashboardView 的空态占位是同一套语言。
+   父容器（.cardPadder-portrait）实测 position: relative + 328×492，inset:0 可铺满；
+   绝对定位的兄弟层不参与布局，槽位几何（.detailImageContainerCard 339×492）保持原样。 */
+.detailPosterFallback {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--s-gradient-dusk);
+  pointer-events: none;
+}
+
 /* 简介折叠(真实站 .overview-text + btnReadMore:未展开限 3 行,点"更多"展开) */
 .overview-text {
   display: -webkit-box;

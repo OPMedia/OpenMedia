@@ -86,7 +86,6 @@
     "playlists": "播放列表",
     "collections": "合集",
     "me": "我的",
-    "searchPlaceholder": "搜索电影、剧集…",
     "userMenu": "用户菜单",
     "theme": "主题",
     "themeDark": "深色",
@@ -210,9 +209,7 @@
     "serverGeneral": "通用",
     "serverUsers": "用户",
     "serverLibraries": "媒体库",
-    "serverLiveTv": "电视直播",
     "serverNetwork": "网络",
-    "serverTranscode": "转码",
     "serverDatabase": "数据库",
     "serverSync": "转换",
     "serverTasks": "计划任务",
@@ -390,7 +387,11 @@
     "typeSeries": "剧集",
     "typeEpisode": "分集",
     "empty": "没有找到相关内容",
-    "title": "搜索"
+    "title": "搜索",
+    "history": "搜索历史",
+    "historyClear": "清空历史",
+    "historyEmpty": "还没有搜索记录",
+    "historyRemove": "删除这条搜索记录"
   },
   "time": {
     "resumeAt": "{time}"

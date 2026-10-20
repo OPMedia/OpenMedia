@@ -93,3 +93,22 @@ html.theme-light .skinHeader-withBackground {
 .btnHeaderPremiere {
   display: none !important;
 }
+
+/* 卡片长标题**硬切且不画省略号**（真机数据下肉眼可见，例：「2013年邓丽君追梦 何」，
+   完整标题是「2013年邓丽君追梦 何日君再来纪念演唱会」）。
+   根因（vendor 规则，见 assets/emby495/modules__cardbuilder__card.css）：
+     .cardText{padding:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+     .cardTextActionButton{width:auto;text-overflow:ellipsis;text-align:inherit;line-height:1!important}
+   标题装在子 `button.cardTextActionButton` 里，它是**原子内联级盒**（.emby-button 一族给了
+   inline-block）且 width:auto → 自己撑到内容宽度（实测 353.7px），而父 .cardText 只有 135px。
+   父级 `text-overflow:ellipsis` **只对溢出的内联文本生效，对原子内联子块不生效**，
+   所以裁出来是一条硬边、没有省略号。
+   修法：把子盒约束回父盒宽度并让它自己成为裁剪容器 —— 这样 ellipsis 落在子盒的内联文本上。
+   实测（1600×900 库页，60 张卡）：父级溢出 48/60 → 0/60，子盒宽 353.7 → 135px，
+   标题渲染为「2013年邓丽君追梦…」。
+   注意：这**不是**字号上调造成的 —— 要让这些标题装下，字号得降 2.3–11px，而本轮只上调约 0.6px，
+   且「临界截断」（溢出 0<Δ≤8px）样本为 0。 */
+.cardText > .cardTextActionButton {
+  max-width: 100%;
+  overflow: hidden;
+}

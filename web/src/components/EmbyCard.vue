@@ -14,7 +14,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { imageUrl, markPlayed, markFavorite, getItems } from '@/api/endpoints'
+import { cardArtUrl, markPlayed, markFavorite, getItems } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import ItemMenuSheet from '@/components/ItemMenuSheet.vue'
 import { showToast } from '@/api/toast'
@@ -26,20 +26,46 @@ const router = useRouter()
 const auth = useAuthStore()
 const { t } = useI18n()
 
-/** 卡片形态:backdrop=16:9 剧照 / portrait=2:3 海报 / portrait-horiz=横向剧集卡(真实站 /tv 集 tab) */
+/**
+ * 卡片形态:backdrop=16:9 剧照 / portrait=2:3 海报 / portrait-horiz=横向剧集卡(真实站 /tv 集 tab)
+ *
+ * ⚠️ `portrait-horiz` 在 **padder 上**现在只是 `backdrop` 的别名(都是 16:9),保留这个取值只是为了不改公开 prop 类型。
+ * 原因:Emby **没有** `cardPadder-horiz` / `cardPadder-portrait-horiz` 这两个类 ——
+ * vendor `assets/emby495/modules__cardbuilder__card.css` 的 `@supports` 块只定义了
+ * `cardPadder-{backdrop, square, portrait, fourThree, banner}`,参考实现 `reference/emby-4.9.5/cardbuilder.js`
+ * 也只是拼 `cardPadder-{shape}`。实测拼出不存在的类时图容器会塌成 **165×1 px**(同页 `cardPadder-portrait` = 135×202 px),
+ * 卡片标题可见、图整条看不见。**不要再往这里拼不存在的类**;要新形状先在 vendor CSS 里确认类名存在。
+ */
 const isBackdrop = computed(() => props.shape === 'backdrop')
 const isHoriz = computed(() => props.shape === 'portrait-horiz')
 const padderCls = computed(() => {
-  if (isBackdrop.value) return 'cardPadder-backdrop'
-  if (isHoriz.value) return 'cardPadder-horiz cardPadder-portrait-horiz'
+  // portrait-horiz 与 backdrop 同为 16:9,复用真实存在的 backdrop padder(剧集图源本身就是 16:9:
+  // 自己的 Primary 缩略图,或父级 series backdrop;实测 allNoArt = 0)
+  if (isBackdrop.value || isHoriz.value) return 'cardPadder-backdrop'
   return 'cardPadder-portrait'
 })
-const imgSrc = computed(() => {
-  if (isBackdrop.value) {
-    return imageUrl(props.item.Id, 'Primary', props.item.ImageTags?.Primary, { maxWidth: 525, maxHeight: 296, quality: 90 })
-  }
-  return imageUrl(props.item.Id, 'Primary', props.item.ImageTags?.Primary, { maxWidth: 300, maxHeight: 450, quality: 90 })
-})
+/**
+ * 卡片图源 —— 必须走 `cardArtUrl`，**不能**在这里无条件拼 Primary。
+ *
+ * 原实现是 `imageUrl(item.Id, 'Primary', item.ImageTags?.Primary, …)`：tag 是 undefined 也照拼，
+ * 于是真机 Emby 4.9.5.0 对「没有 Primary 图」的条目返回 **HTTP 500**（不是 404）：
+ *   · 详情页「一个屋檐下」(Series 1256855)：100 集全无 Primary → 进一次页面打出 99×500 + 1×502，
+ *     129 张卡只有 29 张出图（22.5%）；
+ *   · 80 个系列 / 2039 集实测 **1262 集（61.9%）没有 Primary**，而它们全都能从
+ *     系列海报（SeriesPrimaryImageTag）或父级剧照（ParentBackdropImageTags）拿到图；
+ *   · 全站 13739 条真实条目里 1931 条没有 Primary。
+ * `cardArtUrl` 先看 tag 再拼 URL，拿不到图源时返回空串 → 这里不渲染 <img>、不发请求，
+ * 直接走下面的品牌渐变兜底层。横版卡退剧照、竖版卡退系列海报的取舍见 endpoints.ts 的注释。
+ */
+const imgSrc = computed(() =>
+  // 请求尺寸必须与 padder 形态一致:`portrait-horiz` 是 `backdrop` 的别名(同为 16:9),
+  // 尺寸要跟着一起走 16:9,否则会出现"padder 16:9 却按 300×450 要图"的错配(竖版尺寸的图被塞进横版框)。
+  cardArtUrl(props.item, props.shape, isBackdrop.value || isHoriz.value
+    ? { maxWidth: 525, maxHeight: 296, quality: 90 }
+    : { maxWidth: 300, maxHeight: 450, quality: 90 }),
+)
+/** 有图源才渲染 <img>（空串 = 这张条目真没有可用图，直接露兜底层，见 imgFailed 注释） */
+const hasArt = computed(() => imgSrc.value !== '')
 /**
  * 图片解码完成标记（只驱动 .s-img/.s-card-img 的 opacity/filter 过渡，不改任何交互语义）：
  * 初始 blur(12px)+opacity 0 → load/error 后 blur(0)+opacity 1。
@@ -54,6 +80,10 @@ const imgEl = ref<HTMLImageElement | null>(null)
  * 浏览器于是就地画一个「碎图」图标，看起来像页面坏了。
  * 真实服务器上确实有缺海报的条目（22 个库里实测有），所以这条路径必须好看：
  * 失败时让 img 保持不可见，露出下面的品牌渐变兜底层。
+ *
+ * 同一层兜底也服务「一开始就没有图源」的卡片：`cardArtUrl` 返回空串时根本不渲染 <img>
+ * （不发那次必然 500 的请求），此时 imgFailed 保持 false，所以模板里兜底层用
+ * `!hasArt || imgFailed` 两个条件一起判定。
  */
 const imgFailed = ref(false)
 function onImgError() {
@@ -232,10 +262,12 @@ function onTouchEnd() {
       <button type="button" data-action="link" tabindex="-1"
               class="itemAction cardContent-button cardContent cardImageContainer cardContent-background cardContent-bxsborder-fv coveredImage coveredImage-noScale"
               :class="padderCls" @click="open">
-        <img ref="imgEl" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale s-img s-card-img" :class="{ 'is-loaded': imgLoaded, 'is-failed': imgFailed }" :src="imgSrc" loading="lazy" decoding="async" @load="imgLoaded = true" @error="onImgError" />
+        <!-- 有图源才渲染 <img>：没有图源时连请求都不发（真机对这种请求返回 500，见 imgSrc 注释） -->
+        <img v-if="hasArt" ref="imgEl" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale s-img s-card-img" :class="{ 'is-loaded': imgLoaded, 'is-failed': imgFailed }" :src="imgSrc" loading="lazy" decoding="async" @load="imgLoaded = true" @error="onImgError" />
         <!-- 缺图兜底：品牌渐变 + 居中水印。盖在 .s-img 的占位底色之上、交互层之下。
-             有图时完全不存在（v-if），所以正常卡片零开销、零视觉变化。 -->
-        <div v-if="imgFailed" class="s-card-fallback" aria-hidden="true">
+             两种情况走这里：① 根本没有可用图源（!hasArt）② 图源存在但加载失败（imgFailed）。
+             有图且加载成功时完全不存在（v-if），所以正常卡片零开销、零视觉变化。 -->
+        <div v-if="!hasArt || imgFailed" class="s-card-fallback" aria-hidden="true">
           <img class="s-card-fallback-mark" :src="markWhite" alt="" draggable="false" />
         </div>
         <div v-if="progressPct > 0" class="innerCardFooter">

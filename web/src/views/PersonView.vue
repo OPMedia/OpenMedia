@@ -8,7 +8,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { getPerson, getItems, imageUrl } from '@/api/endpoints'
+import { getPerson, getItems, cardArtUrl } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
 
@@ -23,20 +23,37 @@ const items = ref<BaseItemDto[]>([])
 /** 人物在作品中的角色(从来源条目带入;真实站人物页显示 演员/导演 等) */
 const role = computed(() => (typeof route.query.role === 'string' ? route.query.role : ''))
 
+/**
+ * 人物头像。
+ *
+ * 原实现无条件拼 `imageUrl(person.Id, 'Primary', person.ImageTags?.Primary)` —— tag 是 undefined 也照拼，
+ * 真机 Emby 4.9.5.0 对没有 Primary 的条目 `/Items/{id}/Images/Primary` 返回 **HTTP 500**（不是 404）。
+ * 改走 `cardArtUrl`：没有 tag 返回空串 → 模板用 v-if 不渲染 <img>，不发这次必然 5xx 的请求。
+ */
 const posterSrc = computed(() =>
-  person.value ? imageUrl(person.value.Id, 'Primary', person.value.ImageTags?.Primary, { maxWidth: 375, maxHeight: 563, quality: 90 }) : '')
+  cardArtUrl(person.value, 'portrait', { maxWidth: 375, maxHeight: 563, quality: 90 }))
+
+/** 加载失败原因(非空时页面走错误态,不再退化成"查无此人") */
+const loadError = ref('')
 
 onMounted(async () => {
+  const id = String(route.params.id)
   try {
     const userId = auth.user!.Id
-    const id = String(route.params.id)
+    // getPerson 内部已经把路由里的 id 换成 Name 再查（真机 /Persons/{id} 恒 500，只认 Name）
     person.value = await getPerson(id, userId)
     document.title = `${person.value.Name} · ${t('app.name')}`
     items.value = (await getItems(userId, {
       PersonIds: id, Recursive: true, IncludeItemTypes: 'Movie,Series',
       Fields: 'PrimaryImageAspectRatio,ProductionYear', Limit: 60,
     })).Items
-  } catch { /* 静默 */ } finally {
+  } catch (e) {
+    // 这里原来是 `catch { /* 静默 */ }`：真机 /Persons/{id} 恒 500 时错误被吃掉，
+    // person 停在 null → 下面的"该人物作品"查询**根本不发** → 整页退化成 item.notFound，
+    // 看起来像"这个人物不存在"，实际是接口 500。现在把原因暴露到页面错误态 + 控制台。
+    loadError.value = e instanceof Error ? e.message : String(e)
+    console.error('[PersonView] 人物页加载失败', id, e)
+  } finally {
     loading.value = false
   }
 })
@@ -56,7 +73,8 @@ function goHome() { router.push('/') }
                 <div class="card portraitCard detailImageContainerCard card-hoverable">
                   <div class="detailImageContainerCard-cardBox cardBox">
                     <div class="itemAction cardContent cardImageContainer cardContent-background detailImage cardContent-bxsborder-fv coveredImage coveredImage-noScale cardPadder-portrait detailImage-transparent">
-                      <img draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="posterSrc" loading="lazy" decoding="async" />
+                      <!-- 没有图源时 posterSrc 为空串，v-if 整个不渲染：避免 src="" 让浏览器去请求页面本身 -->
+                      <img v-if="posterSrc" draggable="false" alt=" " class="cardImage cardImage-bxsborder-fv coveredImage coveredImage-noScale" :src="posterSrc" loading="lazy" decoding="async" />
                     </div>
                   </div>
                 </div>
@@ -97,6 +115,7 @@ function goHome() { router.push('/') }
         </div>
       </main>
     </template>
+    <div v-else-if="loadError" class="page-error">{{ t('item.notFound') }}<div class="secondaryText">{{ loadError }}</div></div>
     <div v-else class="page-error">{{ t('item.notFound') }}</div>
   </div>
 </template>

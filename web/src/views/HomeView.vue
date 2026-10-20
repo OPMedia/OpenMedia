@@ -638,7 +638,13 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
   gap: var(--s-row-gap);
   max-width: var(--s-content-max);
   margin: 0 auto;
-  padding-top: var(--s-sp-9);
+  /* 顶栏是 fixed（高 --header-height，含刘海安全区，≤768px 自动切 --s-header-h-sm）。
+     内容从 y=0 开始排，所以这里必须自己让开一个顶栏高度 + 一段呼吸间距。
+     曾经只写 --s-sp-9(48px)：hero 在首位时被下面的 :has 规则清零、由 hero 自己让位，
+     但收藏页（hero 被 heroSlotActive 关掉）没有兜底 —— 实测首个标题 top=48 而顶栏 bottom=64，
+     标题有 16px 压在顶栏底下（用户："收藏页第一个标题和顶栏的间隔太小看着很冲突"）。
+     用 --header-height 而不是 --s-header-h：前者已含 env(safe-area-inset-top)。 */
+  padding-top: calc(var(--header-height) + var(--s-sp-6));
   padding-bottom: var(--s-sp-11);
 }
 
@@ -911,7 +917,8 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
 @media (max-width: 640px) {
   .s-home-inner {
     gap: var(--s-sp-7);
-    padding-top: var(--s-sp-6);
+    /* 不再覆写 padding-top：基础值用的 --header-height 在 ≤768px 已经是 --s-header-h-sm，
+       这里写死 var(--s-sp-6)=24px 会让移动端收藏页的标题重新压回顶栏底下（56-24=32px 被盖住）。 */
   }
   .s-row-head,
   .s-row-track,

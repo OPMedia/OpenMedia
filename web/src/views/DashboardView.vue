@@ -126,7 +126,16 @@ onMounted(() => {
             <div class="card bannerCard activeSession card-hoverable sideFooterCard card-autoactive">
               <div class="cardBox cardBox-sideFooter visualCardBox cardBox-touchzoom">
                 <button type="button" class="itemAction cardContent-button cardContent cardImageContainer cardContent-nobr cardImageContainer-sideFooter">
-                  <img class="cardImage" :src="'/emby/Items/101/Images/Primary?maxWidth=150&quality=90'" alt="" />
+                  <!--
+                    占位卡不该产生真实请求。
+                    这里原本是 :src="'/emby/Items/101/Images/Primary?maxWidth=150&quality=90'" —— 写死的 id=101,
+                    而本服务器没有这个条目,于是**每进一次后台就一条 404**(2026-10-20 真机逐路由实测记录在案;
+                    证据 scratch/lead2/datafix-admin/{before,after}/route-probe.json 的 dashboard 路由)。
+                    下面「长风渡口」是 v1 mock 占位文案(没有真实条目可引用),所以不该去请求任何真实图片:
+                    换成品牌渐变占位层 —— 复用 EmbyCard 缺图兜底同一个 --s-gradient-dusk 令牌,零网络请求,
+                    并且保留 .cardImage 的尺寸约束(position:absolute + inset:0 + 100%/100%),占位观感不变。
+                  -->
+                  <div class="cardImage dashboardCardPlaceholder" aria-hidden="true"></div>
                 </button>
                 <div class="innerCardFooter">
                   <div class="itemProgressBar"><div class="itemProgressBarForeground" style="width: 74%"></div></div>
@@ -164,4 +173,9 @@ onMounted(() => {
 /* 控制台布局细节(真实站 dashboardSections 多列 flex wrap;样式大多在原版 css,此处仅本页特有) */
 .activeSessionsItems { display: flex; flex-wrap: wrap; gap: 1em; }
 .activeSessionsItems .activeSession { width: 24em; }
+/* 占位卡图位:品牌渐变(与 EmbyCard 缺图兜底同一令牌),纯 CSS,不引任何图片资源 → 零网络请求 */
+.dashboardCardPlaceholder {
+  background: var(--s-gradient-dusk);
+  background-size: 100% 100%;
+}
 </style>

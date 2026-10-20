@@ -11,7 +11,7 @@
  */
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { imageUrl } from '@/api/endpoints'
+import { cardArtUrl } from '@/api/endpoints'
 import { computed } from 'vue'
 import { vAutoAnimate } from '@formkit/auto-animate/vue'
 import SSheet from '@/components/ui/SSheet.vue'
@@ -27,8 +27,15 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 
+/**
+ * 菜单头部缩略图。
+ *
+ * 原实现无条件拼 `imageUrl(item.Id, 'Primary', item.ImageTags?.Primary)` —— tag 是 undefined 也照拼，
+ * 真机 Emby 4.9.5.0 对没有 Primary 的条目返回 **HTTP 500**（不是 404；全站 13739 条真实条目里 1931 条没有 Primary）。
+ * 改走 `cardArtUrl`：没有 tag 就返回空串 → 下面模板不设 backgroundImage，不发这次必然 5xx 的请求。
+ */
 const previewBg = computed(() =>
-  imageUrl(props.item.Id, 'Primary', props.item.ImageTags?.Primary, { maxWidth: 120, maxHeight: 180, quality: 90 }),
+  cardArtUrl(props.item, 'portrait', { maxWidth: 120, maxHeight: 180, quality: 90 }),
 )
 
 /* 列表 FLIP:auto-animate 动手前必须过 useReducedMotionSafe(铁律 16) */
@@ -83,7 +90,7 @@ function onItem(item: MenuItem) {
     @close="emit('close')"
   >
     <div class="actionsheetItemPreview flex flex-shrink-zero flex-direction-row">
-      <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="{ backgroundImage: `url(${previewBg})` }"></div>
+      <div class="actionsheetItemPreviewImage-bg actionsheetItemPreviewImage-bg-portrait" :style="previewBg ? { backgroundImage: `url(${previewBg})` } : undefined"></div>
       <div class="actionsheetItemPreviewContent">
         <div class="actionsheetItemPreviewText mediaInfoItems actionsheetItemPreviewText-main">
           <div class="actionsheetPreviewTextItem mediaInfoItem">{{ item.Name }}</div>

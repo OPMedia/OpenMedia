@@ -60,8 +60,8 @@ const isItem = computed(() => router.currentRoute.value.name === 'item')
 const isPlay = computed(() => router.currentRoute.value.name === 'play')
 /**
  * 管理/设置语境：按 path 判断，不按 route name ——
- * 插件页的 name 是 plugin-*（plugin-shenyi / plugin-backup …），但它们的页面根节点
- * 同样带 page-withFullDrawer（老 CSS 在 ≥60em 给左侧留 248px），漏判会让这些页左边空一条沟。
+ * 这一批页面的 route name 五花八门（dashboard-* / settings-*），但页面根节点都带
+ * page-withFullDrawer（老 CSS 在 ≥60em 给左侧留 248px），漏判会让这些页左边空一条沟。
  */
 const isAdminContext = computed(() => {
   const path = router.currentRoute.value.path
@@ -70,7 +70,7 @@ const isAdminContext = computed(() => {
 /** 库页：老页面 page-withFullDrawer 语境（docked 侧栏） */
 const hasFullDrawer = computed(() => router.currentRoute.value.name === 'library')
 /**
- * docked 语境 = 页面根节点带 page-withFullDrawer 的那些页：库页 / 详情 / 搜索 / 设置 / 后台 / 插件页。
+ * docked 语境 = 页面根节点带 page-withFullDrawer 的那些页：库页 / 详情 / 搜索 / 设置 / 后台。
  * 这些页在 ≥60em 被老 CSS 固定左偏移，侧栏必须常驻，否则左边空一条；
  * 首页（HomeView 已换成全出血的 .s-home）与人物页（无 page-withFullDrawer）走覆盖式抽屉。
  */
@@ -130,6 +130,9 @@ const adminPageTitle = computed(() => {
 // 已移除「元数据管理器」（路由已删）、「Emby Premiere」（路由已删），
 // 以及「Serata Web 设置」组（播放/通用/键盘和遥控器 三条 route 为 null 的死按钮——
 // 同名能力已由下面「<用户> 首选」组的 播放/配置 覆盖）。
+// 本轮再砍 8 条（用户点名不需要）：电视直播 / 转码 / 神医助手 / Backup & Restore /
+// Diagnostic Options / Open Subtitles / Subtitle Options / User Sessions ——
+// 侧栏项、路由、插件详情视图一并删除，不留死链（这些页的路由与视图文件已全库 0 引用）。
 const adminSections = computed(() => [
   {
     title: `${auth.user?.Name ?? ''} ${t('dash.secPrefs')}`,
@@ -148,9 +151,7 @@ const adminSections = computed(() => [
       { label: t('dash.serverGeneral'), route: '/dashboard/general' },
       { label: t('dash.serverUsers'), route: '/dashboard/users' },
       { label: t('dash.serverLibraries'), route: '/dashboard/libraries' },
-      { label: t('dash.serverLiveTv'), route: '/dashboard/livetv' },
       { label: t('dash.serverNetwork'), route: '/dashboard/network' },
-      { label: t('dash.serverTranscode'), route: '/dashboard/transcoding' },
       { label: t('dash.serverDatabase'), route: '/dashboard/database' },
       { label: t('dash.serverSync'), route: '/dashboard/convert' },
       { label: t('dash.serverTasks'), route: '/dashboard/tasks' },
@@ -168,13 +169,6 @@ const adminSections = computed(() => [
     items: [
       { label: t('dash.advPlugins'), route: '/dashboard/plugins' },
       { label: t('dash.advApiKeys'), route: '/dashboard/apikeys' },
-      // 插件名属于专有名词，路由 meta 里也是同一份硬编码，暂不进 locale
-      { label: '神医助手', route: '/dashboard/plugins/shenyi' },
-      { label: 'Backup & Restore', route: '/dashboard/plugins/backup' },
-      { label: 'Diagnostic Options', route: '/dashboard/plugins/diagnostics' },
-      { label: 'Open Subtitles', route: '/dashboard/plugins/opensubtitles' },
-      { label: 'Subtitle Options', route: '/dashboard/plugins/subtitleoptions' },
-      { label: 'User Sessions', route: '/dashboard/plugins/usersessions' },
     ],
   },
 ])
@@ -375,24 +369,6 @@ function updateNavFades(): void {
   navFadeBottom.value = el.scrollTop + el.clientHeight < el.scrollHeight - 2
 }
 
-// ---------- 抽屉搜索框（真实站搜索入口） ----------
-const drawerSearch = ref('')
-let drawerSearchTimer: ReturnType<typeof setTimeout> | undefined
-
-function onDrawerSearchInput(): void {
-  clearTimeout(drawerSearchTimer)
-  drawerSearchTimer = setTimeout(() => {
-    const q = drawerSearch.value.trim()
-    if (!q) return
-    void router.push({ name: 'search', query: { q } })
-  }, 350)
-}
-
-function onDrawerSearchEnter(): void {
-  const q = drawerSearch.value.trim()
-  if (q) void router.push({ name: 'search', query: { q } })
-}
-
 // ---------- 顶栏滚动：8px 后玻璃底、下滚隐藏 / 上滚显现 ----------
 const headerElevated = ref(false)
 const headerHidden = ref(false)
@@ -438,6 +414,9 @@ const userMenuItems = computed(() => [
 ])
 
 const avatarError = ref(false)
+// userImageUrl 在没有 PrimaryImageTag 时返回空串：本服务器账号没有头像，
+// 无条件拼 URL 会在**每一个页面**打一条恒定 404 的 /Users/{id}/Images/Primary。
+// 空串时下面的 <img v-if="avatarSrc && !avatarError"> 直接不渲染，走既有的 svg 占位兜底。
 const avatarSrc = computed(() => (auth.user ? userImageUrl(auth.user.Id, auth.user.PrimaryImageTag) : ''))
 
 function onUserMenuPick(item: { id?: string }): void {
@@ -473,11 +452,27 @@ function openLibrary(id: string): void {
 async function loadViews(): Promise<void> {
   if (!auth.user) return
   try {
-    views.value = (await getUserViews(auth.user.Id)).Items
+    views.value = (await getUserViews(auth.user.Id)).Items ?? []
   } catch {
     /* 侧栏库列表失败不阻塞 */
   }
 }
+
+/**
+ * 登录态一变就（重）拉库列表 —— 「侧栏 · 我的媒体整段空白」的根因修复。
+ * App.vue 是根组件，onMounted 只在**整页加载**时跑一次：从登录页进来的那次挂载，
+ * auth.user 还是 null，loadViews() 直接 return，之后再没人叫它 ——
+ * 于是整个会话里 views 恒为空，「我的媒体」展开后一行都没有（只有 F5 才恢复）。
+ * immediate 同时替掉原来 onMounted 里那次调用；登出时清空，避免残留上一个账号的库。
+ */
+watch(
+  () => auth.user?.Id,
+  (id) => {
+    if (id) void loadViews()
+    else views.value = []
+  },
+  { immediate: true },
+)
 
 // ---------- 结构类：主题类归 useTheme，这里只碰版式类 ----------
 watchEffect(() => {
@@ -528,7 +523,6 @@ function onResize(): void {
 }
 
 onMounted(() => {
-  void loadViews()
   void syncIndicator()
   document.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
   window.addEventListener('keydown', onWindowKeydown)
@@ -536,7 +530,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  clearTimeout(drawerSearchTimer)
   document.removeEventListener('scroll', onAnyScroll, { capture: true })
   window.removeEventListener('keydown', onWindowKeydown)
   window.removeEventListener('resize', onResize)
@@ -615,22 +608,16 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-if="!isAdminContext" class="s-drawer__search">
-        <svg class="s-ico s-drawer__searchicon" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="11" cy="11" r="6.5" />
-          <path d="m16 16 4 4" />
-        </svg>
-        <input
-          v-model="drawerSearch"
-          type="search"
-          class="s-input"
-          :placeholder="t('shell.searchPlaceholder')"
-          :aria-label="t('app.search')"
-          autocomplete="off"
-          @input="onDrawerSearchInput"
-          @keydown.enter="onDrawerSearchEnter"
-        />
-      </div>
+      <!--
+        抽屉里**不留任何搜索入口**（用户 2026-10-20 第二轮口径："搜索栏不需要两个 侧边栏那个删掉"）。
+        演进史：抽屉搜索输入框 → 抽屉「搜索」导航行 → 全删。
+        为什么上一轮留下的「搜索」行也得走：≥60em 时抽屉在搜索页是常驻 docked，
+        侧栏那条「搜索」行会和页面自己的输入框同屏 —— 一屏两个搜索入口。
+        现在搜索入口只有两处，且互斥、每屏最多一个：
+          · 桌面（>768px）：顶栏放大镜（搜索页自身除外，那一页的输入框就是入口）
+          · 移动（≤768px）：底部导航的「搜索」tab（顶栏放大镜此时隐藏）
+        打字统一发生在搜索页自己的输入框（SearchView 的 #searchPageInput，带搜索历史）。
+      -->
 
       <div class="s-drawer__navwrap">
         <nav ref="navEl" class="s-nav s-scroll" :aria-label="t('shell.nav')">
@@ -658,15 +645,6 @@ onBeforeUnmount(() => {
               >
                 <span class="s-nav__label">{{ t('app.home') }}</span>
               </button>
-              <button
-                type="button"
-                class="s-nav__row"
-                :class="{ 'is-active': activeKey === 'search' }"
-                @click="router.push('/search')"
-              >
-                <span class="s-nav__label">{{ t('app.search') }}</span>
-              </button>
-
               <div class="s-nav__group">
                 <button
                   type="button"
@@ -768,7 +746,7 @@ onBeforeUnmount(() => {
       </div>
     </aside>
 
-    <!-- 顶栏：左（返回/首页/菜单/标题或 logo）· 中（库页 tabs）· 右（搜索/主题/用户） -->
+    <!-- 顶栏：左（返回/首页/菜单/标题或 logo）· 中（库页 tabs）· 右（主题/用户） -->
     <header
       class="s-header"
       :class="{ 'is-elevated': headerElevated, 'is-hidden': headerHidden, 'is-docked': isDocked }"
@@ -845,7 +823,21 @@ onBeforeUnmount(() => {
         </nav>
 
         <div class="s-header__right">
-          <button type="button" class="s-iconbtn" :aria-label="t('app.search')" @click="router.push('/search')">
+          <!--
+            顶栏放大镜（用户 2026-10-20 第二轮定调："搜索栏不需要两个 侧边栏那个删掉"）：
+            侧栏那条「搜索」行已删，桌面端搜索入口就是这一个放大镜。
+            两条自我约束，保证任何一屏都只有一个搜索入口：
+              · 搜索页自身不显示（那一页的 #searchPageInput 就是入口，
+                否则"放大镜 + 输入框"又是两个）；
+              · ≤768px 不显示（移动端底栏已有「搜索」tab，见 .s-iconbtn--search 的媒体查询）。
+          -->
+          <button
+            v-if="!isSearch"
+            type="button"
+            class="s-iconbtn s-iconbtn--search"
+            :aria-label="t('app.search')"
+            @click="router.push('/search')"
+          >
             <svg class="s-ico" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="11" cy="11" r="6.5" />
               <path d="m16 16 4 4" />
@@ -1175,8 +1167,16 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--s-text-3);
   font-family: var(--s-font);
-  font-size: var(--s-fs-sm);
-  font-weight: var(--s-fw-medium);
+  /*
+    字号/字重 = 真机 Emby 4.9.5 顶栏 tab 实测值（.emby-tab-button：
+    font-size 16.1549px / font-weight 600 / line-height 24.2323px），
+    与 .skinHeader .emby-button 同值。此前这里是 --s-fs-sm(14px)/--s-fw-medium(500)，
+    用户连续两轮反馈"顶栏字体太小"。
+    这里是**唯一**按真机实测值写死的字号（tokens.css 无对应令牌，且 tokens 不在本文件写域）；
+    五档视口实测不换行/不横向溢出/相邻 tab 不相交，横向挤压时优先缩 padding，不回退字号。
+  */
+  font-size: 16.1549px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition:
@@ -1322,38 +1322,8 @@ onBeforeUnmount(() => {
   }
 }
 
-.s-drawer__search {
-  display: flex;
-  align-items: center;
-  gap: var(--s-sp-2);
-  flex: none;
-  height: 36px;
-  margin: var(--s-sp-1) var(--s-sp-3) var(--s-sp-3);
-  padding: 0 var(--s-sp-3);
-  border-radius: var(--s-r-sm);
-  background: var(--s-raised);
-  color: var(--s-text-3);
-}
-
-.s-drawer__searchicon {
-  width: 16px;
-  height: 16px;
-}
-
-.s-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--s-text-1);
-  font-family: var(--s-font);
-  font-size: var(--s-fs-sm);
-}
-
-.s-input::placeholder {
-  color: var(--s-text-3);
-}
+/* 抽屉搜索输入框（.s-drawer__search / .s-drawer__searchicon / .s-input）已整块删除：
+   搜索入口只剩导航（抽屉「搜索」行 + 移动底栏「搜索」tab），打字在搜索页进行。 */
 
 .s-drawer__navwrap {
   position: relative;
@@ -1609,10 +1579,29 @@ onBeforeUnmount(() => {
     display: none;
   }
 
+  /* 移动端顶栏不放搜索：底栏已有「搜索」tab，两个入口正是用户反复投诉的点。
+     顶栏放大镜只在桌面出现；搜索页自身的那个由模板里的 v-if="!isSearch" 关掉。 */
+  .s-iconbtn--search {
+    display: none;
+  }
+
   /* 移动端抽屉：顶边对齐 sm 顶栏（头部 44px 只留关闭按钮，品牌由顶栏负责），
      底栏(--s-z-nav 80) 在层级上高于抽屉(--s-z-drawer 60)，底部让出底栏高度 */
   .s-drawer {
     padding-bottom: calc(var(--s-bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* 覆盖式抽屉打开时（= withDialogOpen，见 watchEffect 里的结构类），底栏必须让位。
+     为什么：底栏 --s-z-nav(80) > 抽屉 --s-z-drawer(60)，实测抽屉展开时底栏仍浮在模态之上，
+     elementFromPoint 命中它的 svg（真的可点）。于是抽屉里的「搜索」行与底栏的「搜索」tab
+     同时可点 —— 又变成两个搜索入口（用户口径 2026-10-20：搜索入口只许有一个）。
+     而且抽屉此时是 aria-modal + 焦点陷阱 + 滚动锁的模态，被它遮住的内容本就不该还能交互。
+     底栏让出的 --s-bottom-nav-h 由抽屉的 padding-bottom 同步收回，抽屉内容补满到屏幕底。 */
+  html.withDialogOpen .s-bottom-nav {
+    display: none;
+  }
+  html.withDialogOpen .s-drawer {
+    padding-bottom: 0;
   }
 }
 </style>

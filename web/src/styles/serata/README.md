@@ -30,15 +30,33 @@
 `--s-gradient-dusk`（纵向）`--s-gradient-dusk-h`（横向）
 
 **图画区（hero）—— 「背景图居中、两侧过渡」，只放在 `:root`、不在主题块里覆盖**
-`--s-hero-mask`（两侧渐隐蒙版）`--s-hero-scrim`（上/下/左三层 `--s-bg` 收口）
+`--s-hero-mask`（两侧渐隐蒙版）`--s-hero-scrim`（上/下/左三层 `--s-bg` 收口）`--s-hero-copy-wash`（文案背后的局部承托）
 `--s-hero-control-bg` `--s-hero-control-bg-hover` `--s-hero-control-fg` `--s-hero-control-ring`
 > 这一版把图画区从「固定压暗层 + 一套固定白字」改成「图溶进页面底色」，令牌因此只剩三条几何决策 + 一组控件色。
 > `--s-hero-mask` 让图自己两侧消失（用 mask 而不是盖底色 —— 盖底色会把底下的页面底色也改掉，接缝看得出来）；
 > `--s-hero-scrim` 用 `--s-bg` 收口，所以**文案可以直接用 `--s-text-*` / `--s-cta-*`**，
 > 不再需要 `--s-hero-ink` 那套"压在图上"的固定色（上一版正是被它拖累：浅色主题下文案区被迫是一块黑斑，与「浅色就用浅色」冲突）。
-> 唯一真的压在未渐隐剧照上的是暂停按钮，所以只有它有一组不随主题翻转的 `--s-hero-control-*`。
+> 真正压在未渐隐剧照上的只有右下角那组圆点/暂停键，所以只有它们有一组不随主题翻转的 `--s-hero-control-*`。
+>
+> **遮罩浓度是用户投诉项，不是口味项（2026-10-20）**：「无论深色浅色，遮罩太浓，背后的背景图根本看不清」。
+> 所以分工被拆成两层：`--s-hero-scrim` 只负责把带宽的**四条边**收进页面底色，文案对比度交给
+> `--s-hero-copy-wash`（画在 `.hero-copy-body::before`，只覆盖文案块，右半张剧照保持原始亮度）。
+> 改这组值必须同时守住三条**像素级**判据（脚本：`scratch/lead2/verify-final.py`）：
+> 1. **图区**（x 55%~95%、y 10%~70%）与原始剧照的平均亮度差 ≤0.08、单点 ≤0.18；
+> 2. **四条边**的接缝 `EXCESS = AT-EDGE − 邻域中位步长 ≤ 3`（只看边缘那一步的绝对值会把渐隐尾巴误判成台阶：
+>    390 浅色实测 AT-EDGE=2.00，但邻域步长 3.36–4.72，EXCESS 是负的）；
+> 3. **文字对比度**：标题 ≥3:1、其余 ≥4.5:1，深浅两主题都要。
+> 另外 `--s-hero-scrim` 的**底部 0% 必须是 100% 的 `--s-bg`**（写成 `color-mix` 会留 14% 剧照，
+> 实测与页面底色差 16~29，在带宽下缘形成一条横台阶）；`.hero-stage` 的底色也必须是 `--s-bg` 而不是
+> `--s-img-placeholder`（两侧被 mask 溶掉后露的就是它，会与页面底色差 17.4/13.3）。加载态不受影响：
+> 骨架是独立一层 `.hero-sk-art`，自己铺满整条带宽。
 
-**字体** `--s-font` `--s-font-mono` `--s-fs-hero/display/h1/h2/h3/body/sm/xs` `--s-lh-tight/snug/body` `--s-fw-regular/medium/semibold` `--s-tracking-tight/hero`
+**字体** `--s-font` `--s-font-mono` `--s-fs-hero` `--s-fs-hero-sm` `--s-fs-display/h1/h2/h3/body/sm/xs` `--s-lh-tight/snug/body` `--s-fw-regular/medium/semibold` `--s-tracking-tight/hero`
+> **字号基准是「真机 Emby 4.9.5 网页端的 computed font-size」为下限，不是口味**（用户口径：「所有字体都小了，人家 Emby 那种大小就是合适的」）。
+> 实测（1600×900、已登录真机，`scratch/lead2/emby-fonts.json`）：html/body **14.424px**（Emby 把 `:root` 设成 90.15%）、
+> `.sectionTitle` **21.636px**/w600、`.cardText` **14.424px**、`.cardText-secondary` 13.268px、`.emby-button` 14.424px/w600。
+> 对应我们的每一档都必须 **≥** 同语义元素：`--s-fs-body`(15) `--s-fs-sm`(14) `--s-fs-xs`(13) `--s-fs-h3`(17) `--s-fs-h2`(22) `--s-fs-h1`(30) `--s-fs-display`(38)。
+> `--s-fs-hero-sm`(26) 是**窄屏 banner 专用档**：文案压在图上时，靠收小字号适配带宽，而不是把 banner 撑高。
 
 **间距** `--s-sp-1`(4px) … `--s-sp-11`(80px)、`--s-gutter`(24px)、`--s-gutter-sm`(16px)、`--s-row-gap`(40px)
 
@@ -49,7 +67,10 @@
 **布局** `--s-header-h`(64) `--s-header-h-sm`(56) `--s-drawer-w`(248) `--s-hero-min-h`(460) `--s-content-max` `--s-bottom-nav-h`
 > hero 高度**没有令牌**：旧的 `--s-hero-h: min(75vh, 860px)` 已删除。
 > 桌面由 `HomeHero.vue` 的 `.hero-stage { height: clamp(400px, 58vh, 620px) }` 给（横幅比 16:9 宽，图 `cover` 居中裁切）；
-> 窄屏（≤900px）改回 `aspect-ratio: 16/9` 让剧照不被裁构图，文案落到图下方。
+> 窄屏（≤900px）改成**跟着宽度走**的 `clamp(224px, 60vw, 280px)` —— 文案压在图上，但**不许拿 banner 高度买文案空间**
+> （用户口径：「变小适配 banner 栏的大小」「你现在这样就是浪费空间」）。
+> 硬验收：390×844 / 360×640 上 stage ≤ 视口 40%，且「继续观看」行标题仍在首屏内（实测 234px/27.7%、224px/35%）。
+> `aspect-ratio: 16/9` 在窄屏**装不下**这套压图文案（390 只有 201px、360 只有 184px，最少需要 ≈216px），已否决。
 
 **层级** `--s-z-backdrop`(40) `--s-z-drawer`(60) `--s-z-header`(70) `--s-z-nav`(80) `--s-z-sheet`(1000) `--s-z-toast`(1200)
 > 弹层带（1000/1200）与壳层（≤80）之间留空档，避免 header/drawer 和弹层抢层级。旧实现里各写各的硬编码 999/1000，已收敛。
@@ -128,6 +149,36 @@ export function useHomeHero(userId: MaybeRefOrGetter<string | undefined>): {
   reload: () => Promise<void>
 }
 ```
+
+**池子口径（用户口径：「banner 放的是随机推荐的东西，而不是继续观看的图片」）**：
+三层取数，顺序不可调 —— ① `Filters=IsResumable`（Limit 8）→ ② 最近播放 `SortBy=DatePlayed Desc`（Limit 24，
+客户端只留**有播放痕迹**的：`LastPlayedDate || PlaybackPositionTicks>0 || Played || PlayCount>0`）→
+③ 最新入库（Limit 40，**仅在 ①② 合计 <2 条时**才发这条请求）。
+③ 是"随机新片"的来源：真机实测它和播放历史毫无关系，旧逻辑当补位池用，于是 6 张里 4 张变成新片推荐。
+拼池时还按**图会撞**去重：解析出的横版图 key（`wideArtOf()` 的 `id+type+tag`）或 `SeriesName` 任一已占用就跳过 ——
+真机实测第 3/4/5 项曾是同一条 `Items/1668375/Images/Backdrop` + 同一标题，用户会直接判定"轮播坏了"。
+`playable` 与 `brand` 两条 key **各自记账**（混记会让 ① 里那条无横版图的整集文件用剧名把 ② 里同剧的集全部挡掉，池子退到 2 张）。
+
+**交互（WCAG 2.2.2）**：8000ms 自动轮转；hover / 区域内 focus / 标签页隐藏都停；`prefers-reduced-motion` 下**初始暂停**。
+暂停控件**不常驻在 banner 角上**（用户口径：「左上角为什么会有一个暂停/播放按钮，这不该出现」）：
+它并进右下角那组圆点，默认 `opacity: 0` + `pointer-events: none`，只有 `:focus-visible`（键盘 Tab 到）或已暂停时才显形，
+Tab 可达、带 `aria-label` / `aria-pressed` —— "能停"的能力一点没少，只是不再占画面。
+
+**承托层与净图区（验收判据，别改坏）**：
+- 承托层（`.hero-copy-body::before`）的**上沿不得高于"剧照区顶部往下 25%"** —— 窄屏实测 390×844 = 29.1%、360×640 = 25.9%。
+- 代价：**窄屏标题封成一行**（桌面两行）。360×640 的剧照区 224px 装不下
+  `56（25% 净图）+ 157.6（两行文案）+ 40（圆点带）= 253.6px`，收一行后 222.6 ≤ 224 刚好过线。超长标题窄屏出省略号是明确取舍。
+- 净图区判据**必须用差分**：参照系 = 同一次运行把 `scrim + wash + mask` 全关（两次都隐藏文案**子元素** ——
+  wash 挂在 `.hero-copy-body::before` 上，隐藏整个 `.hero-copy-body` 会连承托层一起藏掉，差分就测不到它）。
+  判据区桌面 `x55–85%/y10–70%`、移动 `x25–75%/y15–25%`；**mean ≤0.08 且 p99 ≤0.25**。
+  **不要**拿"与原始剧照逐像素比"当判据：1920px → 348px 是 5.5× 降采样，画面自身边缘的重采样差就能到 0.2–0.8。
+
+**换图时延（必须保持）**：`src` 只在翻面那一刻写入的话，**点之前那张图从未被请求**，
+冷缓存下一次 MISS 打真机要 1.4–3.7s，于是每次轮播都有 **3.7–6.8s 的"新标题 + 上一部剧照"** 窗口。
+所以池子一确定就整池 `new Image()` 预热（不在文档里，低优先级，不抢首屏），
+请求宽度按槽位算 `clamp(900, round(slotW × dpr), 1920)` 且**整个生命周期只算一次**（改了大小 URL 就变，预热缓存当场作废）。
+验收量的是**用户实际看到的那张**（`opacity > 0.5 && naturalWidth > 0`），**不能看 `is-front` 类名**
+—— 类名在图片加载完成之前就已切到新图，会给出"图已经换了"的假结论。
 
 ### 4.4 动效运行时 `lib/motion.ts`
 

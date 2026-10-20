@@ -10,7 +10,7 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { BaseItemDto } from '@/api/types'
-import { getItems, getGenres, getItem, imageUrl } from '@/api/endpoints'
+import { getItems, getGenres, getItem, cardArtUrl } from '@/api/endpoints'
 import { useAuthStore } from '@/stores/auth'
 import EmbyCard from '@/components/EmbyCard.vue'
 import SSheet from '@/components/ui/SSheet.vue'
@@ -108,8 +108,34 @@ async function load() {
     // ---- 非"节目"tab 的内容分支(真实站 /tv 页各 tab 独立内容) ----
     if (tab === 'episodes') {
       // "集"tab:递归列出全部剧集(真实站为横向 portraitCard-horiz 列表)
+      //
+      // ⚠️ `Filters: 'IsNotFolder'` 看着多余,其实是**让这个页签真的返回 Episode 的唯一开关**。
+      // 真机实测(2026-10-20,直连 tv.wenjian.de,13 个剧集库逐一验过;脚本
+      // scratch/lead2/probe-lib-types.mjs、probe-episode-forms.mjs,本文件对应复现:
+      // scratch/lead2/datafix/recon17-episode-filters.mjs):
+      //   · 现状 `IncludeItemTypes=Episode` + 无 Filters/无 SortBy → 返回 `{"Series":100}`,
+      //     和**完全不传** IncludeItemTypes 一模一样(日番 total 1464 / 国产剧 4649 / 国漫 530 —— 全是 Series 数);
+      //   · 加 `SortBy=SortName` / `DateCreated` / `SeriesSortName`、加 `IsMissing=false` → 仍是 Series;
+      //   · 加 `Filters=IsNotFolder` → 返回 `{"Episode":100}`,total 变成
+      //     日番 50068 / 国产剧 166810 / 国漫 37900;
+      //   · `Filters=IsUnplayed` 或 `SortBy=DatePlayed` 也能拿到 Episode,但它们会改变语义,不能用。
+      // 即:这台服务器**只在查询被强制到条目级枚举时才认 `IncludeItemTypes=Episode`**。
+      // 对 Episode 而言 `IsNotFolder` 是恒真条件(剧集不是文件夹),所以无副作用。
+      // 不加它的后果:页签叫"集",列出来的却是剧(Series)—— 用户一眼可见的功能性缺陷。
+      // 修好后这些 Episode 大多没有自己的 Primary,由 `cardArtUrl` 回退到
+      // `SeriesPrimaryImageTag`(实测返回的 100 条里 100 条都有该 tag)→ 卡片不会是渐变占位。
+      //
+      // 【已知且明确不修】有两个库即使加了 `IsNotFolder` 仍然列 Series:
+      //   稳友荐剧(2000000002)、2026十月番(2000000007)。
+      // 剧集本身是存在的 —— 直连真机实测:`稳友荐剧` 的《一斩苍穹》(Series 1310342)
+      // 有 **14 集**(`/Shows/1310342/Episodes` → 200,total = 14);`2026十月番` 的《FX战士久留美》有 3 集。
+      // 症结在这两个(插件/虚拟)库的**库级递归枚举不下沉**:`Recursive=true` 与 `false`
+      // 返回同一批 52 / 70 个 Series,所以 `ParentId=库` 的 Episode 查询必然拿不到条目。
+      // 这是**服务端枚举限制,不是本页的 bug**;客户端唯一解法是"逐个 Series 拉
+      // `/Shows/{id}/Episodes` 再聚合"(这两个库要多发 52~100 条请求),**明确不做**。
+      // 后人不要再把它当 bug 反复修。
       const r = await getItems(userId, {
-        ParentId: libId, Recursive: true, IncludeItemTypes: 'Episode',
+        ParentId: libId, Recursive: true, IncludeItemTypes: 'Episode', Filters: 'IsNotFolder',
         SortBy: 'SeriesSortName,SortName', SortOrder: 'Ascending', Limit: 200,
         Fields: 'PrimaryImageAspectRatio,ProductionYear',
       })
@@ -128,9 +154,21 @@ async function load() {
       return
     }
     tabItems.value = []
-    // chip 类 tab 需要完整条目集来生成工作室/标签
+    // chip 类 tab 需要完整条目集来生成工作室/标签。
+    //
+    // ⚠️ 必须显式要 `Fields`：Emby 的**默认返回集不含** `Studios`/`Tags`，
+    // 不传就是"数据一旦存在，这两个 tab 还是空的"的潜伏缺陷（实测 2026-10-20：
+    // 不传 Fields 时 100 条里 `'Studios' in item === false`、带 Studios 的 0 条）。
+    // 但本服务器实测**即使显式 `Fields=Studios,Tags` 也拿不到这两个键**
+    // （hasStudiosKey = 0 / hasTagsKey = 0）；对照实验 `Fields=People` 同样拿不到 `People`，
+    // 即这台服务器整体**忽略 Fields 参数**，只返回一套固定字段集。
+    // → 所以 studios/tags 两个 tab 当前为空是**数据/服务端字段侧**的原因，
+    //   前端这层只保证"不再因为少要字段而空"。
     if (currentTab.value === 'studios' || currentTab.value === 'tags') {
-      items.value = (await getItems(userId, { ParentId: libId, Recursive: true, IncludeItemTypes: isTv ? 'Series' : 'Movie', Limit: 200 })).Items
+      items.value = (await getItems(userId, {
+        ParentId: libId, Recursive: true, IncludeItemTypes: isTv ? 'Series' : 'Movie',
+        Limit: 200, Fields: 'Studios,Tags,PrimaryImageAspectRatio,ProductionYear',
+      })).Items
     }
     // 类型/工作室筛选(详情页链接 → ?genre=/?studio=;真实站 list 页筛选同款)
     const genre = typeof route.query.genre === 'string' ? route.query.genre : undefined
@@ -264,6 +302,19 @@ function filterQuery(): Record<string, string> {
   if (filterYears.value.length) q.Years = filterYears.value.join(',')
   return q
 }
+
+/**
+ * 列表行缩略图（2:3 竖版）。
+ *
+ * 原实现无条件拼 `imageUrl(item.Id, 'Primary', item.ImageTags?.Primary)` —— tag 是 undefined 也照拼，
+ * 而真机 Emby 4.9.5.0 对「没有 Primary 图」的条目 `/Items/{id}/Images/Primary` 返回 **HTTP 500**
+ * （不是 404；全站 13739 条真实条目里 1931 条没有 Primary）。
+ * 改走 `cardArtUrl`：没有 tag 就返回 undefined，Vue 会把 src 属性整个去掉 ——
+ * 浏览器不发任何请求，也不会画一个碎图图标。
+ */
+function rowArt(item: BaseItemDto): string | undefined {
+  return cardArtUrl(item, 'portrait', { maxWidth: 120, maxHeight: 180, quality: 90 }) || undefined
+}
 </script>
 
 <template>
@@ -315,7 +366,16 @@ function filterQuery(): Record<string, string> {
           <div v-if="!tabItems.length" class="page-loading">{{ t('library.empty') }}</div>
           <div v-else class="emby-scroller padded-top-focusscale padded-bottom-focusscale scrollX hiddenScrollX scrollFrameX flex-direction-row">
             <div class="scrollSlider focusable itemsContainer focuscontainer-x scrollSliderX">
-              <EmbyCard v-for="it in tabItems" :key="it.Id" :item="it" :shape="currentTab === 'episodes' ? 'portrait-horiz' : 'backdrop'" />
+              <!-- 形态必须是 Emby CSS 里**真实存在**的 padder 类。
+                   原来 episodes 传 'portrait-horiz' → EmbyCard 拼出 `cardPadder-horiz cardPadder-portrait-horiz`，
+                   而这两个类在 assets/emby495/modules__cardbuilder__card.css 里**没有任何定义**
+                   （@supports 块只定义了 backdrop / square / portrait / fourThree / banner，
+                   参考实现 cardbuilder.js 也只是拼 `cardPadder-{shape}`），
+                   于是图容器塌成一条线：实测 `.cardPadder-portrait-horiz` = **165×1 px**
+                   （同一页网格视图的 `.cardPadder-portrait` = 135×202 px），标题可见、图不可见。
+                   剧集图源本身就是 16:9（自己的 Primary 缩略图，或父级 series backdrop；
+                   实测这三个库 allNoArt = 0），所以用真实存在的 backdrop(16:9) padder。 -->
+              <EmbyCard v-for="it in tabItems" :key="it.Id" :item="it" shape="backdrop" />
             </div>
           </div>
         </div>
@@ -342,7 +402,7 @@ function filterQuery(): Record<string, string> {
           >
             <div class="listItem-content listItem-content-margin listItem-content-bg listItemContent-touchzoom listItem-border listItem-border-offset listItem-border-offset-portrait">
               <div class="listItemImageContainer listItemImageContainer-portrait">
-                <img draggable="false" class="listItemImage listItemImage-portrait coveredImage coveredImage-noScale" :src="imageUrl(item.Id, 'Primary', item.ImageTags?.Primary, { maxWidth: 120, maxHeight: 180, quality: 90 })" loading="lazy" decoding="async" />
+                <img draggable="false" class="listItemImage listItemImage-portrait coveredImage coveredImage-noScale" :src="rowArt(item)" loading="lazy" decoding="async" />
               </div>
               <div class="listItemBody itemAction listItemBody-2-lines">
                 <div class="listItemBodyText listItemBodyText-lf">{{ item.Name }}</div>

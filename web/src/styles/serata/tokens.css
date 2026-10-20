@@ -21,14 +21,28 @@
     'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
   --s-font-mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas, monospace;
 
-  --s-fs-hero: clamp(30px, 3.2vw, 52px);
-  --s-fs-display: 34px;
-  --s-fs-h1: 26px;
-  --s-fs-h2: 19px;
-  --s-fs-h3: 16px;
-  --s-fs-body: 14px;
-  --s-fs-sm: 13px;
-  --s-fs-xs: 12px;
+  /* 字号基准：**以真机 Emby 4.9.5 网页端的 computed font-size 为下限**（不是口味）。
+     实测（1600×900，已登录 tv.wenjian.de，见 scratch/lead2/emby-fonts.json）：
+       html/body          = 14.424px（Emby 把 :root 设成 90.15%）
+       .sectionTitle      = 21.636px / w600   ← 行标题
+       .cardText          = 14.424px          ← 卡片主标题
+       .cardText-secondary= 13.268px（92%）    ← 卡片副标题
+       .emby-button       = 14.424px / w600
+       .listItemBodyText  = 14.424px / w500
+     上一版对应值是 19 / 14 / 13 / 16 —— 行标题小 12%、正文小 3%、副标题小 2%，
+     整体读起来"发虚"。这一版每一步都抬到 **≥ Emby 实测值**（留 3%~8% 余量），
+     并保持原比例阶梯（xs < sm < body < h3 < h2 < h1 < display < hero）。
+     改这一处会全站生效，任何页面出现换行/溢出都算回归，必须逐页复验。 */
+  --s-fs-hero: clamp(34px, 3.4vw, 58px);
+  /* 窄屏 banner 文案压在图里，用这一档收小（见 HomeHero.vue 的 ≤900px 分支） */
+  --s-fs-hero-sm: 26px;
+  --s-fs-display: 38px;
+  --s-fs-h1: 30px;
+  --s-fs-h2: 22px;
+  --s-fs-h3: 17px;
+  --s-fs-body: 15px;
+  --s-fs-sm: 14px;
+  --s-fs-xs: 13px;
 
   --s-lh-tight: 1.15;
   --s-lh-snug: 1.35;
@@ -146,31 +160,56 @@
 
   /* 压字层：上 + 下 + 左 三层 --s-bg 渐变。
      · 上：只收掉"带宽顶边"那一条硬线（带宽顶边就在顶栏下方，本来就该是软的）；
-     · 下：承重的那一层 —— 文案贴底，下缘要足够实才敢让标题压在图上；
-     · 左：文案列在左边，左侧渐隐 + 这层叠加，保证文字底色就是页面底色本身。
-     档位按实测反推：目标是最坏情况 ≥7:1（WCAG AA 要 4.5:1），
-     同时不把图糊死 —— 值见 HomeHero.vue 旁边的实测记录。 */
+     · 下：文案贴底，只在最下面一小条承重；
+     · 左：文案列在左边，只覆盖左半区，右半张剧照保持干净。
+     ⚠️ 用户口径（2026-10-20）：「遮罩浓度太大了，无论深浅，背后的背景图根本看不清」。
+     上一版是 左 0.96 / 下 0.84（16% 处）→ 实测整条 banner 下半张基本糊成一块底色。
+     这一版把三层都砍薄、并把影响范围收窄（下 62%→46%、左 58%→50%），
+     文字可读性不再靠"整条压暗"，而是靠 .hero-copy 自己的局部承托层（见 HomeHero.vue）。
+
+     ⚠️ **底部 0% 必须是 100% 的 --s-bg，不能是 color-mix**。
+     实测（scratch/lead2/hero-after/bottom-attrib.json，1600×900）：底部那层 0% 写成
+     `color-mix(--s-bg 86%)` 时，带宽最后一行仍留 14% 剧照，与页面底色差 **16~29**，
+     在 banner 下缘形成一条看得见的横台阶（image-off 对照降到 3.93，证明就是这一层）。
+     左右两侧没有这个问题 —— 因为 --s-hero-mask 已经把图在两侧溶到 0，露出的就是页面底色。
+     所以底部这一层要"贴着页面底色收口"：0% 全实，再快速退到透明。
+     判据用斜率感知（见 scratch/lead2/seam-metric.py）：`EXCESS = 边缘步长 − 邻域中位步长 ≤ 3`。
+     只看"边缘那一步的绝对值"会误判 —— 一条平滑渐隐在最后一像素本来就有 2~4 的差。
+     验收口径（像素级，写进 verify 任务）：图区（x 55%~95%、y 10%~70%）与原始剧照的
+     平均亮度差 ≤0.08、单点 ≤0.18；四条边缘 EXCESS ≤3；文字区对比度 ≥4.5:1（大标题 ≥3:1）。 */
   --s-hero-scrim:
     linear-gradient(
       180deg,
       var(--s-bg) 0%,
-      color-mix(in srgb, var(--s-bg) 58%, transparent) 7%,
-      transparent 17%
+      color-mix(in srgb, var(--s-bg) 40%, transparent) 5%,
+      transparent 12%
     ),
     linear-gradient(
       0deg,
       var(--s-bg) 0%,
-      color-mix(in srgb, var(--s-bg) 84%, transparent) 16%,
-      color-mix(in srgb, var(--s-bg) 52%, transparent) 38%,
-      transparent 62%
+      color-mix(in srgb, var(--s-bg) 90%, transparent) 6%,
+      color-mix(in srgb, var(--s-bg) 62%, transparent) 14%,
+      color-mix(in srgb, var(--s-bg) 22%, transparent) 28%,
+      transparent 46%
     ),
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--s-bg) 96%, transparent) 0%,
-      color-mix(in srgb, var(--s-bg) 78%, transparent) 20%,
-      color-mix(in srgb, var(--s-bg) 44%, transparent) 38%,
-      transparent 58%
+      color-mix(in srgb, var(--s-bg) 88%, transparent) 0%,
+      color-mix(in srgb, var(--s-bg) 56%, transparent) 16%,
+      color-mix(in srgb, var(--s-bg) 22%, transparent) 32%,
+      transparent 50%
     );
+
+  /* 文案局部承托层：只画在文案块背后（不是整条 banner），边缘化开到 0。
+     文案用主题文字色（--s-text-*），所以它需要一个"局部底色"来保证对比度；
+     把底色收在文案块上，右半张图就干净了 —— 这是"图看得清"和"字读得出"的唯一同时解。 */
+  --s-hero-copy-wash: radial-gradient(
+    120% 150% at 8% 88%,
+    color-mix(in srgb, var(--s-bg) 88%, transparent) 0%,
+    color-mix(in srgb, var(--s-bg) 68%, transparent) 42%,
+    color-mix(in srgb, var(--s-bg) 24%, transparent) 72%,
+    transparent 100%
+  );
 
   /* 暂停按钮：唯一真的压在**未渐隐**剧照上的控件，所以它必须有自己的一套"在图上"的配色，
      不能跟随主题（浅色主题的 --s-text-1 是深墨，压在深剧照上直接消失）。
