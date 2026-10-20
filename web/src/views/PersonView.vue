@@ -63,7 +63,19 @@ function goHome() { router.push('/') }
 
 <template>
   <div>
-    <div v-if="loading" class="page-loading">{{ t('common.loading') }}</div>
+    <!-- 加载态 / 错误态也必须带 `<main>` 滚动壳。
+         改前这三个状态都是裸 <div>，加载期间整页没有滚动容器（与 ItemDetailView 同一类缺陷，
+         见 docs/adr/0012-web-home-hero.md 第六轮）。壳上的 class 与正常态逐字相同，
+         三种状态互切时布局零位移。 -->
+    <main
+      v-if="loading"
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page scrollY focuscontainer-x"
+      aria-busy="true"
+    >
+      <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
+        <div class="page-loading">{{ t('common.loading') }}</div>
+      </div>
+    </main>
     <template v-else-if="person">
       <main class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page scrollY focuscontainer-x">
         <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
@@ -115,7 +127,17 @@ function goHome() { router.push('/') }
         </div>
       </main>
     </template>
-    <div v-else-if="loadError" class="page-error">{{ t('item.notFound') }}<div class="secondaryText">{{ loadError }}</div></div>
-    <div v-else class="page-error">{{ t('item.notFound') }}</div>
+    <!-- 两种错误态合并：只有 loadError 时多一行详情。都要有滚动壳 -->
+    <main
+      v-else
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page scrollY focuscontainer-x"
+    >
+      <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
+        <div class="page-error">
+          {{ t('item.notFound') }}
+          <div v-if="loadError" class="secondaryText">{{ loadError }}</div>
+        </div>
+      </div>
+    </main>
   </div>
 </template>

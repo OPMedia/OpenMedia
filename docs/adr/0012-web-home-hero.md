@@ -555,3 +555,158 @@ outset 会把右下两条边画深 → 看起来就像一条"看到一半的进�
 10. `web/tools/probe-multi-body.mjs`、`probe-content-card.mjs`、`probe-home3.mjs`、`probe-home4.mjs`、
     `probe-card-hover.mjs` 仍在断言**已删除的多选 DOM**（无 npm script 引用，未清理）。
 
+---
+
+## 修订 2026-10-20（六 · 用户第五轮实测反馈，一条）
+
+原话：
+
+> 「继续优化 点击任意条目之后 侧边栏会常驻 导致不能滑动详情页 看不到信息」
+
+这句话里有三个可分别证伪的断言。**先复现，再动手**（第一版探针在 1600/1280/1024 三档全部"滚得动"，
+说明我量的场景和用户遇到的不是同一个）。
+
+### 1. 三个断言的实测判定
+
+| 用户断言 | 判定 | 证据 |
+|---|---|---|
+| 侧边栏常驻 | **成立**，但本身不是缺陷 | `.s-drawer.is-docked` x=0 w=248；`html.withFullDrawer`；详情页 `<main>` 自带 `page-withFullDrawer page-withDockedDrawer`（真实站 4.9.5 的 dump 就是这样） |
+| 详情页不能滑动 | **成立 —— 但只发生在"加载窗口期"** | 该窗口期内 `<main>` **根本不存在**（`document.querySelector('main') === null`） |
+| 看不到信息 | **成立**，同一窗口期只有一行灰字"加载中…" | 全屏唯一可滚元素是侧栏自己的 `.s-nav.s-scroll`（max 240）→ 滚轮滚的是侧栏 |
+
+时间线（`scratch/lead6/probe-timeline.mjs`，1600×900，点卡片起算）：
+
+```
++ 2500ms  path=/item/1310342  main=**null**  loading=true  可滚容器=1（只有 s-nav s-scroll）
++ 4000ms  path=/item/1310342  main=**null**  loading=true  可滚容器=1
++ 6000ms  path=/item/1310342  main=**null**  loading=true  可滚容器=1
++ 8000ms  path=/item/1310342  main=**null**  loading=true  可滚容器=1
++11000ms  path=/item/1310342  main=YES(1352x900 auto 1860/900 max=960)  loading=false  按钮=221
+```
+
+### 2. 根因（两层，都在 `ItemDetailView.vue`）
+
+**① `<main>` 被写在数据分支里。** 模板是
+
+```html
+<div v-if="loading" class="page-loading">…</div>
+<div v-else-if="notFound" class="page-error">…</div>
+<template v-else-if="item">
+  <main class="itemView …">   ← 唯一滚动壳在这里面
+```
+
+于是从点卡片到数据回来，**整页没有滚动容器**。而侧栏是 docked 常驻的，全屏唯一能滚的就是侧栏导航列表
+—— 用户滚轮滚的是侧栏，详情页一动不动。**这不是样式问题，是渲染时序的结构性缺陷。**
+
+**② `loading=false` 被 4 个串行请求共同阻塞。** 改前 `load()` 是
+`getItem → getSimilarItems → getSeasons → loadEpisodes` 四个 `await` 排队，`loading` 在 `finally` 里才置 false。
+直连夹具实测（`scratch/lead6/api-timing.cjs`）：
+
+| 请求 | 冷启动耗时 |
+|---|---|
+| `getItem` | **630ms** ← 首屏真正需要的只有这一个 |
+| `getSimilarItems` | 1664ms |
+| `getSeasons` | 491ms |
+| `getEpisodes` | 2519ms |
+| **串行合计** | **5304ms**（浏览器首屏实测 8.5s 才出现 `<main>`） |
+
+### 3. 修复
+
+1. **加载态 / 错误态各自带同一个 `<main>` 壳**，class 与正常态**逐字相同**（所以三种状态互切零位移）。
+2. **首屏只等 `getItem`**：它一到就 `loading=false`，标题/海报/按钮/滚动壳立刻可用；
+   相似 / 季 / 分集改 `Promise.allSettled` 并行补，失败不阻塞。
+3. **分集只发一次请求**：`watch(currentSeasonId)` 与显式调用之间用 `next === currentSeasonId.value` 分流，
+   两条路径互斥（实测 `/Episodes` 请求数 = **1**）。
+4. **骨架屏**（`s-detailSkeleton*`，全部走 `--s-*` 令牌）：海报位 + 标题位 + 信息行 + 三个按钮圆点 +
+   6 格占位卡 + 一行"加载中…"。改前加载态是 `emby495-overrides.css` 里 `.page-loading`（4em 空白 + 一行灰字）。
+5. **`measureOverview()` 挪到 `nextTick()` 之后**：改前它在 `finally` 里同步调用，那时内容还没进 DOM，
+   `overviewClamped` 恒为 false —— 简介"更多"按钮因此永远不会出现。顺手修掉。
+6. **同类缺陷一起修**：`PersonView.vue` 的加载态与两种错误态同样是裸 `<div>`（`page-loading` 在 `<main>` 之前），
+   一并套壳并合并两个错误分支。
+
+### 4. 顺带钉死：「点击条目没反应」不是幻觉
+
+第五轮把它记为"1 次观测、8 次复测无法复现"的偶发。本轮**机制查明**：
+`/item/:id` 是路由级懒加载（`component: () => import('@/views/ItemDetailView.vue')`），
+而 vue-router 是在**所有守卫跑完之后**才去解析异步组件 —— 也就是**点击之后**才开始下载它。
+`scratch/lead6/probe-router-nav.mjs` 抓到失败现场：
+
+```
+nav 事件 = [{to:"/item/1310342", from:"/library/2000000002", kind:"beforeEach"}]   ← push 发生了
+err      = []                                                                     ← 无任何报错
+（没有 pushState、没有 afterEach → 导航挂住；手动 router.push 立刻 resolved）
+```
+
+限速 A/B（`probe-ab-prefetch.mjs`，700ms 延迟 / 150KB/s / 禁用缓存，唯一差别是点击前有没有悬停）：
+
+| 组 | 点击 → URL 变化 |
+|---|---|
+| A 不悬停直接点（≈改前） | **4714ms** |
+| B 悬停 3s 再点（改后 `pointerenter` 预取） | **1100ms** |
+
+修复：`EmbyCard.vue` 上 `@pointerenter="prefetchRoute"`，鼠标进入卡片即预取目标路由组件
+（模块级缓存，重复调用零成本；失败静默）。生产环境这个 chunk 是 42.45kB / **gzip 11.15kB**，代价可忽略。
+
+### 5. 验收锚点（第六轮）
+
+| 项 | 数值 |
+|---|---|
+| 加载期"无 `<main>`"采样 | **0 / 16**（限速 700ms / 150KB/s 下点击后每 200ms 采样） |
+| 骨架屏 | **1148×679**；占位卡 6 格 **170×255**；骨架期 `main` `overflow-y: auto` |
+| 点击 → URL 变化 | 不预取 **4714ms** → 预取 **1100ms**（省 77%） |
+| 内容定型（与改前基线逐项比对） | 分集图 **14**、人物图 **10**、相似 **12**、`main` 内按钮 **221**、`scrollHeight/clientHeight` **1860/900**、max **960** |
+| 真实滚轮 | 滚轮×10 → `scrollTop` **960 / max 960** |
+| 不存在的条目 | `<main>` 存在 + `overflow-y: auto` + 文案「条目不存在」 |
+| 人物页 | `/person/549986` 采样 **50 次 0 次无 main**；加载态 **49/49** 有 main；错误态有 main + 文案 |
+| 第五轮验收脚本重跑 | **35 PASS / 0 FAIL**，`/item` 段真正执行（滚轮 0→**960 = max**） |
+| 构建 | `pnpm type-check` exit 0；`pnpm build` exit 0（1.27s） |
+
+### 第六轮冻结哈希
+
+| 文件 | sha256 |
+|---|---|
+| `web/src/views/ItemDetailView.vue` | `318C50B102419FDDFAE7629575D009EC2E8D548711A3AE4717C5EF6C2E6DE71A` |
+| `web/src/components/EmbyCard.vue` | `501338C41AEEE598648AF9D630F5B52A10F34F6C17270A021D6B92C43E43496C` |
+| `web/src/views/PersonView.vue` | `0A5F625B4ACD0927FB1BC6602E454519F3CB34D85389E5D45143A7BEEB5A2F43` |
+
+### 这一轮必须留档的两件事
+
+**一、「0 FAIL」不等于通过 —— 我们的验收脚本会静默跳过。**
+
+`scratch/lead5/accept5final.mjs` 的 `/item` 段取样点取的是卡片**正中心**。而卡片正中心在**未悬停**时
+命中的是播放 FAB 按钮：
+
+```
+elementFromPoint(卡片中心) → tag=BUTTON, class="fab cardOverlayButton-fab … cardOverlayButton-fab",
+                             data-action="resume"
+（鼠标移入后同一坐标 → tag=DIV, class="cardOverlayContainer itemAction", data-action="play"）
+```
+
+于是点击跳的是 `/play/<id>`，`until('/item/')` 永远等不到 → 15s 后返回 `null` → 整段 `if (onDetail)` 被跳过，
+汇总里**既不计 FAIL 也不计 PASS**。第五轮那次「33 PASS / 1 FAIL」与本次首跑的「34 PASS / 0 FAIL」
+都因此不可信。修法已落：取样点改卡片左上角 `(left+16, top+16)`、点击前先 `hover`、失败必须落一条 `**FAIL**`。
+**度量错了，结论就会假**（第五轮已留档 4 次同类教训，这是第 5 次）。
+
+**二、探针自己又错了 3 次，全部当场自查纠正。**
+
+① 用**限速下的 `Page.navigate`** 去测"人物页加载态" —— 那样连 App 的 JS 都还在下载，
+页面里根本没有 `<main>`，于是 40 次采样全判"无 main" → 假 FAIL。改成"App 先就绪 → 限速 → SPA 内 `router.push`"后 49/49 有 main。
+② 骨架刚挂上就查 `clientHeight`：页面进入过渡期它是 0（见遗留风险 1），要等 ~220ms。
+③ 轮询"内容到齐"的条件写成"标题出现即停"，而标题来自 `getItem`（最快那个），
+于是 `similar`/`episodes` 还在飞就取数，误判"分集丢了" —— 等满 20s 后实测 14 张分集图，与基线一致。
+
+### 第六轮遗留风险（未验证 / 已知缺陷，不许含糊）
+
+1. **页面进入过渡期 ~220ms 内内容区是空的**：`.s-page-enter-active` 包裹层 `height: 0`，而 `<main>` 是
+   `position: absolute` 不撑高父元素 → `main.clientHeight` 为 0。实测采样：3751ms / 3829ms / 3905ms / 3969ms
+   四次为 0，4046ms 才变 900。**这是全站既有行为**（所有 `.page` 都是 absolute），不是本轮引入；
+   修它要动 `motion.css` 的页面过渡，全站风险，本轮未做。
+2. 骨架屏只做了详情页。库页 / 搜索页 / 后台各页仍是 `.page-loading` 一行灰字
+   （它们的 `<main>` 常驻，**不影响滚动**，只是观感差一档）。
+3. 预取只挂在卡片的 `pointerenter` 上。直接敲 URL 进 `/item`、或从抽屉/搜索直达时，仍要等 chunk。
+4. `/play` 播放页与 `VideoOsdView` 未纳入本轮验收。
+5. 本轮全部在 1600×900 + 限速下验；**移动端未复测**（第五轮的移动端滚动审计缺口仍在）。
+6. 相似 / 季 / 分集并行后仍可能先后到达，区块会"跳一下"（未做高度占位）。
+7. `ItemDetailView` 里仍有 `line-clamp` 兼容写法与两处 `!important`（详情主按钮，真实站取证），未动。
+
+

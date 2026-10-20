@@ -148,6 +148,28 @@ const isLibrary = computed(() => props.item.Type === 'CollectionFolder')
  */
 let suppressClickUntil = 0
 
+/**
+ * 预取「点下去要跳去的那个路由组件」。
+ *
+ * 为什么必须有：`/item/:id` 的组件是 `() => import('@/views/ItemDetailView.vue')`，
+ * 而 vue-router 是在**所有守卫跑完之后**才去解析这个异步组件 —— 也就是「点击之后」才开始下载它。
+ * 实测（CDP 限速 700ms 延迟 / 150KB/s）：点卡片 → URL 变成 /item 用了 **4842ms**；
+ * dev 下更糟，Vite 要现场编译这个 1000+ 行的 SFC，实测有一次 2.5s 后仍停在库页
+ * （router.beforeEach 已经带着 to=/item 触发了，afterEach 永远没来，无任何报错）。
+ * 这段时间页面零反馈 —— 用户看到的就是「点了没反应，侧栏还常驻着」，也就是本轮报的那个现象。
+ *
+ * 鼠标进入卡片就预取一次：模块级缓存，重复调用零成本；失败静默，绝不影响正常点击。
+ */
+let routePrefetched = false
+function prefetchRoute() {
+  if (routePrefetched) return
+  routePrefetched = true
+  const loading = isLibrary.value
+    ? import('@/views/LibraryView.vue')
+    : import('@/views/ItemDetailView.vue')
+  void loading.catch(() => {})
+}
+
 function open() {
   // 多选已按用户要求整体下线（「我们现在没有多选 卡片左上角的多选按钮不需要了」）：
   // 点卡片恒定 = 跳转，不存在「先勾选不跳转」的中间态。
@@ -283,6 +305,7 @@ function onTouchEnd() {
       'card-hoverable card-autoactive',
     ]"
     @contextmenu="onCtxMenu"
+    @pointerenter="prefetchRoute"
     @touchstart.passive="onTouchStart"
     @touchend="onTouchEnd"
   >

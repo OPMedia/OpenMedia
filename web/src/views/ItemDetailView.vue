@@ -68,28 +68,76 @@ const ICON_MORE = '\uE5D3'
 const ICON_CHEV_R = '\uE5C8'
 const ICON_CHEV_L = '\uE5C4'
 
+/**
+ * 加载详情页。
+ *
+ * ⚠️ 这里的分段是有原因的，不许再合并回一个 `await` 串：
+ *
+ * 改前是「getItem → getSimilarItems → getSeasons → loadEpisodes」四个**串行** await，
+ * 而 `<main>`（唯一滚动壳）当时写在 `v-else-if="item"` 分支里，`loading` 又要等四个请求全完
+ * 才置 false。于是点进详情页后的那段时间里：
+ *   · 页面上**不存在 `<main>`**，全屏唯一可滚元素是侧栏自己的 `.s-nav.s-scroll`；
+ *   · 用户滚轮滚到的是侧栏，详情页一动不动 —— 这就是「侧边栏常驻、滑不动、看不到信息」。
+ * 真机实测该窗口期 = 浏览器首屏 **8.5s**（4 个串行请求 5304ms + 首帧渲染），
+ * 而首屏真正需要的只有 getItem 的 **630ms**。
+ *
+ * 现在：① 首屏只等 getItem，一到就撤加载态（`<main>` 已常驻，见模板）；
+ *       ② 相似 / 季 / 分集并行补，谁先回来谁先渲染，不再阻塞首屏。
+ */
 async function load() {
   loading.value = true
   notFound.value = false
+  // 换条目先清场：否则上一条的相似推荐/分集会在新条目下先闪一下（真实站不会）
+  item.value = null
+  similar.value = []
+  seasons.value = []
+  episodes.value = []
+  people.value = []
+  currentSeasonId.value = null
+
+  const userId = auth.user!.Id
+  const id = String(route.params.id)
+
   try {
-    const userId = auth.user!.Id
-    const id = String(route.params.id)
+    // ① 首屏关键路径：只有「条目本体」这一个请求
     item.value = await getItem(userId, id)
-    document.title = `${item.value.Name} · ${t('app.name')}`
-    similar.value = (await getSimilarItems(id, userId)).Items
-    people.value = item.value.People ?? []
-    if (item.value.Type === 'Series') {
-      seasons.value = (await getSeasons(id, userId)).Items
-      currentSeasonId.value = seasons.value[0]?.Id ?? null
-      await loadEpisodes()
-    }
   } catch {
     notFound.value = true
-  } finally {
     loading.value = false
-    // 简介 clamp 检测(真实站仅在文本被截断时显示"更多")
-    void measureOverview()
+    return
   }
+
+  document.title = `${item.value.Name} · ${t('app.name')}`
+  people.value = item.value.People ?? []
+  loading.value = false
+  // 简介 clamp 检测(真实站仅在文本被截断时显示"更多")。必须等 DOM 真的渲染完再量，
+  // 改前是在 finally 里同步调的，那时内容还没进 DOM，`overviewClamped` 恒为 false。
+  void nextTick().then(() => measureOverview())
+
+  // ② 次屏：并行补，失败不阻塞（真实站也是"有就显示"）
+  const tasks: Promise<unknown>[] = [
+    getSimilarItems(id, userId)
+      .then((r) => { similar.value = r.Items ?? [] })
+      .catch(() => {}),
+  ]
+  if (item.value.Type === 'Series') {
+    tasks.push(
+      getSeasons(id, userId)
+        .then(async (r) => {
+          seasons.value = r.Items ?? []
+          const next = seasons.value[0]?.Id ?? null
+          if (next === currentSeasonId.value) {
+            // 季 id 没变（含变 null）→ watch 不会触发，这里显式拉一次
+            await loadEpisodes()
+          } else {
+            // 变了 → 交给 watch(currentSeasonId)，保证只发一次请求
+            currentSeasonId.value = next
+          }
+        })
+        .catch(() => {}),
+    )
+  }
+  void Promise.allSettled(tasks)
 }
 
 async function loadEpisodes() {
@@ -486,8 +534,45 @@ function libIcon(): string {
 
 <template>
   <div>
-    <div v-if="loading" class="page-loading">{{ t('common.loading') }}</div>
-    <div v-else-if="notFound" class="page-error">{{ t('item.notFound') }}</div>
+    <!-- 加载态 / 错误态**也必须带 `<main class="itemView …">` 滚动壳**。
+         改前这两个状态是裸 <div>，而 `<main>` 写在 v-else-if="item" 里 —— 于是从点卡片到数据
+         回来的那段时间（真机实测浏览器首屏 8.5s）整页**不存在滚动容器**，侧栏又是 docked 常驻，
+         全屏唯一可滚的就只剩侧栏自己的 `.s-nav.s-scroll`：滚轮滚的是侧栏，详情页一动不动。
+         这就是用户报的「侧边栏会常驻 导致不能滑动详情页 看不到信息」。
+         壳上那一串 class 与正常态逐字相同，所以三种状态互相切换时布局零位移。 -->
+    <main
+      v-if="loading"
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x"
+      aria-busy="true"
+    >
+      <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
+        <div class="s-detailSkeleton" role="status">
+          <div class="s-detailSkeleton-hero">
+            <div class="s-detailSkeleton-poster"></div>
+            <div class="s-detailSkeleton-main">
+              <div class="s-detailSkeleton-bar s-detailSkeleton-barTitle"></div>
+              <div class="s-detailSkeleton-bar s-detailSkeleton-barMeta"></div>
+              <div class="s-detailSkeleton-bar"></div>
+              <div class="s-detailSkeleton-bar s-detailSkeleton-barShort"></div>
+              <div class="s-detailSkeleton-actions"><span></span><span></span><span></span></div>
+              <span class="s-detailSkeleton-text">{{ t('common.loading') }}</span>
+            </div>
+          </div>
+          <!-- 下方补一排卡片位：只留上半截时，1600×900 下下半屏全黑，像"只加载了一半" -->
+          <div class="s-detailSkeleton-row" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </main>
+    <main
+      v-else-if="notFound"
+      class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x"
+    >
+      <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
+        <div class="page-error">{{ t('item.notFound') }}</div>
+      </div>
+    </main>
     <template v-else-if="item">
       <main class="itemView darkContentContainer-item view flex flex-direction-column scrollFrameY flex-grow emby-scroller page page-withFullDrawer page-withDockedDrawer focuscontainer-x">
         <div class="scrollSlider flex-grow flex-direction-column padded-top-page scrollSliderY focuscontainer-y navout-up">
@@ -1002,4 +1087,103 @@ function libIcon(): string {
   color: #000 !important;
 }
 .detailButton-primary .md-icon { color: #000; }
+
+/* ============================================================================
+   详情页骨架屏（加载态专用）
+   ============================================================================
+   为什么要有：改前加载态是 `emby495-overrides.css` 里 `.page-loading`（padding 4em + 一行居中灰字），
+   详情页在那个状态下既没有 `<main>` 壳也没有任何结构，用户看到的是「常驻侧栏 + 一行"加载中…"」，
+   判断成"页面坏了/滑不动"。骨架先把版式立起来：海报位、标题位、信息行、按钮位。
+   时长上它现在只覆盖 getItem 的 630ms（次屏已并行），不是原来的 8.5s。
+   颜色全部走 --s-* 令牌，深浅主题自动跟。 */
+.s-detailSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 0 var(--s-gutter) 48px;
+  max-inline-size: 1100px;
+}
+.s-detailSkeleton-hero {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 24px;
+}
+.s-detailSkeleton-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--s-gutter-sm);
+}
+.s-detailSkeleton-row span {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--s-r-sm);
+  background: var(--s-raised);
+  animation: s-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.s-detailSkeleton-poster {
+  flex-shrink: 0;
+  inline-size: 232px;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--s-r-md);
+  background: var(--s-raised);
+  animation: s-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.s-detailSkeleton-main {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+}
+.s-detailSkeleton-bar {
+  block-size: 14px;
+  inline-size: 88%;
+  border-radius: var(--s-r-sm);
+  background: var(--s-raised);
+  animation: s-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.s-detailSkeleton-barTitle { block-size: 34px; inline-size: 56%; }
+.s-detailSkeleton-barMeta { block-size: 12px; inline-size: 34%; }
+.s-detailSkeleton-barShort { inline-size: 62%; }
+.s-detailSkeleton-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.s-detailSkeleton-actions span {
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: 50%;
+  background: var(--s-raised);
+  animation: s-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.s-detailSkeleton-text {
+  margin-top: 4px;
+  font-size: var(--s-fs-sm);
+  color: var(--s-text-3);
+}
+@keyframes s-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+/* 尊重系统"减少动效"：不做呼吸，静态灰块 */
+@media (prefers-reduced-motion: reduce) {
+  .s-detailSkeleton-poster,
+  .s-detailSkeleton-bar,
+  .s-detailSkeleton-row span,
+  .s-detailSkeleton-actions span { animation: none; }
+}
+/* 窄屏：海报收到上方、内容在下（否则 232px 海报 + 文字列在 390px 下会挤成一条）；
+   占位卡从 6 列降到 3 列 */
+@media (max-width: 700px) {
+  .s-detailSkeleton { gap: 16px; }
+  .s-detailSkeleton-hero { flex-direction: column; gap: 16px; }
+  .s-detailSkeleton-poster { inline-size: 38%; }
+  .s-detailSkeleton-main { padding-top: 0; }
+  .s-detailSkeleton-row { flex-wrap: wrap; }
+  .s-detailSkeleton-row span { flex: 0 0 calc((100% - 2 * var(--s-gutter-sm)) / 3); }
+}
 </style>
