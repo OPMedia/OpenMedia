@@ -1,0 +1,74 @@
+{
+  "runAt": "2026-10-20 14:00:33",
+  "tag": "release-warmup",
+  "user": "perf-user-001",
+  "tool": "load-ab.py (A/B 同口径短版)",
+  "serverAliveAtEnd": true,
+  "scenarios": [
+    {
+      "label": "L1-Items分页-10rps",
+      "requests": 470,
+      "durationS": 5.0,
+      "rps": 93.2,
+      "p50Ms": 18.3,
+      "p95Ms": 25.5,
+      "p99Ms": 368.9,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 470
+      }
+    },
+    {
+      "label": "L1-Items分页-50rps",
+      "requests": 2516,
+      "durationS": 5.0,
+      "rps": 499.2,
+      "p50Ms": 55.5,
+      "p95Ms": 110.0,
+      "p99Ms": 180.4,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 2516
+      }
+    },
+    {
+      "label": "L1b-Items递归-50rps",
+      "requests": 3341,
+      "durationS": 5.0,
+      "rps": 663.6,
+      "p50Ms": 44.7,
+      "p95Ms": 80.4,
+      "p99Ms": 102.1,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 3341
+      }
+    },
+    {
+      "label": "L3-静态流-并发10",
+      "requests": 0,
+      "durationS": 0,
+      "rps": 0,
+      "p50Ms": 0.0,
+      "p95Ms": 0.0,
+      "p99Ms": 0.0,
+      "errorRate": 100.0,
+      "codes": {},
+      "skipped": true,
+      "reason": "库为合成数据，媒体文件不存在（D:\\perf-tree\\perf-lib-023\\Movie-008881.mkv）——静态流档位不适用"
+    },
+    {
+      "label": "L4-认证-并发20",
+      "requests": 3159,
+      "durationS": 5.0,
+      "rps": 630.6,
+      "p50Ms": 28.7,
+      "p95Ms": 61.0,
+      "p99Ms": 79.8,
+      "errorRate": 0.0,
+      "codes": {
+        "200": 3159
+      }
+    }
+  ]
+}

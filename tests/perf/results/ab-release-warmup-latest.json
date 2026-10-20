@@ -1,5 +1,5 @@
 {
-  "runAt": "2026-10-20 13:30:49",
+  "runAt": "2026-10-20 14:00:33",
   "tag": "release-warmup",
   "user": "perf-user-001",
   "tool": "load-ab.py (A/B 同口径短版)",
@@ -7,41 +7,41 @@
   "scenarios": [
     {
       "label": "L1-Items分页-10rps",
-      "requests": 499,
-      "durationS": 5.1,
-      "rps": 98.1,
-      "p50Ms": 19.4,
-      "p95Ms": 26.5,
-      "p99Ms": 88.9,
+      "requests": 470,
+      "durationS": 5.0,
+      "rps": 93.2,
+      "p50Ms": 18.3,
+      "p95Ms": 25.5,
+      "p99Ms": 368.9,
       "errorRate": 0.0,
       "codes": {
-        "200": 499
+        "200": 470
       }
     },
     {
       "label": "L1-Items分页-50rps",
-      "requests": 2466,
+      "requests": 2516,
       "durationS": 5.0,
-      "rps": 489.6,
-      "p50Ms": 57.0,
-      "p95Ms": 117.2,
-      "p99Ms": 183.0,
+      "rps": 499.2,
+      "p50Ms": 55.5,
+      "p95Ms": 110.0,
+      "p99Ms": 180.4,
       "errorRate": 0.0,
       "codes": {
-        "200": 2466
+        "200": 2516
       }
     },
     {
       "label": "L1b-Items递归-50rps",
-      "requests": 3846,
+      "requests": 3341,
       "durationS": 5.0,
-      "rps": 764.8,
-      "p50Ms": 38.9,
-      "p95Ms": 68.5,
-      "p99Ms": 86.2,
+      "rps": 663.6,
+      "p50Ms": 44.7,
+      "p95Ms": 80.4,
+      "p99Ms": 102.1,
       "errorRate": 0.0,
       "codes": {
-        "200": 3846
+        "200": 3341
       }
     },
     {
@@ -59,15 +59,15 @@
     },
     {
       "label": "L4-认证-并发20",
-      "requests": 2517,
+      "requests": 3159,
       "durationS": 5.0,
-      "rps": 502.0,
-      "p50Ms": 23.3,
-      "p95Ms": 115.8,
-      "p99Ms": 300.0,
+      "rps": 630.6,
+      "p50Ms": 28.7,
+      "p95Ms": 61.0,
+      "p99Ms": 79.8,
       "errorRate": 0.0,
       "codes": {
-        "200": 2517
+        "200": 3159
       }
     }
   ]
