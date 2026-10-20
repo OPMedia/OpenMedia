@@ -34,6 +34,8 @@ If you're a new user looking to install Emby Server, please head over to [emby.m
 
 [术语表 / Glossary](docs/GLOSSARY.md "全项目术语权威：SPEC、代码、PR 讨论中出现这些词时，含义以此为准")
 
+[本地环境配置](docs/setup-local-env.md "Windows 本地开发环境：.NET 10 SDK / PostgreSQL 18 (5432, 123456) / Node+pnpm / ffmpeg，含起服务、起前端、跑测试与链接约定")
+
 
 ## 前端（Web / Serata） ##
 
