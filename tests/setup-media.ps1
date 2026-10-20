@@ -5,9 +5,19 @@
 # PowerShell 5.1 兼容。
 param(
     [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media",
-    [string]$Ffmpeg = "D:\OpenMedia\ffmpeg.exe"
+    [string]$Ffmpeg = ''
 )
 $ErrorActionPreference = 'Stop'
+
+# ffmpeg 定位：显式 -Ffmpeg > PATH 解析 > 历史硬编码路径。
+# 旧默认值写死 D:\OpenMedia\ffmpeg.exe，本机（winget 安装）无此路径，
+# 而 scenarios.ps1 不透传 -Ffmpeg，导致场景测试一进 S3 就挂——2026-10-20 全量回归暴露。
+if (-not $Ffmpeg) {
+    $ffcmd = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
+    if ($ffcmd) { $Ffmpeg = $ffcmd.Source }
+    elseif (Test-Path -LiteralPath 'D:\OpenMedia\ffmpeg.exe') { $Ffmpeg = 'D:\OpenMedia\ffmpeg.exe' }
+    else { throw '找不到 ffmpeg.exe：用 -Ffmpeg 指定，或把 ffmpeg 加入 PATH' }
+}
 
 $movies = @(
     @{ Folder = 'Movie1'; Title = 'Movie1'; Year = 2020; Poster = $true;  Seconds = 10 },
@@ -87,6 +97,7 @@ foreach ($m in $movies) {
 }
 
 Write-Host "媒体目录: $MediaRoot"
+Write-Host "ffmpeg   : $Ffmpeg"
 Get-ChildItem -LiteralPath $MediaRoot -Recurse -File | ForEach-Object {
     Write-Host ("  {0}  {1} bytes" -f $_.FullName.Substring($MediaRoot.Length + 1), $_.Length)
 }

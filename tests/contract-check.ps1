@@ -95,14 +95,19 @@ else {
 Write-Host "`n=== /Users 契约 ===" -ForegroundColor Cyan
 $rU = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/Users" -Headers $hdrs
 $ju = ConvertFrom-JsonSafe $rU.Body
-if ($rU.Status -eq 200 -and $ju -is [System.Array] -and $ju.Count -gt 0) {
-    Add-Check '/Users' 'HTTP 200 + 数组' "status=200 count=$($ju.Count)" 'PASS'
-    $pvU = @(Get-PascalViolations $ju)
+# 数组判定看 HTTP 原文：PS 5.1 的 ConvertFrom-Json 会把「单元素 JSON 数组」解包成标量，
+# 用 $ju -is [Array] 判会误报 FAIL（docs/test-report.md §5 已记为误报）。2026-10-20 修正。
+# 注意不能用 -like '[*'（'[' 会被当字符集起始符抛 WildcardPatternException）。
+$bodyIsArray = ($null -ne $rU.Body) -and $rU.Body.TrimStart().StartsWith('[')
+$juArr = @($ju)
+if ($rU.Status -eq 200 -and $bodyIsArray -and $juArr.Count -gt 0) {
+    Add-Check '/Users' 'HTTP 200 + 数组' "status=200 count=$($juArr.Count)" 'PASS'
+    $pvU = @(Get-PascalViolations $juArr)
     Add-Check '/Users' '键名 PascalCase（首元素）' $(if ($pvU.Count) { "违规: $($pvU -join ',')" } else { '全部 PascalCase' }) $(if ($pvU.Count) { 'FAIL' } else { 'PASS' })
-    $uid = "$($ju[0].Id)"
+    $uid = "$($juArr[0].Id)"
     Add-Check '/Users' 'User.Id = Guid N 格式（32 hex）' "Id=$uid" $(if (Test-EmbyIdFormat $uid) { 'PASS' } else { 'FAIL' })
-    $hasName = [bool]$ju[0].PSObject.Properties['Name']
-    Add-Check '/Users' '关键字段 Name' $(if ($hasName) { "存在（$($ju[0].Name)）" } else { '缺失' }) $(if ($hasName) { 'PASS' } else { 'FAIL' })
+    $hasName = [bool]$juArr[0].PSObject.Properties['Name']
+    Add-Check '/Users' '关键字段 Name' $(if ($hasName) { "存在（$($juArr[0].Name)）" } else { '缺失' }) $(if ($hasName) { 'PASS' } else { 'FAIL' })
 }
 else {
     Add-Check '/Users' 'HTTP 200 + 数组' "status=$($rU.Status)$(if ($token) { '' } else { '（未认证）' })" 'FAIL'

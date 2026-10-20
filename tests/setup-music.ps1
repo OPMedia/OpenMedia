@@ -4,10 +4,17 @@
 # PowerShell 5.1 兼容。
 param(
     [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media-music",
-    [string]$Ffmpeg = "D:\OpenMedia\ffmpeg.exe"
+    [string]$Ffmpeg = ''
 )
 $ErrorActionPreference = 'Stop'
 
+# ffmpeg 定位：显式 -Ffmpeg > PATH 解析 > 历史硬编码路径（与 setup-media.ps1 一致）。
+if (-not $Ffmpeg) {
+    $ffcmd = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
+    if ($ffcmd) { $Ffmpeg = $ffcmd.Source }
+    elseif (Test-Path -LiteralPath 'D:\OpenMedia\ffmpeg.exe') { $Ffmpeg = 'D:\OpenMedia\ffmpeg.exe' }
+    else { throw '找不到 ffmpeg.exe：用 -Ffmpeg 指定，或把 ffmpeg 加入 PATH' }
+}
 if (-not (Test-Path -LiteralPath $Ffmpeg)) { throw "ffmpeg 不存在: $Ffmpeg" }
 
 # 曲目定义：艺人 / 专辑 / 年份 / 曲目号 / 标题 / 频率(Hz) / 扩展名 / 编码器参数

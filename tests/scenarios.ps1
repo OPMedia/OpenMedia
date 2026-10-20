@@ -8,7 +8,8 @@ param(
     [string]$OutDir = '',
     [string]$AdminUser = 'admin',
     [string]$AdminPw = 'admin',
-    [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media"
+    [string]$MediaRoot = "D:\Dev\OpenMedia\tests\media",
+    [string]$Ffmpeg = ''
 )
 $ErrorActionPreference = 'Continue'
 if (-not $OutDir) { $OutDir = Join-Path $PSScriptRoot 'results' }
@@ -183,7 +184,7 @@ Add-Result -Section 'S2-认证' -Name 'GET /Users（无 token）' -Expected '401
 
 # ============ S3 媒体库 ============
 Write-Host "`n=== S3 媒体库 ===" -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot 'setup-media.ps1') -MediaRoot $MediaRoot | Out-Null
+& (Join-Path $PSScriptRoot 'setup-media.ps1') -MediaRoot $MediaRoot -Ffmpeg $Ffmpeg | Out-Null
 $mediaOk = (Test-Path "$MediaRoot\Movie1\Movie1.mkv") -and (Test-Path "$MediaRoot\Movie1\Movie1.nfo") -and `
            (Test-Path "$MediaRoot\Movie2\Movie2.mkv") -and (Test-Path "$MediaRoot\Movie2\Movie2.nfo")
 Add-Result -Section 'S3-媒体库' -Name '测试媒体就绪（Movie1/Movie2 mkv+nfo+poster）' -Expected '文件存在' `
@@ -233,7 +234,13 @@ while ((Get-Date) -lt $deadline) {
     $rItems = Invoke-EmbyRequest -Client $client -Method 'GET' -Url "$ApiBase/Items?Recursive=true&IncludeItemTypes=Movie&Limit=20" -Headers $hdrs
     if ($rItems.Status -eq 200) {
         $movies = @((ConvertFrom-JsonSafe $rItems.Body).Items)
-        if ($movies.Count -ge 2) { $foundSec = [Math]::Round($sw.Elapsed.TotalSeconds, 1); break }
+        # 条目数与元数据都要就绪：首轮扫描时条目先建、元数据（nfo year / poster）后落库，
+        # 只等 count>=2 会读到 ProductionYear 为空的中间态，产出假 FAIL
+        # （2026-10-20 全量回归首轮 3 条 FAIL、二轮全绿，定位至此）。
+        $m1 = @($movies | Where-Object { "$($_.Name)" -eq 'Movie1' })[0]
+        $m2 = @($movies | Where-Object { "$($_.Name)" -eq 'Movie2' })[0]
+        $metaReady = $m1 -and $m2 -and $m1.ProductionYear -and $m2.ProductionYear
+        if ($movies.Count -ge 2 -and $metaReady) { $foundSec = [Math]::Round($sw.Elapsed.TotalSeconds, 1); break }
     }
     Start-Sleep -Seconds 3
 }
