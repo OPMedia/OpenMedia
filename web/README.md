@@ -7,8 +7,7 @@ OpenMedia 的 Web 前端，内部设计代号 **Serata**。独立于后端开发
 - 组件基座：[reka-ui](https://reka-ui.com/) 2.11（无样式可访问性原语，**shadcn-vue 就是它套了一层 Tailwind**）
 - 动效：`motion-v` 2.8（Framer Motion 的 Vue 移植）+ `@formkit/auto-animate` 0.10（列表 FLIP，2KB）+ `@vueuse/core` 15
 - 设计层：`src/styles/serata/`（令牌 + 基元 + 动效 + 换肤桥），契约见 [styles/serata/README.md](src/styles/serata/README.md)
-- 规格与决策：[docs/spec/web.md](../docs/spec/web.md)、[ADR-0011](../docs/adr/0011-web-ui-emby-parity.md)、
-  [ADR-0012](../docs/adr/0012-web-home-hero.md)、[ADR-0013](../docs/adr/0013-settings-honesty.md)
+- 设计契约：仓库根目录 `AGENTS.md` 与 `src/styles/serata/README.md`
 
 ## 快速开始
 
@@ -56,7 +55,7 @@ pnpm dev          # http://localhost:5173
 | `src/api/`、`src/mocks/` | API 客户端（含 `api/toast.ts` 全局 toast）与 MSW 假数据 |
 | `src/i18n/locales/` | `zh-CN.json` / `en.json`（两侧键必须对齐，**由 Lead 独占维护**） |
 | `tools/` | 浏览器验收与依赖探针（见下） |
-| `../docs/adr/`、`../docs/spec/` | 架构决策与规格 |
+| `AGENTS.md`（仓库根目录） | 项目约定、构建命令与前端验收规则 |
 
 ## 写前端时的硬规矩
 
@@ -67,7 +66,7 @@ pnpm dev          # http://localhost:5173
 5. **`t()` 必须落在 `computed` 或模板里**：模块级常量不会随语言切换重算。
 6. **焦点环要 `!important` + `box-shadow` 双保险**：老主题的 `outline:0!important` 会吃掉单层 outline。
 7. **`prefers-reduced-motion` 下自动轮转初始暂停**，但仍允许用户手动开启。
-8. **每个设置项必须有读取方**（见 ADR-0013）：只写进 localStorage 而没人读的开关等于骗人，不加。
+8. **每个设置项必须有读取方**：只写进 localStorage 而没人读的开关等于骗人，不加。
 9. **弹层不许再手搓**：凡是要 Esc / 点外关闭 / 焦点陷阱 / 读屏隔离的浮层，一律用 `components/ui/SSheet.vue`。
    手搓 `v-if` 遮罩必然丢掉焦点管理和滚动锁定——旧 `SheetMenu`/`ItemMenuSheet`/`EmbySelect` 三处就是这么丢的。
 10. **动效类名只从 `motion.css` 取**，组件里不许再写 `@keyframes`、裸 `ms`、裸 `cubic-bezier`；时长/缓动只认 `--s-dur-*` / `--s-ease-*`。
