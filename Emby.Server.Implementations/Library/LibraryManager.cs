@@ -438,10 +438,10 @@ namespace Emby.Server.Implementations.Library
 
             item.SetParent(null);
 
-            ItemRepository.DeleteItemAsync(item.Id, CancellationToken.None).GetAwaiter().GetResult();
+            ItemRepository.DeleteItem(item.Id, CancellationToken.None);
             foreach (var child in children)
             {
-                ItemRepository.DeleteItemAsync(child.Id, CancellationToken.None).GetAwaiter().GetResult();
+                ItemRepository.DeleteItem(child.Id, CancellationToken.None);
             }
 
             _libraryItemsCache.Remove(item.Id);
@@ -1279,7 +1279,7 @@ namespace Emby.Server.Implementations.Library
                 progress.Report(percent * 100);
             }
 
-            ItemRepository.UpdateInheritedValuesAsync(cancellationToken).GetAwaiter().GetResult();
+            await ItemRepository.UpdateInheritedValuesAsync(cancellationToken).ConfigureAwait(false);
 
             // S2 验收：条目缓存命中率报告（每轮扫描时点；容量/TTL 可用
             // OPENMEDIA_ITEM_CACHE_SIZE / OPENMEDIA_ITEM_CACHE_TTL_SECONDS 调）
@@ -1537,7 +1537,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetStudiosAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetStudios(query);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetGenres(InternalItemsQuery query)
@@ -1548,7 +1548,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetGenres(query);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetGameGenres(InternalItemsQuery query)
@@ -1559,7 +1559,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetGameGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetGameGenres(query);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetMusicGenres(InternalItemsQuery query)
@@ -1570,7 +1570,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetMusicGenresAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetMusicGenres(query);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetAllArtists(InternalItemsQuery query)
@@ -1581,7 +1581,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetAllArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetAllArtists(query);
         }
 
         public QueryResult<Tuple<BaseItem, ItemCounts>> GetArtists(InternalItemsQuery query)
@@ -1592,7 +1592,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetArtists(query);
         }
 
         private void SetTopParentOrAncestorIds(InternalItemsQuery query)
@@ -1636,7 +1636,7 @@ namespace Emby.Server.Implementations.Library
             }
 
             SetTopParentOrAncestorIds(query);
-            return ItemRepository.GetAlbumArtistsAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetAlbumArtists(query);
         }
 
         public QueryResult<BaseItem> GetItemsResult(InternalItemsQuery query)
@@ -3020,7 +3020,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<PersonInfo> GetPeople(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeopleAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetPeople(query);
         }
 
         public List<PersonInfo> GetPeople(BaseItem item)
@@ -3043,7 +3043,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<Person> GetPeopleItems(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeopleNamesAsync(query, CancellationToken.None).GetAwaiter().GetResult().Select(i =>
+            return ItemRepository.GetPeopleNames(query).Select(i =>
             {
                 try
                 {
@@ -3060,7 +3060,7 @@ namespace Emby.Server.Implementations.Library
 
         public List<string> GetPeopleNames(InternalPeopleQuery query)
         {
-            return ItemRepository.GetPeopleNamesAsync(query, CancellationToken.None).GetAwaiter().GetResult();
+            return ItemRepository.GetPeopleNames(query);
         }
 
         public void UpdatePeople(BaseItem item, List<PersonInfo> people)
@@ -3070,7 +3070,7 @@ namespace Emby.Server.Implementations.Library
                 return;
             }
 
-            ItemRepository.UpdatePeopleAsync(item.Id, people, CancellationToken.None).GetAwaiter().GetResult();
+            ItemRepository.UpdatePeople(item.Id, people);
         }
 
         public async Task<ItemImageInfo> ConvertImageToLocal(BaseItem item, ItemImageInfo image, int imageIndex)
@@ -3177,10 +3177,18 @@ namespace Emby.Server.Implementations.Library
 
         private void StartScanInBackground()
         {
-            Task.Run(() =>
+            // Fire-and-forget: 调用方不等待后台扫描结果，异常在此记录以免成为未观测的 Task。
+            _ = Task.Run(async () =>
             {
                 // No need to start if scanning the library because it will handle it
-                ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None);
+                try
+                {
+                    await ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error validating media library in background", ex);
+                }
             });
         }
 
@@ -3355,7 +3363,7 @@ namespace Emby.Server.Implementations.Library
                 var folderId = GetNewItemId(path, typeof(CollectionFolder));
                 try
                 {
-                    ItemRepository.DeleteItemAsync(folderId, CancellationToken.None).GetAwaiter().GetResult();
+                    await ItemRepository.DeleteItemAsync(folderId, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
