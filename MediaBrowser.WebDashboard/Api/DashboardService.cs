@@ -429,7 +429,7 @@ namespace MediaBrowser.WebDashboard.Api
             {
                 using (var fs = _fileSystem.GetFileStream(destinationFilePath, FileOpenMode.Create, FileAccessMode.Write, FileShareMode.Read))
                 {
-                    stream.CopyTo(fs);
+                    await stream.CopyToAsync(fs).ConfigureAwait(false);
                 }
             }
         }

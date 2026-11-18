@@ -240,7 +240,8 @@ namespace MediaBrowser.Api
                 throw new ResourceNotFoundException(string.Format("Package not found: {0}", request.Name));
             }
 
-            Task.Run(() => _installationManager.InstallPackage(package, true, new SimpleProgress<double>(), CancellationToken.None));
+            // Installation continues in the background; the response must not wait for it.
+            _ = Task.Run(() => _installationManager.InstallPackage(package, true, new SimpleProgress<double>(), CancellationToken.None));
         }
 
         /// <summary>

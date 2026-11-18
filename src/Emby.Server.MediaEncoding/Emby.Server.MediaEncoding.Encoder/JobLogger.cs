@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.Logging;
@@ -20,9 +21,13 @@ public class JobLogger
 		_logger = logger;
 	}
 
-	public async void StartStreamingLog(EncodingJobInfo state, Stream source, Stream target)
+	public void StartStreamingLog(EncodingJobInfo state, Stream source, Stream target)
 	{
-		_ = 2;
+		_ = StartStreamingLogAsync(state, source, target);
+	}
+
+	private async Task StartStreamingLogAsync(EncodingJobInfo state, Stream source, Stream target)
+	{
 		try
 		{
 			using StreamReader reader = new StreamReader(source);

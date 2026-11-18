@@ -373,16 +373,27 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 		}
 	}
 
-	private async void OnTranscodeKillTimerStopped(object state)
+	private void OnTranscodeKillTimerStopped(object state)
 	{
-		TranscodingJob transcodingJob = (TranscodingJob)state;
-		if (!transcodingJob.HasExited && (int)transcodingJob.Type != 0 && transcodingJob.TimerDuration != -1 && (DateTime.UtcNow - transcodingJob.LastPingDate).TotalMilliseconds < (double)transcodingJob.TimerDuration)
+		_ = KillTranscodingJobFromTimerAsync((TranscodingJob)state);
+	}
+
+	private async Task KillTranscodingJobFromTimerAsync(TranscodingJob transcodingJob)
+	{
+		try
 		{
-			transcodingJob.StartKillTimer(OnTranscodeKillTimerStopped, "ShortTimeSinceLastPing");
-			return;
+			if (!transcodingJob.HasExited && (int)transcodingJob.Type != 0 && transcodingJob.TimerDuration != -1 && (DateTime.UtcNow - transcodingJob.LastPingDate).TotalMilliseconds < (double)transcodingJob.TimerDuration)
+			{
+				transcodingJob.StartKillTimer(OnTranscodeKillTimerStopped, "ShortTimeSinceLastPing");
+				return;
+			}
+			Logger.Info("Transcoding kill timer stopped for JobId {0} PlaySessionId {1}. Killing transcoding", new object[2] { transcodingJob.Id, transcodingJob.PlaySessionId });
+			await KillTranscodingJob(transcodingJob, closeLiveStream: true, delete: true).ConfigureAwait(continueOnCapturedContext: false);
 		}
-		Logger.Info("Transcoding kill timer stopped for JobId {0} PlaySessionId {1}. Killing transcoding", new object[2] { transcodingJob.Id, transcodingJob.PlaySessionId });
-		await KillTranscodingJob(transcodingJob, closeLiveStream: true, delete: true).ConfigureAwait(continueOnCapturedContext: false);
+		catch (Exception ex)
+		{
+			Logger.ErrorException("Error killing transcoding job from timer", ex);
+		}
 	}
 
 	internal Task KillTranscodingJobs(string deviceId, string playSessionId, bool deleteFiles)
@@ -411,13 +422,15 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 	{
 		job.DisposeKillTimer();
 		Logger.Debug("KillTranscodingJob - JobId {0} PlaySessionId {1}. Killing transcoding", new object[2] { job.Id, job.PlaySessionId });
+		bool shouldCancel;
 		lock (_activeTranscodingJobs)
 		{
 			_activeTranscodingJobs.Remove(job);
-			if (!job.CancellationTokenSource.IsCancellationRequested)
-			{
-				job.CancellationTokenSource.Cancel();
-			}
+			shouldCancel = !job.CancellationTokenSource.IsCancellationRequested;
+		}
+		if (shouldCancel)
+		{
+			await job.CancellationTokenSource.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
 		}
 		// S3：_transcodingLocks 已改 lock striping（固定桶，无条目可删）
 		await job.ProcessLock.WaitAsync().ConfigureAwait(continueOnCapturedContext: false);
@@ -429,7 +442,7 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 				try
 				{
 					Logger.Info("Stopping ffmpeg process with q command for {0}", new object[1] { job.Path });
-					process.StandardInput.WriteLine("q");
+					await process.StandardInput.WriteLineAsync("q").ConfigureAwait(continueOnCapturedContext: false);
 					if (!(await process.WaitForExitAsync(5000).ConfigureAwait(continueOnCapturedContext: false)))
 					{
 						Logger.Info("Killing ffmpeg process for {0}", new object[1] { job.Path });
@@ -453,7 +466,8 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 		}
 		if (delete)
 		{
-			DeletePartialStreamFiles(job.Path, job.Type, 0, 1500);
+			// Partial-file cleanup is retrying/deferred by design and must not delay job termination.
+			_ = DeletePartialStreamFiles(job.Path, job.Type, 0, 1500);
 		}
 		if (closeLiveStream && !string.IsNullOrWhiteSpace(job.LiveStreamId))
 		{

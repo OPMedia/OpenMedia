@@ -520,7 +520,7 @@ public class SubtitleEncoder : ISubtitleEncoder
 		}
 		using Stream stream = _fileSystem.GetFileStream(file, (FileOpenMode)2, (FileAccessMode)2, (FileShareMode)1, false);
 		using StreamWriter streamWriter = new StreamWriter(stream, encoding);
-		streamWriter.Write(text2);
+		await streamWriter.WriteAsync(text2).ConfigureAwait(continueOnCapturedContext: false);
 	}
 
 	private string GetSubtitleCachePath(string mediaPath, MediaProtocol mediaProtocol, int subtitleStreamIndex, string outputSubtitleExtension)

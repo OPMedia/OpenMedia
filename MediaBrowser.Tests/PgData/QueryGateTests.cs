@@ -86,8 +86,7 @@ namespace MediaBrowser.Tests.PgData
             var gate = new GateFakeRepository();
 
             var entered = 0;
-            var release = new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new SemaphoreSlim(0);
 
             var holders = Enumerable.Range(0, capacity)
                 .Select(_ => Task.Run(async () =>
@@ -95,7 +94,11 @@ namespace MediaBrowser.Tests.PgData
                     Interlocked.Increment(ref entered);
                     try
                     {
-                        return await gate.RunAsync(ct => release.Task).ConfigureAwait(false);
+                        return await gate.RunAsync<bool>(async ct =>
+                        {
+                            await release.WaitAsync(ct).ConfigureAwait(false);
+                            return true;
+                        }).ConfigureAwait(false);
                     }
                     catch (PoolExhaustedException)
                     {
@@ -147,7 +150,7 @@ namespace MediaBrowser.Tests.PgData
                 "503 拒绝必须有界收敛（实测 " + watch.ElapsedMilliseconds + "ms）");
 
             // 放行 + 全量归还：门不得泄漏，否则后续查询全部 503
-            release.TrySetResult(true);
+            release.Release(capacity);
             await Task.WhenAll(holders).ConfigureAwait(false);
             Assert.AreEqual(0, PgGateAccess.QueryGateInUse,
                 "全部放行后门必须完全归还（当前 " + PgGateAccess.QueryGateInUse + "）");
@@ -166,12 +169,15 @@ namespace MediaBrowser.Tests.PgData
 
             var capacity = PgGateAccess.QueryGateCapacity;
             var gate = new GateFakeRepository();
-            var release = new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new SemaphoreSlim(0);
             var background = Enumerable.Range(0, capacity)
                 .Select(_ => Task.Run(async () =>
                 {
-                    await gate.RunAsync(ct => release.Task).ConfigureAwait(false);
+                    await gate.RunAsync<bool>(async ct =>
+                    {
+                        await release.WaitAsync(ct).ConfigureAwait(false);
+                        return true;
+                    }).ConfigureAwait(false);
                 }))
                 .ToArray();
 
@@ -216,7 +222,7 @@ namespace MediaBrowser.Tests.PgData
             Assert.AreEqual("PoolExhausted", gated,
                 "门满时 GetItems 应被 503；否则本用例的“门饱和”前提不成立");
 
-            release.TrySetResult(true);
+            release.Release(capacity);
             await Task.WhenAll(background).ConfigureAwait(false);
         }
 
@@ -271,13 +277,16 @@ namespace MediaBrowser.Tests.PgData
 
             var inUse = new TaskCompletionSource<bool>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
-            var release = new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new SemaphoreSlim(0);
 
             var holders = Enumerable.Range(0, capacity)
                 .Select(_ => Task.Run(async () =>
                 {
-                    await gate.RunAsync(ct => release.Task).ConfigureAwait(false);
+                    await gate.RunAsync<bool>(async ct =>
+                    {
+                        await release.WaitAsync(ct).ConfigureAwait(false);
+                        return true;
+                    }).ConfigureAwait(false);
                 }))
                 .ToArray();
 
@@ -314,7 +323,7 @@ namespace MediaBrowser.Tests.PgData
                 "拒绝必须快速收敛（实测 " + watch.ElapsedMilliseconds + "ms）；"
                 + "15s 池等待已改为 3s，绝不允许回到 U2 的 60s 挂死形态");
 
-            release.TrySetResult(true);
+            release.Release(capacity);
             await Task.WhenAll(holders).ConfigureAwait(false);
         }
 

@@ -147,7 +147,8 @@ public abstract class BaseHlsService : BaseStreamingService
 				{
 					while (!reader.EndOfStream)
 					{
-						if (reader.ReadLine().IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
+						string line = await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false);
+						if (line != null && line.IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
 						{
 							num++;
 						}

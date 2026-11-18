@@ -252,10 +252,10 @@ namespace MediaBrowser.Tests.PgData
             {
                 // 生产 SELECT 的第一列是 id（BIGINT），差分要的是行身份；优先取 name 列，
                 // 取不到再退回第一列，使 PG 侧与 SQLite 侧都按 name 归一。
-                var value = TryGetColumnValue(reader, "name");
+                var value = await TryGetColumnValueAsync(reader, "name").ConfigureAwait(false);
                 if (value == null)
                 {
-                    value = reader.IsDBNull(0)
+                    value = await reader.IsDBNullAsync(0).ConfigureAwait(false)
                         ? "<NULL>"
                         : Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture) ?? "<NULL>";
                 }
@@ -270,13 +270,13 @@ namespace MediaBrowser.Tests.PgData
         /// <summary>
         /// Try to read a column by name; returns null when absent or DBNULL.
         /// </summary>
-        private static string TryGetColumnValue(NpgsqlDataReader reader, string columnName)
+        private static async Task<string> TryGetColumnValueAsync(NpgsqlDataReader reader, string columnName)
         {
             for (var i = 0; i < reader.FieldCount; i++)
             {
                 if (string.Equals(reader.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
                 {
-                    return reader.IsDBNull(i)
+                    return await reader.IsDBNullAsync(i).ConfigureAwait(false)
                         ? "<NULL>"
                         : Convert.ToString(reader.GetValue(i), CultureInfo.InvariantCulture) ?? "<NULL>";
                 }

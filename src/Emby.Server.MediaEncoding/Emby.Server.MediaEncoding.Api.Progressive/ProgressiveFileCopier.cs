@@ -91,7 +91,7 @@ public class ProgressiveFileCopier : IAsyncStreamWriter, IHasHeaders
 			int emptyReadLimit = (AllowEndOfFile ? 20 : 100);
 			while (eofCount < emptyReadLimit)
 			{
-				if (((!allowAsyncFileRead) ? (await CopyToInternalAsyncWithSyncRead(inputStream, outputStream, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) : (await CopyToInternalAsync(inputStream, outputStream, cancellationToken).ConfigureAwait(continueOnCapturedContext: false))) == 0)
+				if (((!allowAsyncFileRead) ? (await CopyToInternalAsyncWithManualRead(inputStream, outputStream, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) : (await CopyToInternalAsync(inputStream, outputStream, cancellationToken).ConfigureAwait(continueOnCapturedContext: false))) == 0)
 				{
 					if (_job == null || _job.HasExited)
 					{
@@ -114,15 +114,14 @@ public class ProgressiveFileCopier : IAsyncStreamWriter, IHasHeaders
 		}
 	}
 
-	private async Task<int> CopyToInternalAsyncWithSyncRead(Stream source, Stream destination, CancellationToken cancellationToken)
+	private async Task<int> CopyToInternalAsyncWithManualRead(Stream source, Stream destination, CancellationToken cancellationToken)
 	{
 		byte[] array = new byte[81920];
 		int totalBytesRead = 0;
 		while (true)
 		{
-			int num;
-			int bytesRead = (num = source.Read(array, 0, array.Length));
-			if (num == 0)
+			int bytesRead = await source.ReadAsync(array, 0, array.Length, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+			if (bytesRead == 0)
 			{
 				break;
 			}

@@ -38,9 +38,17 @@ namespace MediaBrowser.Tests.PgData
 
         public PackageVersionClass SystemUpdateLevel => PackageVersionClass.Release;
 
-        public event EventHandler<GenericEventArgs<PackageVersionInfo>> ApplicationUpdated;
+        public event EventHandler<GenericEventArgs<PackageVersionInfo>> ApplicationUpdated
+        {
+            add { }
+            remove { }
+        }
 
-        public event EventHandler HasPendingRestartChanged;
+        public event EventHandler HasPendingRestartChanged
+        {
+            add { }
+            remove { }
+        }
 
         public bool SupportsAutoRunAtStartup => false;
 
@@ -58,7 +66,11 @@ namespace MediaBrowser.Tests.PgData
 
         public string PackageRuntime => "Test";
 
-        public event EventHandler HasUpdateAvailableChanged;
+        public event EventHandler HasUpdateAvailableChanged
+        {
+            add { }
+            remove { }
+        }
 
         public Task<SystemInfo> GetSystemInfo(CancellationToken cancellationToken)
         {

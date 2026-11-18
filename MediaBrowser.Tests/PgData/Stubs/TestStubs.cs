@@ -20,7 +20,11 @@ namespace MediaBrowser.Tests.PgData
 
         public string ExceptionMessagePrefix { get; set; }
 
-        public event EventHandler LoggerLoaded;
+        public event EventHandler LoggerLoaded
+        {
+            add { }
+            remove { }
+        }
 
         public ILogger GetLogger(string name)
         {
