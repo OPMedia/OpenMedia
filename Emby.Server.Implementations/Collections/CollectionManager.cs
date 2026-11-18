@@ -351,26 +351,39 @@ namespace Emby.Server.Implementations.Collections
             _logger = logger;
         }
 
-        public async void Run()
+        public void Run()
         {
-            if (!_config.Configuration.CollectionsUpgraded && _config.Configuration.IsStartupWizardCompleted)
+            // IServerEntryPoint.Run 是同步契约：升级任务在后台执行，异常由 RunAsync 记录。
+            _ = RunAsync();
+        }
+
+        private async Task RunAsync()
+        {
+            try
             {
-                var path = _collectionManager.GetCollectionsFolderPath();
-
-                if (_fileSystem.DirectoryExists(path))
+                if (!_config.Configuration.CollectionsUpgraded && _config.Configuration.IsStartupWizardCompleted)
                 {
-                    try
-                    {
-                        await _collectionManager.EnsureLibraryFolder(path, true).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error creating camera uploads library", ex);
-                    }
+                    var path = _collectionManager.GetCollectionsFolderPath();
 
-                    _config.Configuration.CollectionsUpgraded = true;
-                    _config.SaveConfiguration();
+                    if (_fileSystem.DirectoryExists(path))
+                    {
+                        try
+                        {
+                            await _collectionManager.EnsureLibraryFolder(path, true).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.ErrorException("Error creating camera uploads library", ex);
+                        }
+
+                        _config.Configuration.CollectionsUpgraded = true;
+                        _config.SaveConfiguration();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error running collections upgrade", ex);
             }
         }
 

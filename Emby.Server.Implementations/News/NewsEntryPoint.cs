@@ -59,12 +59,17 @@ namespace Emby.Server.Implementations.News
         /// Called when [timer fired].
         /// </summary>
         /// <param name="state">The state.</param>
-        private async void OnTimerFired(object state)
+        private void OnTimerFired(object state)
         {
-            var path = Path.Combine(_appPaths.CachePath, "news.json");
+            // TimerCallback 是同步契约：后台下载不阻塞计时器线程，异常由 OnTimerFiredAsync 记录。
+            _ = OnTimerFiredAsync();
+        }
 
+        private async Task OnTimerFiredAsync()
+        {
             try
             {
+                var path = Path.Combine(_appPaths.CachePath, "news.json");
                 await DownloadNews(path).ConfigureAwait(false);
             }
             catch (Exception ex)
