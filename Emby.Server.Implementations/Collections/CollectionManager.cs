@@ -99,7 +99,9 @@ namespace Emby.Server.Implementations.Collections
 
         private IEnumerable<BoxSet> GetCollections(User user)
         {
-            var folder = GetCollectionsFolder(false).Result;
+            // createIfNeeded=false 的 EnsureLibraryFolder 只查现有文件夹、不会启动异步创建；
+            // 这里直接走同一查找逻辑，避免为纯同步查询引入阻塞等待。
+            var folder = FindFolders(GetCollectionsFolderPath()).FirstOrDefault();
 
             return folder == null ?
                 new List<BoxSet>() :
@@ -351,26 +353,39 @@ namespace Emby.Server.Implementations.Collections
             _logger = logger;
         }
 
-        public async void Run()
+        public void Run()
         {
-            if (!_config.Configuration.CollectionsUpgraded && _config.Configuration.IsStartupWizardCompleted)
+            // IServerEntryPoint.Run 是同步契约：升级任务在后台执行，异常由 RunAsync 记录。
+            _ = RunAsync();
+        }
+
+        private async Task RunAsync()
+        {
+            try
             {
-                var path = _collectionManager.GetCollectionsFolderPath();
-
-                if (_fileSystem.DirectoryExists(path))
+                if (!_config.Configuration.CollectionsUpgraded && _config.Configuration.IsStartupWizardCompleted)
                 {
-                    try
-                    {
-                        await _collectionManager.EnsureLibraryFolder(path, true).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error creating camera uploads library", ex);
-                    }
+                    var path = _collectionManager.GetCollectionsFolderPath();
 
-                    _config.Configuration.CollectionsUpgraded = true;
-                    _config.SaveConfiguration();
+                    if (_fileSystem.DirectoryExists(path))
+                    {
+                        try
+                        {
+                            await _collectionManager.EnsureLibraryFolder(path, true).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.ErrorException("Error creating camera uploads library", ex);
+                        }
+
+                        _config.Configuration.CollectionsUpgraded = true;
+                        _config.SaveConfiguration();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error running collections upgrade", ex);
             }
         }
 

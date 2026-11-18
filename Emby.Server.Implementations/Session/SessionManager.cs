@@ -627,7 +627,25 @@ namespace Emby.Server.Implementations.Session
             }
         }
 
-        private async void CheckForIdlePlayback(object state)
+        private void CheckForIdlePlayback(object state)
+        {
+            // TimerCallback 是同步契约：检查在后台运行，异常由 CheckForIdlePlaybackAsync 记录。
+            _ = CheckForIdlePlaybackAsync();
+        }
+
+        private async Task CheckForIdlePlaybackAsync()
+        {
+            try
+            {
+                await CheckForIdlePlaybackCore().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug("Error checking for idle playback", ex);
+            }
+        }
+
+        private async Task CheckForIdlePlaybackCore()
         {
             var playingSessions = Sessions.Where(i => i.NowPlayingItem != null)
                 .ToList();

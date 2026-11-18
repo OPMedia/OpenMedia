@@ -420,26 +420,39 @@ namespace Emby.Server.Implementations.Devices
             _logger = logger;
         }
 
-        public async void Run()
+        public void Run()
         {
-            if (!_config.Configuration.CameraUploadUpgraded && _config.Configuration.IsStartupWizardCompleted)
+            // IServerEntryPoint.Run 是同步契约：升级任务在后台执行，异常由 RunAsync 记录。
+            _ = RunAsync();
+        }
+
+        private async Task RunAsync()
+        {
+            try
             {
-                var path = _deviceManager.GetUploadsPath();
-
-                if (_fileSystem.DirectoryExists(path))
+                if (!_config.Configuration.CameraUploadUpgraded && _config.Configuration.IsStartupWizardCompleted)
                 {
-                    try
-                    {
-                        await _deviceManager.EnsureLibraryFolder(path, null).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error creating camera uploads library", ex);
-                    }
+                    var path = _deviceManager.GetUploadsPath();
 
-                    _config.Configuration.CameraUploadUpgraded = true;
-                    _config.SaveConfiguration();
+                    if (_fileSystem.DirectoryExists(path))
+                    {
+                        try
+                        {
+                            await _deviceManager.EnsureLibraryFolder(path, null).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.ErrorException("Error creating camera uploads library", ex);
+                        }
+
+                        _config.Configuration.CameraUploadUpgraded = true;
+                        _config.SaveConfiguration();
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error running camera uploads upgrade", ex);
             }
         }
 

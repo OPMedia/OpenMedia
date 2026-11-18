@@ -1748,7 +1748,8 @@ namespace Emby.Server.Implementations
 
             IsShuttingDown = true;
 
-            Task.Run(async () =>
+            // Fire-and-forget：重启通知在后台发送，异常已在任务内记录。
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -2213,7 +2214,7 @@ namespace Emby.Server.Implementations
                 {
                     using (var reader = new StreamReader(response.Content))
                     {
-                        var result = reader.ReadToEnd();
+                        var result = await reader.ReadToEndAsync().ConfigureAwait(false);
                         var valid = string.Equals(Name, result, StringComparison.OrdinalIgnoreCase);
 
                         _validAddressResults.AddOrUpdate(apiUrl, valid, (k, v) => valid);
