@@ -116,18 +116,34 @@ namespace Rssdp.Infrastructure
             }
         }
 
-        private async void OnBroadcastTimerCallback(object state)
-        {
-            StartListeningForNotifications();
-            RemoveExpiredDevicesFromCache();
+        public Action<string> LogFunction { get; set; }
 
+        private void WriteTrace(string text)
+        {
+            if (LogFunction != null)
+            {
+                LogFunction(text);
+            }
+        }
+
+        // ITimer callback: must stay void, so start the async work and handle every exception inside it.
+        private void OnBroadcastTimerCallback(object state)
+        {
+            var timerTask = BroadcastTimerCallbackAsync();
+        }
+
+        private async Task BroadcastTimerCallbackAsync()
+        {
             try
             {
+                StartListeningForNotifications();
+                RemoveExpiredDevicesFromCache();
+
                 await SearchAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-
+                WriteTrace("Error in SsdpDeviceLocator broadcast timer: " + ex.Message);
             }
         }
 

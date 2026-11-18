@@ -34,6 +34,9 @@ namespace Rssdp.Infrastructure
         private IDictionary<string, SearchRequest> _RecentSearchRequests;
 
         private Random _Random;
+        private Task[] _disposeTasks = Array.Empty<Task>();
+        private ISsdpCommunicationsServer _disposeCommsServer;
+        private int _cleanupFinished;
 
         private const string ServerVersion = "1.0";
 
@@ -167,36 +170,73 @@ namespace Rssdp.Infrastructure
         }
 
         /// <summary>
+        /// Disposes this publisher and returns a task that completes once all bye-bye notifications have been sent.
+        /// </summary>
+        public Task DisposeAsync()
+        {
+            Dispose();
+            return FinishDisposeAsync(_disposeTasks, _disposeCommsServer);
+        }
+
+        /// <summary>
         /// Stops listening for requests, stops sending periodic broadcasts, disposes all internal resources.
         /// </summary>
         /// <param name="disposing"></param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
+            if (disposing && _CommsServer != null && _disposeCommsServer == null)
             {
                 DisposeRebroadcastTimer();
 
                 var commsServer = _CommsServer;
-                if (commsServer != null)
-                {
-                    commsServer.RequestReceived -= this.CommsServer_RequestReceived;
-                }
+                commsServer.RequestReceived -= this.CommsServer_RequestReceived;
 
+                // Start all bye-bye notifications in the same order as before, but do not
+                // block the disposing thread on their (delayed) network sends.
                 var tasks = Devices.ToList().Select(RemoveDevice).ToArray();
-                Task.WaitAll(tasks);
 
                 _CommsServer = null;
-                if (commsServer != null)
-                {
-                    if (!commsServer.IsShared)
-                        commsServer.Dispose();
-                }
-
-                _RecentSearchRequests = null;
+                _disposeTasks = tasks;
+                _disposeCommsServer = commsServer;
+                var cleanupTask = FinishDisposeAsync(tasks, commsServer);
             }
         }
 
-        private void ProcessSearchRequest(string mx, string searchTarget, IpEndPointInfo remoteEndPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
+        private async Task FinishDisposeAsync(Task[] tasks, ISsdpCommunicationsServer commsServer)
+        {
+            try
+            {
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                WriteTrace("Error sending byebye notifications: " + ex.Message);
+            }
+            finally
+            {
+                if (commsServer != null && Interlocked.Exchange(ref _cleanupFinished, 1) == 0)
+                {
+                    if (!commsServer.IsShared)
+                        commsServer.Dispose();
+
+                    _RecentSearchRequests = null;
+                }
+            }
+        }
+
+        private async Task ProcessSearchRequest(string mx, string searchTarget, IpEndPointInfo remoteEndPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await ProcessSearchRequestCore(mx, searchTarget, remoteEndPoint, receivedOnlocalIpAddress, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                WriteTrace("Error processing SSDP search request: " + ex.Message);
+            }
+        }
+
+        private async Task ProcessSearchRequestCore(string mx, string searchTarget, IpEndPointInfo remoteEndPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
         {
             if (String.IsNullOrEmpty(searchTarget))
             {
@@ -231,37 +271,41 @@ namespace Rssdp.Infrastructure
                 maxWaitInterval = _Random.Next(0, 120);
 
             //Do not block synchronously as that may tie up a threadpool thread for several seconds.
-            Task.Delay(_Random.Next(16, (maxWaitInterval * 1000))).ContinueWith((parentTask) =>
+            // ConfigureAwait(false) keeps the continuation off any captured UI context, matching
+            // the old ContinueWith behaviour.
+            await Task.Delay(_Random.Next(16, (maxWaitInterval * 1000))).ConfigureAwait(false);
+
+            //Copying devices to local array here to avoid threading issues/enumerator exceptions.
+            IEnumerable<SsdpDevice> devices = null;
+            lock (_Devices)
             {
-                //Copying devices to local array here to avoid threading issues/enumerator exceptions.
-                IEnumerable<SsdpDevice> devices = null;
-                lock (_Devices)
+                if (String.Compare(SsdpConstants.SsdpDiscoverAllSTHeader, searchTarget, StringComparison.OrdinalIgnoreCase) == 0)
+                    devices = GetAllDevicesAsFlatEnumerable().ToArray();
+                else if (String.Compare(SsdpConstants.UpnpDeviceTypeRootDevice, searchTarget, StringComparison.OrdinalIgnoreCase) == 0 || (this.SupportPnpRootDevice && String.Compare(SsdpConstants.PnpDeviceTypeRootDevice, searchTarget, StringComparison.OrdinalIgnoreCase) == 0))
+                    devices = _Devices.ToArray();
+                else if (searchTarget.Trim().StartsWith("uuid:", StringComparison.OrdinalIgnoreCase))
+                    devices = (from device in GetAllDevicesAsFlatEnumerable() where String.Compare(device.Uuid, searchTarget.Substring(5), StringComparison.OrdinalIgnoreCase) == 0 select device).ToArray();
+                else if (searchTarget.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
+                    devices = (from device in GetAllDevicesAsFlatEnumerable() where String.Compare(device.FullDeviceType, searchTarget, StringComparison.OrdinalIgnoreCase) == 0 select device).ToArray();
+            }
+
+            if (devices != null)
+            {
+                var deviceList = devices.ToList();
+                //WriteTrace(String.Format("Sending {0} search responses", deviceList.Count));
+
+                var responseTasks = new List<Task>();
+                foreach (var device in deviceList)
                 {
-                    if (String.Compare(SsdpConstants.SsdpDiscoverAllSTHeader, searchTarget, StringComparison.OrdinalIgnoreCase) == 0)
-                        devices = GetAllDevicesAsFlatEnumerable().ToArray();
-                    else if (String.Compare(SsdpConstants.UpnpDeviceTypeRootDevice, searchTarget, StringComparison.OrdinalIgnoreCase) == 0 || (this.SupportPnpRootDevice && String.Compare(SsdpConstants.PnpDeviceTypeRootDevice, searchTarget, StringComparison.OrdinalIgnoreCase) == 0))
-                        devices = _Devices.ToArray();
-                    else if (searchTarget.Trim().StartsWith("uuid:", StringComparison.OrdinalIgnoreCase))
-                        devices = (from device in GetAllDevicesAsFlatEnumerable() where String.Compare(device.Uuid, searchTarget.Substring(5), StringComparison.OrdinalIgnoreCase) == 0 select device).ToArray();
-                    else if (searchTarget.StartsWith("urn:", StringComparison.OrdinalIgnoreCase))
-                        devices = (from device in GetAllDevicesAsFlatEnumerable() where String.Compare(device.FullDeviceType, searchTarget, StringComparison.OrdinalIgnoreCase) == 0 select device).ToArray();
+                    responseTasks.Add(SendDeviceSearchResponses(device, remoteEndPoint, receivedOnlocalIpAddress, cancellationToken));
                 }
 
-                if (devices != null)
-                {
-                    var deviceList = devices.ToList();
-                    //WriteTrace(String.Format("Sending {0} search responses", deviceList.Count));
-
-                    foreach (var device in deviceList)
-                    {
-                        SendDeviceSearchResponses(device, remoteEndPoint, receivedOnlocalIpAddress, cancellationToken);
-                    }
-                }
-                else
-                {
-                    //WriteTrace(String.Format("Sending 0 search responses."));
-                }
-            });
+                await Task.WhenAll(responseTasks).ConfigureAwait(false);
+            }
+            else
+            {
+                //WriteTrace(String.Format("Sending 0 search responses."));
+            }
         }
 
         private IEnumerable<SsdpDevice> GetAllDevicesAsFlatEnumerable()
@@ -269,19 +313,23 @@ namespace Rssdp.Infrastructure
             return _Devices.Union(_Devices.SelectManyRecursive<SsdpDevice>((d) => d.Devices));
         }
 
-        private void SendDeviceSearchResponses(SsdpDevice device, IpEndPointInfo endPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
+        private Task SendDeviceSearchResponses(SsdpDevice device, IpEndPointInfo endPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
         {
+            var tasks = new List<Task>();
+
             bool isRootDevice = (device as SsdpRootDevice) != null;
             if (isRootDevice)
             {
-                SendSearchResponse(SsdpConstants.UpnpDeviceTypeRootDevice, device, GetUsn(device.Udn, SsdpConstants.UpnpDeviceTypeRootDevice), endPoint, receivedOnlocalIpAddress, cancellationToken);
+                tasks.Add(SendSearchResponse(SsdpConstants.UpnpDeviceTypeRootDevice, device, GetUsn(device.Udn, SsdpConstants.UpnpDeviceTypeRootDevice), endPoint, receivedOnlocalIpAddress, cancellationToken));
                 if (this.SupportPnpRootDevice)
-                    SendSearchResponse(SsdpConstants.PnpDeviceTypeRootDevice, device, GetUsn(device.Udn, SsdpConstants.PnpDeviceTypeRootDevice), endPoint, receivedOnlocalIpAddress, cancellationToken);
+                    tasks.Add(SendSearchResponse(SsdpConstants.PnpDeviceTypeRootDevice, device, GetUsn(device.Udn, SsdpConstants.PnpDeviceTypeRootDevice), endPoint, receivedOnlocalIpAddress, cancellationToken));
             }
 
-            SendSearchResponse(device.Udn, device, device.Udn, endPoint, receivedOnlocalIpAddress, cancellationToken);
+            tasks.Add(SendSearchResponse(device.Udn, device, device.Udn, endPoint, receivedOnlocalIpAddress, cancellationToken));
 
-            SendSearchResponse(device.FullDeviceType, device, GetUsn(device.Udn, device.FullDeviceType), endPoint, receivedOnlocalIpAddress, cancellationToken);
+            tasks.Add(SendSearchResponse(device.FullDeviceType, device, GetUsn(device.Udn, device.FullDeviceType), endPoint, receivedOnlocalIpAddress, cancellationToken));
+
+            return Task.WhenAll(tasks);
         }
 
         private string GetUsn(string udn, string fullDeviceType)
@@ -289,7 +337,7 @@ namespace Rssdp.Infrastructure
             return String.Format("{0}::{1}", udn, fullDeviceType);
         }
 
-        private async void SendSearchResponse(string searchTarget, SsdpDevice device, string uniqueServiceName, IpEndPointInfo endPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
+        private async Task SendSearchResponse(string searchTarget, SsdpDevice device, string uniqueServiceName, IpEndPointInfo endPoint, IpAddressInfo receivedOnlocalIpAddress, CancellationToken cancellationToken)
         {
             var rootDevice = device.ToRootDevice();
 
@@ -426,9 +474,19 @@ namespace Rssdp.Infrastructure
 
             var message = BuildMessage(header, values);
 
-            _CommsServer.SendMulticastMessage(message, cancellationToken);
+            ObserveSendResult(_CommsServer.SendMulticastMessage(message, cancellationToken));
 
             //WriteTrace(String.Format("Sent alive notification"), device);
+        }
+
+        private void ObserveSendResult(Task sendTask)
+        {
+            // Notifications are intentionally fire-and-forget, but their failures must be logged.
+            var observationTask = sendTask.ContinueWith(
+                t => WriteTrace("Error sending SSDP notification: " + t.Exception?.Message),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         private Task SendByeByeNotifications(SsdpDevice device, bool isRoot, CancellationToken cancellationToken)
@@ -538,7 +596,9 @@ namespace Rssdp.Infrastructure
                 //else if (!e.Message.Headers.Contains("MAN"))
                 //	WriteTrace("Ignoring search request - missing MAN header.");
                 //else
-                ProcessSearchRequest(GetFirstHeaderValue(e.Message.Headers, "MX"), GetFirstHeaderValue(e.Message.Headers, "ST"), e.ReceivedFrom, e.LocalIpAddress, CancellationToken.None);
+                // ProcessSearchRequest handles its own exceptions; keep a reference to the
+                // pending work so the awaitable is observed.
+                var processRequestTask = ProcessSearchRequest(GetFirstHeaderValue(e.Message.Headers, "MX"), GetFirstHeaderValue(e.Message.Headers, "ST"), e.ReceivedFrom, e.LocalIpAddress, CancellationToken.None);
             }
         }
 

@@ -109,7 +109,9 @@ namespace Mono.Nat.Pmp
 
                         if (attempt == 0)
                         {
-                            Task.Run(() => CreatePortMapListen(udpClient, mapping, cancellationTokenSource.Token));
+                            // The listener runs until cancellation; keep a reference so the
+                            // awaitable is observed instead of being discarded.
+                            var listenTask = Task.Run(() => CreatePortMapListen(udpClient, mapping, cancellationTokenSource.Token));
                         }
 
                         attempt++;
@@ -117,7 +119,7 @@ namespace Mono.Nat.Pmp
                         await Task.Delay(delay).ConfigureAwait(false);
                     }
 
-                    cancellationTokenSource.Cancel();
+                    await cancellationTokenSource.CancelAsync().ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException)
@@ -139,7 +141,7 @@ namespace Mono.Nat.Pmp
             return mapping;
         }
 
-        private async void CreatePortMapListen(UdpClient udpClient, Mapping mapping, CancellationToken cancellationToken)
+        private async Task CreatePortMapListen(UdpClient udpClient, Mapping mapping, CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {

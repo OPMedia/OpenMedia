@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AssemblyName>RSSDP</AssemblyName>
     <RootNamespace>RSSDP</RootNamespace>
+    <WarningsAsErrors>$(WarningsAsErrors);VSTHRD002;VSTHRD003;VSTHRD100;VSTHRD103;VSTHRD110</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

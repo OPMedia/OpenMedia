@@ -148,7 +148,13 @@ namespace Mono.Nat
             }
         }
 
-        public async void Search()
+        // ISearcher callback: must stay void, so start the async work and handle every exception inside it.
+        public void Search()
+        {
+            var searchTask = SearchAllSocketsAsync();
+        }
+
+        private async Task SearchAllSocketsAsync()
         {
             foreach (UdpClient s in sockets)
             {

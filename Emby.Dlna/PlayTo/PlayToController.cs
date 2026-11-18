@@ -130,21 +130,27 @@ namespace Emby.Dlna.PlayTo
             }
         }
 
-        async void _device_MediaChanged(object sender, MediaChangedEventArgs e)
+        // MediaChanged event handler: must stay void, so start the async work and handle every exception inside it.
+        private void _device_MediaChanged(object sender, MediaChangedEventArgs e)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            var mediaChangedTask = HandleMediaChangedAsync(e);
+        }
 
+        private async Task HandleMediaChangedAsync(MediaChangedEventArgs e)
+        {
             try
             {
+                if (_disposed)
+                {
+                    return;
+                }
+
                 var streamInfo = StreamParams.ParseFromUrl(e.OldMediaInfo.Url, _libraryManager, _mediaSourceManager);
                 if (streamInfo.Item != null)
                 {
                     var positionTicks = GetProgressPositionTicks(e.OldMediaInfo, streamInfo);
 
-                    ReportPlaybackStopped(e.OldMediaInfo, streamInfo, positionTicks);
+                    await ReportPlaybackStopped(e.OldMediaInfo, streamInfo, positionTicks).ConfigureAwait(false);
                 }
 
                 streamInfo = StreamParams.ParseFromUrl(e.NewMediaInfo.Url, _libraryManager, _mediaSourceManager);
@@ -160,22 +166,28 @@ namespace Emby.Dlna.PlayTo
             }
         }
 
-        async void _device_PlaybackStopped(object sender, PlaybackStoppedEventArgs e)
+        // PlaybackStopped event handler: must stay void, so start the async work and handle every exception inside it.
+        private void _device_PlaybackStopped(object sender, PlaybackStoppedEventArgs e)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            var playbackStoppedTask = HandlePlaybackStoppedAsync(e);
+        }
 
+        private async Task HandlePlaybackStoppedAsync(PlaybackStoppedEventArgs e)
+        {
             try
             {
+                if (_disposed)
+                {
+                    return;
+                }
+
                 var streamInfo = StreamParams.ParseFromUrl(e.MediaInfo.Url, _libraryManager, _mediaSourceManager);
 
                 if (streamInfo.Item == null) return;
 
                 var positionTicks = GetProgressPositionTicks(e.MediaInfo, streamInfo);
 
-                ReportPlaybackStopped(e.MediaInfo, streamInfo, positionTicks);
+                await ReportPlaybackStopped(e.MediaInfo, streamInfo, positionTicks).ConfigureAwait(false);
 
                 var mediaSource = await streamInfo.GetMediaSource(CancellationToken.None).ConfigureAwait(false);
 
@@ -208,7 +220,7 @@ namespace Emby.Dlna.PlayTo
             }
         }
 
-        private async void ReportPlaybackStopped(uBaseObject mediaInfo, StreamParams streamInfo, long? positionTicks)
+        private async Task ReportPlaybackStopped(uBaseObject mediaInfo, StreamParams streamInfo, long? positionTicks)
         {
             try
             {
@@ -227,15 +239,21 @@ namespace Emby.Dlna.PlayTo
             }
         }
 
-        async void _device_PlaybackStart(object sender, PlaybackStartEventArgs e)
+        // PlaybackStart event handler: must stay void, so start the async work and handle every exception inside it.
+        private void _device_PlaybackStart(object sender, PlaybackStartEventArgs e)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            var playbackStartTask = HandlePlaybackStartAsync(e);
+        }
 
+        private async Task HandlePlaybackStartAsync(PlaybackStartEventArgs e)
+        {
             try
             {
+                if (_disposed)
+                {
+                    return;
+                }
+
                 var info = StreamParams.ParseFromUrl(e.MediaInfo.Url, _libraryManager, _mediaSourceManager);
 
                 if (info.Item != null)
@@ -251,15 +269,21 @@ namespace Emby.Dlna.PlayTo
             }
         }
 
-        async void _device_PlaybackProgress(object sender, PlaybackProgressEventArgs e)
+        // PlaybackProgress event handler: must stay void, so start the async work and handle every exception inside it.
+        private void _device_PlaybackProgress(object sender, PlaybackProgressEventArgs e)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            var playbackProgressTask = HandlePlaybackProgressAsync(e);
+        }
 
+        private async Task HandlePlaybackProgressAsync(PlaybackProgressEventArgs e)
+        {
             try
             {
+                if (_disposed)
+                {
+                    return;
+                }
+
                 var mediaUrl = e.MediaInfo.Url;
 
                 if (string.IsNullOrWhiteSpace(mediaUrl))

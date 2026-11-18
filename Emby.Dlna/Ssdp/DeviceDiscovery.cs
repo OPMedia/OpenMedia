@@ -81,7 +81,10 @@ namespace Emby.Dlna.Ssdp
             {
                 if (_listenerCount > 0 && _deviceLocator == null)
                 {
-                    _deviceLocator = new SsdpDeviceLocator(_commsServer, _timerFactory);
+                    _deviceLocator = new SsdpDeviceLocator(_commsServer, _timerFactory)
+                    {
+                        LogFunction = message => _logger.Debug(message)
+                    };
 
                     // (Optional) Set the filter so we only see notifications for devices we care about 
                     // (can be any search target value i.e device type, uuid value etc - any value that appears in the 

@@ -72,40 +72,15 @@ namespace Emby.Dlna.PlayTo
             _deviceDiscovery.DeviceDiscovered += _deviceDiscovery_DeviceDiscovered;
         }
 
-        async void _deviceDiscovery_DeviceDiscovered(object sender, GenericEventArgs<UpnpDeviceInfo> e)
+        // DeviceDiscovered event handler: must stay void, so start the async work and
+        // handle every exception (including lock acquisition) inside it.
+        private void _deviceDiscovery_DeviceDiscovered(object sender, GenericEventArgs<UpnpDeviceInfo> e)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            var deviceDiscoveredTask = HandleDeviceDiscoveredAsync(e);
+        }
 
-            var info = e.Argument;
-
-            string usn;
-            if (!info.Headers.TryGetValue("USN", out usn)) usn = string.Empty;
-
-            string nt;
-            if (!info.Headers.TryGetValue("NT", out nt)) nt = string.Empty;
-
-            string location = info.Location.ToString();
-
-            // It has to report that it's a media renderer
-            if (usn.IndexOf("MediaRenderer:", StringComparison.OrdinalIgnoreCase) == -1 &&
-                     nt.IndexOf("MediaRenderer:", StringComparison.OrdinalIgnoreCase) == -1)
-            {
-                //_logger.Debug("Upnp device {0} does not contain a MediaRenderer device (0).", location);
-                return;
-            }
-
-            if (_sessionManager.Sessions.Any(i => usn.IndexOf(i.DeviceId, StringComparison.OrdinalIgnoreCase) != -1))
-            {
-                return;
-            }
-
-            var cancellationToken = _disposeCancellationTokenSource.Token;
-
-            await _sessionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-
+        private async Task HandleDeviceDiscoveredAsync(GenericEventArgs<UpnpDeviceInfo> e)
+        {
             try
             {
                 if (_disposed)
@@ -113,7 +88,46 @@ namespace Emby.Dlna.PlayTo
                     return;
                 }
 
-                await AddDevice(info, location, cancellationToken).ConfigureAwait(false);
+                var info = e.Argument;
+
+                string usn;
+                if (!info.Headers.TryGetValue("USN", out usn)) usn = string.Empty;
+
+                string nt;
+                if (!info.Headers.TryGetValue("NT", out nt)) nt = string.Empty;
+
+                string location = info.Location.ToString();
+
+                // It has to report that it's a media renderer
+                if (usn.IndexOf("MediaRenderer:", StringComparison.OrdinalIgnoreCase) == -1 &&
+                         nt.IndexOf("MediaRenderer:", StringComparison.OrdinalIgnoreCase) == -1)
+                {
+                    //_logger.Debug("Upnp device {0} does not contain a MediaRenderer device (0).", location);
+                    return;
+                }
+
+                if (_sessionManager.Sessions.Any(i => usn.IndexOf(i.DeviceId, StringComparison.OrdinalIgnoreCase) != -1))
+                {
+                    return;
+                }
+
+                var cancellationToken = _disposeCancellationTokenSource.Token;
+
+                await _sessionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+                try
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    await AddDevice(info, location, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _sessionLock.Release();
+                }
             }
             catch (OperationCanceledException)
             {
@@ -122,10 +136,6 @@ namespace Emby.Dlna.PlayTo
             catch (Exception ex)
             {
                 _logger.ErrorException("Error creating PlayTo device.", ex);
-            }
-            finally
-            {
-                _sessionLock.Release();
             }
         }
 
