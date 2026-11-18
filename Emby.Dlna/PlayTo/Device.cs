@@ -125,11 +125,11 @@ namespace Emby.Dlna.PlayTo
             if (DateTime.UtcNow >= _lastVolumeRefresh.AddSeconds(5))
             {
                 _lastVolumeRefresh = DateTime.UtcNow;
-                RefreshVolume(CancellationToken.None);
+                var refreshTask = RefreshVolumeAsync(CancellationToken.None);
             }
         }
 
-        private async void RefreshVolume(CancellationToken cancellationToken)
+        private async Task RefreshVolumeAsync(CancellationToken cancellationToken)
         {
             if (_disposed)
                 return;
@@ -434,7 +434,13 @@ namespace Emby.Dlna.PlayTo
         #region Get data
 
         private int _connectFailureCount;
-        private async void TimerCallback(object sender)
+        // ITimer callback: must stay void, so start the async work and handle every exception inside it.
+        private void TimerCallback(object sender)
+        {
+            var timerTask = TimerCallbackAsync(sender);
+        }
+
+        private async Task TimerCallbackAsync(object sender)
         {
             if (_disposed)
                 return;
@@ -508,7 +514,7 @@ namespace Emby.Dlna.PlayTo
                 if (_disposed)
                     return;
 
-                //_logger.ErrorException("Error updating device info for {0}", ex, Properties.Name);
+                _logger.ErrorException("Error updating device info for {0}", ex, Properties.Name);
 
                 _connectFailureCount++;
 

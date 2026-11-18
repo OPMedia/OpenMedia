@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AssemblyName>Mono.Nat</AssemblyName>
     <RootNamespace>Mono.Nat</RootNamespace>
+    <WarningsAsErrors>$(WarningsAsErrors);VSTHRD002;VSTHRD003;VSTHRD100;VSTHRD103;VSTHRD110</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

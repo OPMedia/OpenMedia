@@ -41,7 +41,7 @@ namespace Emby.Dlna.PlayTo
                 {
                     using (var reader = new StreamReader(stream, Encoding.UTF8))
                     {
-                        return XDocument.Parse(reader.ReadToEnd(), LoadOptions.PreserveWhitespace);
+                        return XDocument.Parse(await reader.ReadToEndAsync().ConfigureAwait(false), LoadOptions.PreserveWhitespace);
                     }
                 }
             }
@@ -115,7 +115,7 @@ namespace Emby.Dlna.PlayTo
                 {
                     using (var reader = new StreamReader(stream, Encoding.UTF8))
                     {
-                        return XDocument.Parse(reader.ReadToEnd(), LoadOptions.PreserveWhitespace);
+                        return XDocument.Parse(await reader.ReadToEndAsync().ConfigureAwait(false), LoadOptions.PreserveWhitespace);
                     }
                 }
             }

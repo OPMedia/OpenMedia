@@ -49,6 +49,7 @@ namespace Emby.Dlna.Main
         private readonly IDeviceDiscovery _deviceDiscovery;
 
         private SsdpDevicePublisher _Publisher;
+        private Task _publisherDisposeTask;
 
         private readonly ITimerFactory _timerFactory;
         private readonly ISocketFactory _socketFactory;
@@ -129,7 +130,7 @@ namespace Emby.Dlna.Main
         {
             ((DlnaManager)_dlnaManager).InitProfiles();
 
-            ReloadComponents();
+            var reloadTask = ReloadComponentsAsync();
 
             _config.NamedConfigurationUpdated += _config_NamedConfigurationUpdated;
         }
@@ -138,32 +139,39 @@ namespace Emby.Dlna.Main
         {
             if (string.Equals(e.Key, "dlna", StringComparison.OrdinalIgnoreCase))
             {
-                ReloadComponents();
+                var reloadTask = ReloadComponentsAsync();
             }
         }
 
-        private async void ReloadComponents()
+        private async Task ReloadComponentsAsync()
         {
-            var options = _config.GetDlnaConfiguration();
+            try
+            {
+                var options = _config.GetDlnaConfiguration();
 
-            StartSsdpHandler();
+                StartSsdpHandler();
 
-            if (options.EnableServer)
-            {
-                await StartDevicePublisher(options).ConfigureAwait(false);
-            }
-            else
-            {
-                DisposeDevicePublisher();
-            }
+                if (options.EnableServer)
+                {
+                    await StartDevicePublisher(options).ConfigureAwait(false);
+                }
+                else
+                {
+                    DisposeDevicePublisher();
+                }
 
-            if (options.EnablePlayTo)
-            {
-                StartPlayToManager();
+                if (options.EnablePlayTo)
+                {
+                    StartPlayToManager();
+                }
+                else
+                {
+                    DisposePlayToManager();
+                }
             }
-            else
+            catch (Exception ex)
             {
-                DisposePlayToManager();
+                _logger.ErrorException("Error reloading DLNA components", ex);
             }
         }
 
@@ -394,9 +402,19 @@ namespace Emby.Dlna.Main
 
             if (_communicationsServer != null)
             {
-                _logger.Info("Disposing SsdpCommunicationsServer");
-                _communicationsServer.Dispose();
+                var communicationsServer = _communicationsServer;
                 _communicationsServer = null;
+
+                if (_publisherDisposeTask == null)
+                {
+                    _logger.Info("Disposing SsdpCommunicationsServer");
+                    communicationsServer.Dispose();
+                }
+                else
+                {
+                    // Keep the socket alive until the publisher's bye-bye notifications have been sent.
+                    DisposeCommunicationsServerAfterPublisher(communicationsServer, _publisherDisposeTask);
+                }
             }
 
             ContentDirectory = null;
@@ -405,12 +423,31 @@ namespace Emby.Dlna.Main
             Current = null;
         }
 
+        private void DisposeCommunicationsServerAfterPublisher(ISsdpCommunicationsServer communicationsServer, Task publisherDisposeTask)
+        {
+            // Keep the socket alive until the publisher's bye-bye notifications have been sent.
+            var continuationTask = publisherDisposeTask.ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        _logger.ErrorException("Error disposing SsdpDevicePublisher", t.Exception);
+                    }
+
+                    _logger.Info("Disposing SsdpCommunicationsServer");
+                    communicationsServer.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
         public void DisposeDevicePublisher()
         {
             if (_Publisher != null)
             {
                 _logger.Info("Disposing SsdpDevicePublisher");
-                _Publisher.Dispose();
+                _publisherDisposeTask = _Publisher.DisposeAsync();
                 _Publisher = null;
             }
         }
