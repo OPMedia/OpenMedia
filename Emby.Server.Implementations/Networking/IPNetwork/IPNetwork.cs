@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Text.RegularExpressions;
 
-namespace System.Net
+namespace Emby.Server.Implementations.Networking
 {
     /// <summary>
     /// IP Network utility class. 
@@ -85,7 +87,7 @@ namespace System.Net
             get
             {
 
-                int width = this._family == Sockets.AddressFamily.InterNetwork ? 4 : 16;
+                int width = this._family == AddressFamily.InterNetwork ? 4 : 16;
                 BigInteger uintBroadcast = this._network + this._netmask.PositiveReverse(width);
                 return uintBroadcast;
             }
@@ -98,7 +100,7 @@ namespace System.Net
         {
             get
             {
-                if (this._family == Sockets.AddressFamily.InterNetworkV6)
+                if (this._family == AddressFamily.InterNetworkV6)
                 {
                     return null;
                 }
@@ -113,7 +115,7 @@ namespace System.Net
         {
             get
             {
-                BigInteger fisrt = this._family == Sockets.AddressFamily.InterNetworkV6
+                BigInteger fisrt = this._family == AddressFamily.InterNetworkV6
                     ? this._network
                     : (this.Usable <= 0) ? this._network : this._network + 1;
                 return IPNetwork.ToIPAddress(fisrt, this._family);
@@ -127,7 +129,7 @@ namespace System.Net
         {
             get
             {
-                BigInteger last = this._family == Sockets.AddressFamily.InterNetworkV6
+                BigInteger last = this._family == AddressFamily.InterNetworkV6
                     ? this._broadcast
                     : (this.Usable <= 0) ? this._network : this._broadcast - 1;
                 return IPNetwork.ToIPAddress(last, this._family);
@@ -142,7 +144,7 @@ namespace System.Net
             get
             {
 
-                if (this._family == Sockets.AddressFamily.InterNetworkV6)
+                if (this._family == AddressFamily.InterNetworkV6)
                 {
                     return this.Total;
                 }
@@ -161,7 +163,7 @@ namespace System.Net
             get
             {
 
-                int max = this._family == Sockets.AddressFamily.InterNetwork ? 32 : 128;
+                int max = this._family == AddressFamily.InterNetwork ? 32 : 128;
                 BigInteger count = BigInteger.Pow(2, (max - _cidr));
                 return count;
             }
@@ -192,7 +194,7 @@ namespace System.Net
             IPNetwork(BigInteger ipaddress, AddressFamily family, byte cidr)
         {
 
-            int maxCidr = family == Sockets.AddressFamily.InterNetwork ? 32 : 128;
+            int maxCidr = family == AddressFamily.InterNetwork ? 32 : 128;
             if (cidr > maxCidr)
             {
                 throw new ArgumentOutOfRangeException("cidr");
@@ -971,7 +973,7 @@ namespace System.Net
             ///     return;
             /// }
 
-            int maxCidr = family == Sockets.AddressFamily.InterNetwork ? 32 : 128;
+            int maxCidr = family == AddressFamily.InterNetwork ? 32 : 128;
             if (cidr > maxCidr)
             {
                 if (tryParse == false)
@@ -1430,7 +1432,7 @@ namespace System.Net
                 return;
             }
 
-            int maxCidr = network._family == Sockets.AddressFamily.InterNetwork ? 32 : 128;
+            int maxCidr = network._family == AddressFamily.InterNetwork ? 32 : 128;
             if (cidr > maxCidr)
             {
                 if (trySubnet == false)

@@ -1,8 +1,11 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
 using System.Numerics;
 
-namespace System.Net
+namespace Emby.Server.Implementations.Networking
 {
     public class IPAddressCollection : IEnumerable<IPAddress>, IEnumerator<IPAddress>
     {
@@ -35,7 +38,7 @@ namespace System.Net
                 {
                     throw new ArgumentOutOfRangeException("i");
                 }
-                byte width = this._ipnetwork.AddressFamily == Sockets.AddressFamily.InterNetwork ? (byte)32 : (byte)128;
+                byte width = this._ipnetwork.AddressFamily == AddressFamily.InterNetwork ? (byte)32 : (byte)128;
                 IPNetworkCollection ipn = this._ipnetwork.Subnet(width);
                 return ipn[i].Network;
             }
