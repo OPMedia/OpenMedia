@@ -99,7 +99,9 @@ namespace Emby.Server.Implementations.Collections
 
         private IEnumerable<BoxSet> GetCollections(User user)
         {
-            var folder = GetCollectionsFolder(false).Result;
+            // createIfNeeded=false 的 EnsureLibraryFolder 只查现有文件夹、不会启动异步创建；
+            // 这里直接走同一查找逻辑，避免为纯同步查询引入阻塞等待。
+            var folder = FindFolders(GetCollectionsFolderPath()).FirstOrDefault();
 
             return folder == null ?
                 new List<BoxSet>() :
