@@ -286,27 +286,21 @@ namespace Emby.Server.PgData
 
             return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                var internalId = await GetInternalIdAsync(connection, transaction, itemId, ct).ConfigureAwait(false);
-                if (internalId == null)
-                {
-                    return;
-                }
-
-                var itemInternalId = internalId.Value;
-
+                // item_id 在同一语句内按 guid 解析；guid 不存在时子查询为 NULL，DELETE 不影响任何行。
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    "DELETE FROM item_people WHERE item_id = @item_id",
+                    @"DELETE FROM item_people
+                      WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId }).ConfigureAwait(false);
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = itemId }).ConfigureAwait(false);
 
                 if (validPeople.Count == 0)
                 {
                     return;
                 }
 
-                // 1. 批量 upsert Person 项（单条 UNNEST，RETURNING guid→id）
+                // 1. 批量 upsert Person 项（单条 UNNEST；item 不存在时整批跳过，保留旧早退语义）
                 var personGuids = validPeople
                     .Select(x => GetItemByNameId(typeof(Person), GetPersonPath(x.Person.Name)))
                     .ToArray();
@@ -323,6 +317,7 @@ namespace Emby.Server.PgData
                         (guid, type, type_name, name, clean_name, sort_name, path, is_folder, date_created, date_modified)
                       SELECT u.guid, @type, @type_name, u.name, u.clean_name, u.name, u.path, FALSE, now(), now()
                       FROM UNNEST(@guids, @names, @clean_names, @paths) AS u(guid, name, clean_name, path)
+                      WHERE EXISTS (SELECT 1 FROM media_items WHERE guid = @item_guid)
                       ON CONFLICT (guid, type) DO UPDATE SET
                         type_name = EXCLUDED.type_name,
                         name = EXCLUDED.name,
@@ -331,6 +326,7 @@ namespace Emby.Server.PgData
                         path = EXCLUDED.path,
                         date_modified = now()",
                     ct,
+                    new NpgsqlParameter("item_guid", NpgsqlDbType.Uuid) { Value = itemId },
                     new NpgsqlParameter("type", NpgsqlDbType.Integer) { Value = personTypeCode },
                     new NpgsqlParameter("type_name", NpgsqlDbType.Text) { Value = personTypeName },
                     new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = personGuids },
@@ -348,15 +344,19 @@ namespace Emby.Server.PgData
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    @"INSERT INTO item_people
+                    @"WITH resolved_item AS (
+                        SELECT id FROM media_items WHERE guid = @item_guid LIMIT 1
+                      )
+                      INSERT INTO item_people
                         (item_id, person_id, role, person_type, person_type_name, list_order, sort_order)
-                      SELECT @item_id, p.id, u.role, u.person_type, u.person_type_name, u.list_order, u.sort_order
-                      FROM UNNEST(@guids, @roles, @person_types, @person_type_names, @list_orders, @sort_orders)
+                      SELECT r.id, p.id, u.role, u.person_type, u.person_type_name, u.list_order, u.sort_order
+                      FROM resolved_item r
+                      CROSS JOIN UNNEST(@guids, @roles, @person_types, @person_type_names, @list_orders, @sort_orders)
                            AS u(guid, role, person_type, person_type_name, list_order, sort_order)
                       JOIN media_items p ON p.guid = u.guid
                       ON CONFLICT DO NOTHING",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemInternalId },
+                    new NpgsqlParameter("item_guid", NpgsqlDbType.Uuid) { Value = itemId },
                     new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = personGuids },
                     new NpgsqlParameter("roles", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = roles },
                     new NpgsqlParameter("person_types", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = personTypes },

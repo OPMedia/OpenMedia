@@ -40,7 +40,7 @@ namespace Emby.Server.PgData
     ///
     /// 核心翻译层：
     /// - 旧 guid GUID 主键 → 新 id BIGINT IDENTITY 代理键 + guid UUID 业务键；
-    ///   内存维护 ConcurrentDictionary&lt;Guid, long&gt; 缓存，写入用 INSERT ... RETURNING id / ON CONFLICT。
+    ///   写入按 GUID 在每条语句内用子查询解析 id（无进程内映射缓存）。
     /// - 旧 type TEXT（.NET 完整类型名）→ 新 type INTEGER 分区码 + type_name TEXT 完整类型名。
     /// - 旧 ParentId/SeasonId/SeriesId GUID 列 → 新 parent_id/series_id/album_id BIGINT（写入时解析）。
     /// - 旧 UserDataKey TEXT → 新 user_data_key_id INTEGER（user_data_keys 字典表翻译）。
@@ -64,34 +64,6 @@ namespace Emby.Server.PgData
         private readonly ConcurrentDictionary<string, Type> _typeMap = new ConcurrentDictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
         private readonly IAssemblyInfo _assemblyInfo;
-
-        /// <summary>
-        /// GUID → media_items.id 缓存（写入 RETURNING guid,id 填充）。
-        ///
-        /// 生命周期约束（防无界增长）：
-        /// - Initialize 时整体 Clear（换库/重连后旧映射必然失效）；
-        /// - 写入路径超过 <see cref="GuidMapSoftLimit"/> 时整体清空（缓存而非事实来源，
-        ///   清空只影响命中率，下次未命中回查数据库）。
-        /// </summary>
-        private readonly ConcurrentDictionary<Guid, long> _guidToIdMap = new ConcurrentDictionary<Guid, long>();
-
-        /// <summary>
-        /// GUID 映射缓存软上限。超过即整体失效，避免全量重扫后无限增长。
-        /// </summary>
-        private const int GuidMapSoftLimit = 200_000;
-
-        /// <summary>
-        /// 缓存写入 + 上限保护。
-        /// </summary>
-        private void CacheGuidId(Guid guid, long id)
-        {
-            if (_guidToIdMap.Count >= GuidMapSoftLimit)
-            {
-                _guidToIdMap.Clear();
-            }
-
-            _guidToIdMap[guid] = id;
-        }
 
         public PgItemRepository(
             IServerConfigurationManager config,
@@ -124,9 +96,6 @@ namespace Emby.Server.PgData
         /// </summary>
         public async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
-            // 换库/重连后旧 GUID→id 映射必然失效，整体清空
-            _guidToIdMap.Clear();
-
             await using var connection = await CreateConnectionAsync(cancellationToken).ConfigureAwait(false);
 
             var tables = new[] { "media_items", "chapters", "media_streams", "item_people", "ancestor_ids", "item_extradata" };
@@ -217,46 +186,6 @@ namespace Emby.Server.PgData
                     .GetCurrentAssemblies()
                     .Select(a => a.GetType(name, false))
                     .FirstOrDefault(t => t != null));
-        }
-
-        // ===========================================================
-        // GUID ↔ id 翻译层
-        // ===========================================================
-
-        /// <summary>
-        /// GUID → media_items.id（先查缓存，未命中查库并回填；不存在返回 null）。
-        /// </summary>
-        internal async Task<long?> GetInternalIdAsync(
-            NpgsqlConnection connection,
-            NpgsqlTransaction transaction,
-            Guid guid,
-            CancellationToken cancellationToken)
-        {
-            if (guid.Equals(Guid.Empty))
-            {
-                return null;
-            }
-
-            if (_guidToIdMap.TryGetValue(guid, out var cached))
-            {
-                return cached;
-            }
-
-            var result = await ExecuteScalarAsync(
-                connection,
-                transaction,
-                "SELECT id FROM media_items WHERE guid = @guid LIMIT 1",
-                cancellationToken,
-                new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = guid }).ConfigureAwait(false);
-
-            if (result == null || result == DBNull.Value)
-            {
-                return null;
-            }
-
-            var id = Convert.ToInt64(result);
-            CacheGuidId(guid, id);
-            return id;
         }
 
         // ===========================================================
@@ -587,11 +516,7 @@ namespace Emby.Server.PgData
                     }
 
                     var levelRows = rows.GetRange(start, end - start);
-                    var insertedIds = await UpsertMediaItemsBatchAsync(connection, transaction, levelRows, userDataKeyIdMap, ct).ConfigureAwait(false);
-                    for (int i = 0; i < levelRows.Count; i++)
-                    {
-                        CacheGuidId(levelRows[i].Guid, insertedIds[i]);
-                    }
+                    await UpsertMediaItemsBatchAsync(connection, transaction, levelRows, userDataKeyIdMap, ct).ConfigureAwait(false);
 
                     start = end;
                 }
@@ -812,9 +737,9 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
-        /// 单条 UNNEST 语句批量 UPSERT 全部媒体项，返回按输入顺序排列的 id 数组。
+        /// 单条 UNNEST 语句批量 UPSERT 全部媒体项。
         /// </summary>
-        private static async Task<long[]> UpsertMediaItemsBatchAsync(
+        private static async Task UpsertMediaItemsBatchAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
             List<MediaItemBatchRow> rows,
@@ -1045,8 +970,7 @@ namespace Emby.Server.PgData
                     trailer_types = EXCLUDED.trailer_types,
                     external_series_id = EXCLUDED.external_series_id,
                     owner_id = EXCLUDED.owner_id,
-                    date_last_media_added = EXCLUDED.date_last_media_added
-                RETURNING guid, id";
+                    date_last_media_added = EXCLUDED.date_last_media_added";
 
             await using var cmd = new NpgsqlCommand(sql, connection, transaction);
             cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guid });
@@ -1125,36 +1049,7 @@ namespace Emby.Server.PgData
             cmd.Parameters.Add(new NpgsqlParameter("owner_id", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = ownerId });
             cmd.Parameters.Add(new NpgsqlParameter("date_last_media_added", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = dateLastMediaAdded });
 
-            // PostgreSQL 对 INSERT ... ON CONFLICT ... RETURNING 不保证行序，
-            // 因此 RETURNING 直接带出 guid，按 guid 建映射（绝不按下标配对）。
-            var map = new Dictionary<Guid, long>(count);
-            await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
-            {
-                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    map[reader.GetGuid(0)] = reader.GetInt64(1);
-                }
-            }
-
-            if (map.Count != count)
-            {
-                throw new InvalidOperationException(
-                    $"Batch upsert returned {map.Count} rows for {count} input rows (guid/type conflict mismatch).");
-            }
-
-            var result = new long[count];
-            for (int i = 0; i < count; i++)
-            {
-                if (!map.TryGetValue(guid[i], out var v))
-                {
-                    throw new InvalidOperationException(
-                        $"Batch upsert did not return id for guid {guid[i]}.");
-                }
-
-                result[i] = v;
-            }
-
-            return result;
+            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1266,8 +1161,6 @@ namespace Emby.Server.PgData
                     "DELETE FROM media_items WHERE id = @id",
                     ct,
                     new NpgsqlParameter("id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
-
-                _guidToIdMap.TryRemove(id, out _);
             }, cancellationToken);
         }
 
@@ -1496,9 +1389,6 @@ namespace Emby.Server.PgData
             }
 
             item.Id = reader.GetGuid(reader.GetOrdinal("guid"));
-
-            long internalId = reader.GetInt64(reader.GetOrdinal("id"));
-            CacheGuidId(item.Id, internalId);
 
             // ===== 扁平列覆盖（对照旧 GetItem 逐字段） =====
 

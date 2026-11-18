@@ -170,20 +170,14 @@ namespace Emby.Server.PgData
 
             return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                var internalId = await GetInternalIdAsync(connection, transaction, id, ct).ConfigureAwait(false);
-                if (internalId == null)
-                {
-                    return;
-                }
-
-                var itemId = internalId.Value;
-
+                // item_id 在同一语句内按 guid 解析；guid 不存在时子查询为 NULL，DELETE 不影响任何行。
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    "DELETE FROM chapters WHERE item_id = @item_id",
+                    @"DELETE FROM chapters
+                      WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id }).ConfigureAwait(false);
 
                 if (validChapters.Count == 0)
                 {
@@ -203,13 +197,17 @@ namespace Emby.Server.PgData
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    @"INSERT INTO chapters
+                    @"WITH resolved_item AS (
+                        SELECT id FROM media_items WHERE guid = @guid LIMIT 1
+                      )
+                      INSERT INTO chapters
                         (item_id, chapter_index, start_position_ticks, name, image_path, image_date_modified)
-                      SELECT @item_id, u.idx, u.ticks, u.name, u.image_path, u.image_date_modified
-                      FROM UNNEST(@indices, @ticks, @names, @image_paths, @image_dates)
+                      SELECT r.id, u.idx, u.ticks, u.name, u.image_path, u.image_date_modified
+                      FROM resolved_item r
+                      CROSS JOIN UNNEST(@indices, @ticks, @names, @image_paths, @image_dates)
                            AS u(idx, ticks, name, image_path, image_date_modified)",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId },
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id },
                     new NpgsqlParameter("indices", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = indices },
                     new NpgsqlParameter("ticks", NpgsqlDbType.Array | NpgsqlDbType.Bigint) { Value = ticks },
                     new NpgsqlParameter("names", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = names },
@@ -319,20 +317,14 @@ namespace Emby.Server.PgData
 
             return RunInTransactionAsync(async (connection, transaction, ct) =>
             {
-                var internalId = await GetInternalIdAsync(connection, transaction, id, ct).ConfigureAwait(false);
-                if (internalId == null)
-                {
-                    return;
-                }
-
-                var itemId = internalId.Value;
-
+                // item_id 在同一语句内按 guid 解析；guid 不存在时子查询为 NULL，DELETE 不影响任何行。
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    "DELETE FROM media_streams WHERE item_id = @item_id",
+                    @"DELETE FROM media_streams
+                      WHERE item_id = (SELECT id FROM media_items WHERE guid = @guid LIMIT 1)",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId }).ConfigureAwait(false);
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id }).ConfigureAwait(false);
 
                 if (rows.Count == 0)
                 {
@@ -420,7 +412,10 @@ namespace Emby.Server.PgData
                 await ExecuteNonQueryAsync(
                     connection,
                     transaction,
-                    @"INSERT INTO media_streams
+                    @"WITH resolved_item AS (
+                        SELECT id FROM media_items WHERE guid = @guid LIMIT 1
+                      )
+                      INSERT INTO media_streams
                         (item_id, stream_index, stream_type, codec, language, channel_layout,
                          profile, aspect_ratio, path, is_interlaced, bit_rate, channels,
                          sample_rate, is_default, is_forced, is_external, height, width,
@@ -429,14 +424,15 @@ namespace Emby.Server.PgData
                          is_avc, title, time_base, codec_time_base, color_primaries,
                          color_space, color_transfer)
                       SELECT
-                        @item_id, u.stream_index, u.stream_type, u.codec, u.language, u.channel_layout,
+                        r.id, u.stream_index, u.stream_type, u.codec, u.language, u.channel_layout,
                         u.profile, u.aspect_ratio, u.path, u.is_interlaced, u.bit_rate, u.channels,
                         u.sample_rate, u.is_default, u.is_forced, u.is_external, u.height, u.width,
                         u.average_frame_rate, u.real_frame_rate, u.level, u.pixel_format, u.bit_depth,
                         u.is_anamorphic, u.ref_frames, u.codec_tag, u.comment, u.nal_length_size,
                         u.is_avc, u.title, u.time_base, u.codec_time_base, u.color_primaries,
                         u.color_space, u.color_transfer
-                      FROM UNNEST(
+                      FROM resolved_item r
+                      CROSS JOIN UNNEST(
                         @indices, @types, @codecs, @languages, @channel_layouts,
                         @profiles, @aspect_ratios, @paths, @interlaceds, @bit_rates, @channels,
                         @sample_rates, @is_defaults, @is_forceds, @is_externals, @heights, @widths,
@@ -454,7 +450,7 @@ namespace Emby.Server.PgData
                         color_space, color_transfer
                       )",
                     ct,
-                    new NpgsqlParameter("item_id", NpgsqlDbType.Bigint) { Value = itemId },
+                    new NpgsqlParameter("guid", NpgsqlDbType.Uuid) { Value = id },
                     new NpgsqlParameter("indices", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = indices },
                     new NpgsqlParameter("types", NpgsqlDbType.Array | NpgsqlDbType.Smallint) { Value = types },
                     new NpgsqlParameter("codecs", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = codecs },

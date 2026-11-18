@@ -20,6 +20,9 @@
   <!-- Task B 查询引擎差分 fixture（query-diff-fixture.sql）以嵌入资源随程序集分发 -->
   <ItemGroup>
     <EmbeddedResource Include="PgData\QueryEngine\*.sql" />
+    <!-- 子项写入路径的结构断言读取生产源码，随程序集分发以免依赖运行时工作目录 -->
+    <EmbeddedResource Include="..\src\Emby.Server.PgData\PgItemRepository.ChaptersStreams.cs" Link="PgData\Sources\PgItemRepository.ChaptersStreams.cs" />
+    <EmbeddedResource Include="..\src\Emby.Server.PgData\PgItemRepository.People.cs" Link="PgData\Sources\PgItemRepository.People.cs" />
   </ItemGroup>
 
   <ItemGroup>
