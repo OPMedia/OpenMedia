@@ -28,13 +28,26 @@ namespace Emby.Server.Implementations.ScheduledTasks
         /// </summary>
         /// <param name="lastResult">The last result.</param>
         /// <param name="isApplicationStartup">if set to <c>true</c> [is application startup].</param>
-        public async void Start(TaskResult lastResult, ILogger logger, string taskName, bool isApplicationStartup)
+        public void Start(TaskResult lastResult, ILogger logger, string taskName, bool isApplicationStartup)
         {
             if (isApplicationStartup)
             {
-                await Task.Delay(DelayMs).ConfigureAwait(false);
+                // ITaskTrigger.Start 是 void 契约，延迟触发是刻意的后台行为
+                _ = StartAsync(DelayMs, logger);
+            }
+        }
+
+        private async Task StartAsync(int delayMs, ILogger logger)
+        {
+            try
+            {
+                await Task.Delay(delayMs).ConfigureAwait(false);
 
                 OnTriggered();
+            }
+            catch (Exception ex)
+            {
+                logger.ErrorException("Error in startup trigger", ex);
             }
         }
 

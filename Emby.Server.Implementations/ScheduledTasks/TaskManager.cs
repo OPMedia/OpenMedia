@@ -225,7 +225,8 @@ namespace Emby.Server.Implementations.ScheduledTasks
                 {
                     if (scheduledTask.State == TaskState.Idle)
                     {
-                        Execute(scheduledTask, new TaskOptions());
+                        // 定时任务刻意后台执行；ScheduledTaskWorker 自行上报完成与异常
+                        _ = Execute(scheduledTask, new TaskOptions());
                     }
                 }
             }
@@ -265,7 +266,8 @@ namespace Emby.Server.Implementations.ScheduledTasks
             {
                 if (task.State == TaskState.Idle)
                 {
-                    Execute(task, options);
+                    // 定时任务刻意后台执行；ScheduledTaskWorker 自行上报完成与异常
+                    _ = Execute(task, options);
                     return;
                 }
 
@@ -378,7 +380,8 @@ namespace Emby.Server.Implementations.ScheduledTasks
 
                     if (scheduledTask.State == TaskState.Idle)
                     {
-                        Execute(scheduledTask, enqueuedType.Item2);
+                        // 定时任务刻意后台执行；ScheduledTaskWorker 自行上报完成与异常
+                        _ = Execute(scheduledTask, enqueuedType.Item2);
                     }
                 }
             }

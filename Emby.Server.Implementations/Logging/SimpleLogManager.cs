@@ -7,11 +7,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Model.Logging;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Logging
 {
     public class SimpleLogManager : ILogManager, IDisposable
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         public LogSeverity LogSeverity { get; set; }
         public string ExceptionMessagePrefix { get; set; }
         private FileLogger _fileLogger;
@@ -145,8 +148,9 @@ namespace Emby.Server.Implementations.Logging
             {
                 logger.Dispose();
 
-                var task = TryMoveToArchive(logger.Path, CancellationToken.None);
-                Task.WaitAll(task);
+                // IDisposable.Dispose 是同步契约，但归档可能异步重试；用 JTF.Run 安全阻塞，
+                // 避免 .Wait() 在线程池饥饿时死锁
+                _joinableTaskFactory.Run(async () => await TryMoveToArchive(logger.Path, CancellationToken.None).ConfigureAwait(false));
             }
 
             _fileLogger = null;
@@ -172,7 +176,8 @@ namespace Emby.Server.Implementations.Logging
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 32768);
             _cancellationTokenSource = new CancellationTokenSource();
 
-            Task.Factory.StartNew(LogInternal, _cancellationTokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            // 后台日志消费循环刻意与 FileLogger 同生命周期，由 Dispose 的信号终止，无需等待
+            _ = Task.Factory.StartNew(LogInternal, _cancellationTokenSource.Token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         }
 
         private void LogInternal()

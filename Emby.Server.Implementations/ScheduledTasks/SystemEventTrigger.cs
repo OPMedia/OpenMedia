@@ -24,6 +24,7 @@ namespace Emby.Server.Implementations.ScheduledTasks
         public TaskOptions TaskOptions { get; set; }
 
         private readonly ISystemEvents _systemEvents;
+        private ILogger _logger;
 
         public SystemEventTrigger(ISystemEvents systemEvents)
         {
@@ -37,6 +38,8 @@ namespace Emby.Server.Implementations.ScheduledTasks
         /// <param name="isApplicationStartup">if set to <c>true</c> [is application startup].</param>
         public void Start(TaskResult lastResult, ILogger logger, string taskName, bool isApplicationStartup)
         {
+            _logger = logger;
+
             switch (SystemEvent)
             {
                 case SystemEvent.WakeFromSleep:
@@ -45,14 +48,27 @@ namespace Emby.Server.Implementations.ScheduledTasks
             }
         }
 
-        private async void _systemEvents_Resume(object sender, EventArgs e)
+        private void _systemEvents_Resume(object sender, EventArgs e)
         {
-            if (SystemEvent == SystemEvent.WakeFromSleep)
-            {
-                // This value is a bit arbitrary, but add a delay to help ensure network connections have been restored before running the task
-                await Task.Delay(10000).ConfigureAwait(false);
+            // 系统事件回调必须保持 void；延迟触发在异步助手中执行并自行记录异常
+            _ = ResumeAsync();
+        }
 
-                OnTriggered();
+        private async Task ResumeAsync()
+        {
+            try
+            {
+                if (SystemEvent == SystemEvent.WakeFromSleep)
+                {
+                    // This value is a bit arbitrary, but add a delay to help ensure network connections have been restored before running the task
+                    await Task.Delay(10000).ConfigureAwait(false);
+
+                    OnTriggered();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.ErrorException("Error in system event trigger", ex);
             }
         }
 

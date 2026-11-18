@@ -375,7 +375,7 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                     try
                     {
-                        EnsureSuccessStatusCode(client, response, options);
+                        await EnsureSuccessStatusCode(client, response, options).ConfigureAwait(false);
 
                         options.CancellationToken.ThrowIfCancellationRequested();
 
@@ -561,7 +561,7 @@ namespace Emby.Server.Implementations.HttpClientManager
 
                     using (var response = await client.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false))
                     {
-                        EnsureSuccessStatusCode(client, response, options);
+                        await EnsureSuccessStatusCode(client, response, options).ConfigureAwait(false);
 
                         options.CancellationToken.ThrowIfCancellationRequested();
 
@@ -739,7 +739,7 @@ namespace Emby.Server.Implementations.HttpClientManager
             return exception;
         }
 
-        private void EnsureSuccessStatusCode(HttpClientInfo client, HttpResponseMessage response, HttpRequestOptions options)
+        private async Task EnsureSuccessStatusCode(HttpClientInfo client, HttpResponseMessage response, HttpRequestOptions options)
         {
             var statusCode = response.StatusCode;
 
@@ -754,7 +754,7 @@ namespace Emby.Server.Implementations.HttpClientManager
                         var content = response.Content;
                         if (content != null)
                         {
-                            var msg = content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            var msg = await content.ReadAsStringAsync().ConfigureAwait(false);
                             _logger.Error(msg);
                         }
                     }

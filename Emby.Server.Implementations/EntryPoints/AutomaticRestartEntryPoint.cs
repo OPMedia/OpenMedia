@@ -56,27 +56,40 @@ namespace Emby.Server.Implementations.EntryPoints
             }
         }
 
-        private async void TimerCallback(object state)
+        private void TimerCallback(object state)
         {
-            if (_config.Configuration.EnableAutomaticRestart)
+            // ITimer 回调签名是 void；异步判定与重启在助手中完成
+            _ = TimerCallbackAsync();
+        }
+
+        private async Task TimerCallbackAsync()
+        {
+            try
             {
-                var isIdle = await IsIdle().ConfigureAwait(false);
-
-                if (isIdle)
+                if (_config.Configuration.EnableAutomaticRestart)
                 {
-                    DisposeTimer();
+                    var isIdle = await IsIdle().ConfigureAwait(false);
 
-                    _logger.Info("Automatically restarting the system because it is idle and a restart is required.");
+                    if (isIdle)
+                    {
+                        DisposeTimer();
 
-                    try
-                    {
-                        _appHost.Restart();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error restarting server", ex);
+                        _logger.Info("Automatically restarting the system because it is idle and a restart is required.");
+
+                        try
+                        {
+                            _appHost.Restart();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.ErrorException("Error restarting server", ex);
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error in automatic restart timer", ex);
             }
         }
 

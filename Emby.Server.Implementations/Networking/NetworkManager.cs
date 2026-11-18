@@ -12,12 +12,15 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.System;
+using Microsoft.VisualStudio.Threading;
 using System.Numerics;
 
 namespace Emby.Server.Implementations.Networking
 {
     public class NetworkManager : INetworkManager
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         protected ILogger Logger { get; private set; }
 
         public event EventHandler NetworkChanged;
@@ -84,12 +87,48 @@ namespace Emby.Server.Implementations.Networking
             {
                 if (_localIpAddresses == null)
                 {
-                    var addresses = GetLocalIpAddressesInternal().Result.Select(ToIpAddressInfo).ToArray();
+                    // INetworkManager.GetLocalIpAddresses 是同步契约，无法改为 async；
+                    // JTF.Run 阻塞等待时允许延续任务回到原上下文，避免 .Result 死锁
+                    var addresses = _joinableTaskFactory.Run(async () =>
+                        (await GetLocalIpAddressesInternal().ConfigureAwait(false)).Select(ToIpAddressInfo).ToArray());
 
                     _localIpAddresses = addresses;
 
                     return addresses;
                 }
+                return _localIpAddresses;
+            }
+        }
+
+        /// <summary>
+        /// 与 <see cref="GetLocalIpAddresses"/> 相同的缓存语义，但可 await。
+        ///
+        /// 局域网判定原本调用同步的 GetLocalIpAddresses()，值来自 _localIpAddresses 缓存；
+        /// 改成直接枚举内部实现会绕过缓存，让每次局域网判定都重新枚举网卡。
+        /// 这里保留"首次枚举、之后命中缓存"的语义。
+        /// 唯一差异：并发首调时可能枚举两次，结果等价且是只读操作。
+        /// </summary>
+        private async Task<IpAddressInfo[]> GetLocalIpAddressesCachedAsync()
+        {
+            lock (_localIpAddressSyncLock)
+            {
+                if (_localIpAddresses != null)
+                {
+                    return _localIpAddresses;
+                }
+            }
+
+            var addresses = (await GetLocalIpAddressesInternal().ConfigureAwait(false))
+                .Select(ToIpAddressInfo)
+                .ToArray();
+
+            lock (_localIpAddressSyncLock)
+            {
+                if (_localIpAddresses == null)
+                {
+                    _localIpAddresses = addresses;
+                }
+
                 return _localIpAddresses;
             }
         }
@@ -260,7 +299,8 @@ namespace Emby.Server.Implementations.Networking
 
         public bool IsInLocalNetwork(string endpoint)
         {
-            return IsInLocalNetworkInternal(endpoint, true);
+            // INetworkManager.IsInLocalNetwork 是同步契约；异步判定在内部助手中完成
+            return _joinableTaskFactory.Run(() => IsInLocalNetworkInternalAsync(endpoint, true));
         }
 
         public bool IsAddressInSubnets(string addressString, string[] subnets)
@@ -292,7 +332,7 @@ namespace Emby.Server.Implementations.Networking
             return false;
         }
 
-        private bool IsInLocalNetworkInternal(string endpoint, bool resolveHost)
+        private async Task<bool> IsInLocalNetworkInternalAsync(string endpoint, bool resolveHost)
         {
             if (string.IsNullOrEmpty(endpoint))
             {
@@ -341,7 +381,8 @@ namespace Emby.Server.Implementations.Networking
                 {
                     var prefix = addressString.Substring(0, lengthMatch);
 
-                    if (GetLocalIpAddresses().Any(i => i.ToString().StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                    var localAddresses = await GetLocalIpAddressesCachedAsync().ConfigureAwait(false);
+                    if (localAddresses.Any(i => i.ToString().StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
                     {
                         return true;
                     }
@@ -357,13 +398,13 @@ namespace Emby.Server.Implementations.Networking
                         var host = uri.DnsSafeHost;
                         Logger.Debug("Resolving host {0}", host);
 
-                        address = GetIpAddresses(host).Result.FirstOrDefault();
+                        address = (await GetIpAddresses(host).ConfigureAwait(false)).FirstOrDefault();
 
                         if (address != null)
                         {
                             Logger.Debug("{0} resolved to {1}", host, address);
 
-                            return IsInLocalNetworkInternal(address.ToString(), false);
+                            return await IsInLocalNetworkInternalAsync(address.ToString(), false).ConfigureAwait(false);
                         }
                     }
                     catch (InvalidOperationException)
@@ -497,7 +538,7 @@ namespace Emby.Server.Implementations.Networking
 
                         return physicalAddress.ToString();
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         return null;
                     }
@@ -513,7 +554,8 @@ namespace Emby.Server.Implementations.Networking
         /// <returns>IPEndPoint.</returns>
         public IPEndPoint Parse(string endpointstring)
         {
-            return Parse(endpointstring, -1).Result;
+            // Parse 的公开同步签名被外部调用方使用；JTF.Run 在同步边界安全等待 DNS 解析
+            return _joinableTaskFactory.Run(() => Parse(endpointstring, -1));
         }
 
         /// <summary>
