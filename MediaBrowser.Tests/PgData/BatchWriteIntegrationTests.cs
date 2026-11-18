@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Emby.Server.PgData;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Npgsql;
 using NpgsqlTypes;
@@ -11,13 +13,13 @@ namespace MediaBrowser.Tests.PgData
     /// <summary>
     /// 批量写入正确性集成测试（对应评审 P0-1 / P0-2）。
     ///
-    /// 说明：这里直接驱动 PgItemRepository 实际使用的 SQL 形态
-    /// （INSERT ... SELECT FROM UNNEST ... ON CONFLICT ... RETURNING guid, id，
-    ///  以及全局 parent/series 回填、ancestor_ids 闭包写入），
-    /// 在真实 PostgreSQL 上验证行序、跨块父子引用与层级 distance。
+    /// 说明：P0-1 直接驱动生产 UPSERT 的 SQL 形态（INSERT ... SELECT FROM UNNEST ...
+    /// ON CONFLICT ... RETURNING guid, id）；P0-2 及单阶段写入用例调用真实
+    /// PgItemRepository.SaveItemsAsync（生产 schema），验证父项/系列内联解析、
+    /// 跨块父子引用与 ancestor_ids 层级 distance。
     /// </summary>
     [TestClass]
-    public class BatchWriteIntegrationTests : PgTestBase
+    public class BatchWriteIntegrationTests : ProductionSchemaTestBase
     {
         private const string UpsertSql = @"
             INSERT INTO media_items (guid, type, type_name, name, sort_name, path,
@@ -172,168 +174,208 @@ namespace MediaBrowser.Tests.PgData
 
         /// <summary>
         /// P0-2：子项 GUID 排序在前、父项排序在后，跨 chunk（每块 250，共 300 条）。
-        /// 全局两阶段写入后，parent_id 必须非空，ancestor_ids 层级必须正确。
+        /// 真实 SaveItemsAsync 只调用一次，单阶段写入后 parent_id 必须正确，
+        /// ancestor_ids 层级必须正确——不存在独立的回填步骤。
         /// </summary>
         [TestMethod]
         public async Task P0_2_CrossChunkParentAndAncestors_AreFullyResolved()
         {
-            // 构造 300 条：子项 GUID 全部小于父项 GUID，保证按 Guid 升序分块时
-            // 子项必然落在第 1 块、父项落在第 2 块。
-            const int childCount = 290;
-            var rootGuid = new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff");   // 最大，落在最后
-            var folderGuid = new Guid("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"); // 次大
+            await EnsureProductionSchemaAsync().ConfigureAwait(false);
+            EnsureRepositoryStatics();
 
+            const int childCount = 290;
+            var rootGuid = new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff");
+            var folderGuid = new Guid("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
             var childGuids = Enumerable.Range(0, childCount)
                 .Select(i => Guid.Parse((i + 1).ToString("x8") + "-0000-0000-0000-000000000000"))
                 .ToArray();
 
             Assert.IsTrue(childGuids.All(g => g.CompareTo(folderGuid) < 0), "子项 GUID 必须小于父项");
 
-            // ---- 阶段 1：分块 upsert（引用列留 NULL，与生产 UpsertItemsChunkAsync 一致）----
-            var all = childGuids
-                .Select(g => (Guid: g, Type: 2, Name: "child", Parent: folderGuid))
-                .Concat(new[] { (Guid: folderGuid, Type: 6, Name: "folder", Parent: rootGuid) })
-                .Concat(new[] { (Guid: rootGuid, Type: 6, Name: "root", Parent: Guid.Empty) })
-                .OrderBy(x => x.Guid)
+            // 子项 GUID 小于父项，且子项数量超过一个 chunk：父项先落库，
+            // 部分子项与父项处于不同 chunk（250 行一块）。
+            var items = childGuids.Select(g => NewSeason(g, folderGuid))
+                .Concat(new[] { NewSeason(folderGuid, rootGuid), NewSeason(rootGuid, Guid.Empty) })
                 .ToList();
 
-            const int chunkSize = 250;
-            for (int start = 0; start < all.Count; start += chunkSize)
+            await CreateRepository().SaveItemsAsync(items, CancellationToken.None).ConfigureAwait(false);
+
+            var stored = await ReadReferencesAsync(childGuids.Concat(new[] { folderGuid, rootGuid }).ToArray()).ConfigureAwait(false);
+            var folderId = stored[folderGuid].Id;
+            var rootId = stored[rootGuid].Parent;
+
+            Assert.IsNull(rootId, "真正无父项的 root 必须保持 parent_id IS NULL");
+            Assert.AreEqual(stored[rootGuid].Id, stored[folderGuid].Parent, "folder 的 parent_id 必须指向 root");
+            foreach (var child in childGuids)
             {
-                var chunk = all.Skip(start).Take(chunkSize).ToList();
-                var n = chunk.Count;
-
-                await using var conn = await OpenAsync();
-                await using var cmd = new NpgsqlCommand(UpsertSql, conn);
-                cmd.Parameters.Add(new NpgsqlParameter("guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
-                {
-                    Value = chunk.Select(x => x.Guid).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Array | NpgsqlDbType.Integer)
-                {
-                    Value = chunk.Select(x => x.Type).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Array | NpgsqlDbType.Text)
-                {
-                    Value = Enumerable.Repeat("Item", n).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("name", NpgsqlDbType.Array | NpgsqlDbType.Text)
-                {
-                    Value = chunk.Select(x => x.Name).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Array | NpgsqlDbType.Text)
-                {
-                    Value = chunk.Select(x => "/p/" + x.Guid.ToString("N")).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("year", NpgsqlDbType.Array | NpgsqlDbType.Integer)
-                {
-                    Value = Enumerable.Repeat((object)DBNull.Value, n).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("rating", NpgsqlDbType.Array | NpgsqlDbType.Double)
-                {
-                    Value = Enumerable.Repeat((object)DBNull.Value, n).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("puk", NpgsqlDbType.Array | NpgsqlDbType.Text)
-                {
-                    Value = chunk.Select(x => "puk-" + x.Guid.ToString("N")).ToArray()
-                });
-                cmd.Parameters.Add(new NpgsqlParameter("is_folder", NpgsqlDbType.Array | NpgsqlDbType.Boolean)
-                {
-                    Value = chunk.Select(x => x.Type == 6).ToArray()
-                });
-
-                await cmd.ExecuteNonQueryAsync();
+                Assert.AreEqual(folderId, stored[child].Parent, $"交叉块子项 {child} 的 parent_id 未解析");
             }
 
-            // ---- 阶段 2：全局 parent_id 回填（所有块已 upsert 完毕）----
-            await using (var conn = await OpenAsync())
+            // 祖先闭包：每个 child 应有 folder(distance=1) 和 root(distance=2)。
+            await using var conn = await OpenAsync().ConfigureAwait(false);
             await using (var cmd = new NpgsqlCommand(@"
-                UPDATE media_items m SET
-                    parent_id = CASE WHEN u.pg = '00000000-0000-0000-0000-000000000000'::uuid
-                                     THEN NULL
-                                     ELSE (SELECT p.id FROM media_items p WHERE p.guid = u.pg LIMIT 1) END
-                FROM UNNEST(@guids, @parents) AS u(g, pg)
-                WHERE m.guid = u.g", conn))
+                SELECT count(*) FROM (
+                    SELECT a.item_id, count(*) AS c, min(a.distance) AS dmin, max(a.distance) AS dmax
+                    FROM ancestor_ids a
+                    JOIN media_items m ON m.id = a.item_id
+                    WHERE m.guid = ANY(@guids)
+                    GROUP BY a.item_id
+                ) t WHERE t.c <> 2 OR t.dmin <> 1 OR t.dmax <> 2", conn))
             {
                 cmd.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
                 {
-                    Value = all.Select(x => x.Guid).ToArray()
+                    Value = childGuids
                 });
-                cmd.Parameters.Add(new NpgsqlParameter("parents", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
-                {
-                    Value = all.Select(x => x.Parent).ToArray()
-                });
-                await cmd.ExecuteNonQueryAsync();
+                Assert.AreEqual(0L, Convert.ToInt64(await cmd.ExecuteScalarAsync().ConfigureAwait(false)),
+                    "祖先闭包行数或 distance 层级不正确");
             }
+        }
 
-            // ---- 阶段 3：全局 ancestor_ids 闭包（与生产 RebuildAncestorsAsync 同款递归 CTE）----
-            await using (var conn = await OpenAsync())
-            await using (var cmd = new NpgsqlCommand(@"
-                WITH RECURSIVE walk AS (
-                    SELECT m.id AS item_id, m.parent_id AS ancestor_id, 1 AS distance
-                    FROM media_items m
-                    WHERE m.guid = ANY(@guids) AND m.parent_id IS NOT NULL
-                    UNION ALL
-                    SELECT w.item_id, p.parent_id, w.distance + 1
-                    FROM walk w
-                    JOIN media_items p ON p.id = w.ancestor_id
-                    WHERE p.parent_id IS NOT NULL AND w.distance < 64
-                )
-                INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-                SELECT item_id, ancestor_id, min(distance)
-                FROM walk
-                GROUP BY item_id, ancestor_id
-                ON CONFLICT (item_id, ancestor_id) DO UPDATE SET distance = EXCLUDED.distance", conn))
+        /// <summary>
+        /// 顺序无关性：同一个批次（同一 chunk）内父项 GUID 排在子项之后，
+        /// 且 series GUID 也排在子项之后。单阶段写入必须靠拓扑顺序让两者先落库。
+        /// </summary>
+        [TestMethod]
+        public async Task SaveItems_ParentAndSeriesAfterChildInBatch_StillResolve()
+        {
+            await EnsureProductionSchemaAsync().ConfigureAwait(false);
+            EnsureRepositoryStatics();
+
+            var childGuid = Guid.Parse("00000001-0000-0000-0000-000000000001");
+            var parentGuid = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+            var seriesGuid = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+            var rootGuid = new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+            // 故意以 child → series → parent → root 的顺序传入（父项全部在后）。
+            var items = new[]
             {
-                cmd.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
-                {
-                    Value = childGuids.Concat(new[] { folderGuid, rootGuid }).ToArray()
-                });
-                await cmd.ExecuteNonQueryAsync();
-            }
+                NewSeason(childGuid, parentGuid, seriesGuid),
+                NewSeason(seriesGuid, rootGuid),
+                NewSeason(parentGuid, rootGuid),
+                NewSeason(rootGuid, Guid.Empty)
+            };
 
-            // ---- 断言 1：所有子项 parent_id 非空且指向 folder ----
-            await using (var conn = await OpenAsync())
+            await CreateRepository().SaveItemsAsync(items.ToList(), CancellationToken.None).ConfigureAwait(false);
+
+            var stored = await ReadReferencesAsync(new[] { childGuid, parentGuid, seriesGuid, rootGuid }).ConfigureAwait(false);
+            Assert.AreEqual(stored[parentGuid].Id, stored[childGuid].Parent, "同批次父项出现在子项之后时 parent_id 未解析");
+            Assert.AreEqual(stored[seriesGuid].Id, stored[childGuid].Series, "同批次 series 出现在子项之后时 series_id 未解析");
+            Assert.AreEqual(stored[rootGuid].Id, stored[parentGuid].Parent, "中间父项的 parent_id 未解析");
+            Assert.IsNull(stored[rootGuid].Parent, "root 必须保持 parent_id IS NULL");
+        }
+
+        /// <summary>
+        /// 崩溃窗口属性（用「一次调用即完整」来模拟，不真的杀进程）：
+        /// 跨多个 chunk 的单次 SaveItemsAsync 返回后，凡是提供了父项 GUID 的行
+        /// 都不能留下 parent_id IS NULL；只有真正无父项的条目允许为 NULL。
+        /// </summary>
+        [TestMethod]
+        public async Task SaveItems_SingleCall_LeavesNoNullParentIdForProvidedParent()
+        {
+            await EnsureProductionSchemaAsync().ConfigureAwait(false);
+            EnsureRepositoryStatics();
+
+            const int childCount = 300;
+            var rootGuid = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+            var virtualGuid = Guid.Parse("00000000-0000-0000-0000-000000000001");
+            var childGuids = Enumerable.Range(0, childCount)
+                .Select(i => Guid.Parse((i + 2).ToString("x8") + "-0000-0000-0000-000000000000"))
+                .ToArray();
+
+            var items = childGuids.Select(g => NewSeason(g, rootGuid))
+                .Concat(new[] { NewSeason(rootGuid, Guid.Empty), NewSeason(virtualGuid, Guid.Empty) })
+                .ToList();
+
+            await CreateRepository().SaveItemsAsync(items, CancellationToken.None).ConfigureAwait(false);
+
+            await using (var conn = await OpenAsync().ConfigureAwait(false))
             {
                 await using (var cmd = new NpgsqlCommand(@"
                     SELECT count(*) FROM media_items
-                    WHERE type = 2 AND (parent_id IS NULL OR parent_id <> (SELECT id FROM media_items WHERE guid = @fg))", conn))
+                    WHERE parent_id IS NULL AND guid NOT IN (@virtual, @root)", conn))
                 {
-                    cmd.Parameters.Add(new NpgsqlParameter("fg", NpgsqlDbType.Uuid) { Value = folderGuid });
-                    var bad = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Assert.AreEqual(0L, bad, "存在 parent_id 未回填或回填错误的子项（跨块丢失回归）");
-                }
-
-                await using (var cmd = new NpgsqlCommand(
-                    "SELECT count(*) FROM media_items WHERE type = 2 AND parent_id IS NOT NULL", conn))
-                {
-                    var ok = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Assert.AreEqual((long)childCount, ok, "parent_id 非空的子项数量不符");
-                }
-
-                // ---- 断言 2：每个子项恰好 2 条祖先，distance 分别为 1 和 2 ----
-                await using (var cmd = new NpgsqlCommand(@"
-                    SELECT count(*) FROM (
-                        SELECT a.item_id, count(*) AS c, min(a.distance) AS dmin, max(a.distance) AS dmax
-                        FROM ancestor_ids a
-                        JOIN media_items m ON m.id = a.item_id
-                        WHERE m.type = 2
-                        GROUP BY a.item_id
-                    ) t
-                    WHERE t.c <> 2 OR t.dmin <> 1 OR t.dmax <> 2", conn))
-                {
-                    var bad = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Assert.AreEqual(0L, bad, "祖先闭包行数或 distance 层级不正确");
+                    cmd.Parameters.Add(new NpgsqlParameter("virtual", NpgsqlDbType.Uuid) { Value = virtualGuid });
+                    cmd.Parameters.Add(new NpgsqlParameter("root", NpgsqlDbType.Uuid) { Value = rootGuid });
+                    Assert.AreEqual(0L, Convert.ToInt64(await cmd.ExecuteScalarAsync().ConfigureAwait(false)),
+                        "一次保存后仍有提供了父项 GUID 却 parent_id IS NULL 的行（崩溃窗口回归）");
                 }
 
                 await using (var cmd = new NpgsqlCommand(@"
-                    SELECT count(*) FROM ancestor_ids a
-                    JOIN media_items m ON m.id = a.item_id WHERE m.type = 2", conn))
+                    SELECT count(*) FROM media_items m
+                    WHERE m.guid = ANY(@guids)
+                      AND m.parent_id = (SELECT p.id FROM media_items p WHERE p.guid = @root)", conn))
                 {
-                    var rows = Convert.ToInt64(await cmd.ExecuteScalarAsync());
-                    Assert.AreEqual((long)childCount * 2, rows, "祖先闭包总行数不符");
+                    cmd.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = childGuids });
+                    cmd.Parameters.Add(new NpgsqlParameter("root", NpgsqlDbType.Uuid) { Value = rootGuid });
+                    Assert.AreEqual((long)childCount, Convert.ToInt64(await cmd.ExecuteScalarAsync().ConfigureAwait(false)),
+                        "跨块子项的 parent_id 未全部指向 root");
                 }
             }
+        }
+
+        private static MediaBrowser.Controller.Entities.BaseItem NewSeason(Guid id, Guid parentGuid, Guid seriesGuid = default)
+        {
+            return new MediaBrowser.Controller.Entities.TV.Season
+            {
+                Id = id,
+                ParentId = parentGuid,
+                SeriesId = seriesGuid,
+                Name = "item-" + id.ToString("N"),
+                Path = "/p/" + id.ToString("N"),
+                DateCreated = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                DateModified = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            };
+        }
+
+        private PgItemRepository CreateRepository()
+        {
+            var logger = new MediaBrowser.Model.Logging.NullLogger();
+            var envInfo = new Emby.Server.Implementations.EnvironmentInfo.EnvironmentInfo();
+            var fs = new Emby.Server.Implementations.IO.ManagedFileSystem(
+                logger, envInfo, ".", System.IO.Path.GetTempPath(), false);
+
+            return new PgItemRepository(
+                new FakeConfigManager(),
+                new FakeAppHost(),
+                new Emby.Common.Implementations.Serialization.JsonSerializer(fs, logger),
+                logger,
+                new Emby.Server.Implementations.Reflection.AssemblyInfo(),
+                fs,
+                TestConnectionString);
+        }
+
+        /// <summary>
+        /// BuildBatchRow 会调用 GetTopParent/GetInheritedTags，它们经由静态 LibraryManager
+        /// 回溯父项；测试里只需让它返回 null（引用解析由 SQL 完成，不依赖内存对象图）。
+        /// </summary>
+        private static void EnsureRepositoryStatics()
+        {
+            MediaBrowser.Controller.Extensions.StringExtensions.LocalizationManager = new FakeLocalizationManager();
+            MediaBrowser.Controller.Entities.BaseItem.LibraryManager =
+                System.Reflection.DispatchProxy.Create<MediaBrowser.Controller.Library.ILibraryManager, NullLibraryManagerProxy>();
+        }
+
+        private class NullLibraryManagerProxy : System.Reflection.DispatchProxy
+        {
+            protected override object Invoke(System.Reflection.MethodInfo targetMethod, object[] args) => null;
+        }
+
+        private async Task<Dictionary<Guid, (long Id, long? Parent, long? Series)>> ReadReferencesAsync(Guid[] guids)
+        {
+            var result = new Dictionary<Guid, (long, long?, long?)>();
+            await using var conn = await OpenAsync().ConfigureAwait(false);
+            await using var cmd = new NpgsqlCommand("SELECT guid, id, parent_id, series_id FROM media_items WHERE guid = ANY(@guids)", conn);
+            cmd.Parameters.Add(new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guids });
+            await using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+            while (await reader.ReadAsync().ConfigureAwait(false))
+            {
+                result[reader.GetGuid(0)] = (
+                    reader.GetInt64(1),
+                    await reader.IsDBNullAsync(2).ConfigureAwait(false) ? null : reader.GetInt64(2),
+                    await reader.IsDBNullAsync(3).ConfigureAwait(false) ? null : reader.GetInt64(3));
+            }
+
+            return result;
         }
 
         /// <summary>

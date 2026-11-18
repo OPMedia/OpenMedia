@@ -324,15 +324,16 @@ namespace Emby.Server.PgData
             "external_series_id, owner_id, date_last_media_added";
 
         /// <summary>
-        /// 批量保存（真批量：单条 UNNEST 语句落库整块，网络往返 O(1)）。
+        /// 批量保存（真批量：UNNEST 语句落库，网络往返 O(批次数)）。
         ///
         /// 流程（每块 250 条，独立短事务）：
         ///  1. 删除同 guid 异 type 的历史行（罕见类型变更路径）；
         ///  2. 批量解析 user_data_key → id（单次 UNNEST）；
-        ///  3. 单条 INSERT ... SELECT FROM UNNEST(...) ON CONFLICT (guid, type) DO UPDATE 落库全部行；
-        ///  4. 单条 UPDATE ... FROM (VALUES ...) 回填 parent_id/series_id；
-        ///  5. 祖先闭包表与 extradata 亦为批量 UNNEST。
-        /// 块内按 Guid 升序，保证并发事务加锁顺序一致（杜绝 40P01）。
+        ///  3. 按引用依赖层级落库：每层一条 INSERT ... SELECT FROM UNNEST(...)
+        ///     ON CONFLICT (guid, type) DO UPDATE，parent_id/series_id 在语句内由
+        ///     相关子查询按 guid 解析（同批父项已在更早的层级/块提交）；
+        ///  4. 祖先闭包表与 extradata 亦为批量 UNNEST。
+        /// 同一层级内按 Guid 升序，尽量保持并发事务加锁顺序一致（避免 40P01）。
         /// </summary>
         public async Task SaveItemsAsync(List<BaseItem> items, CancellationToken cancellationToken)
         {
@@ -351,13 +352,14 @@ namespace Emby.Server.PgData
             }
 
             // ---- 事务外一次性提取全部内存侧数据（不占用连接）----
-            var allRows = sortedItems.Select(BuildBatchRow).ToList();
+            var allRows = OrderRowsByReferenceDependency(sortedItems.Select(BuildBatchRow).ToList());
             var allExtraRows = sortedItems
                 .Select(i => (Item: i.Id, Values: GetItemValuesToSave(i, i.GetInheritedTags())))
                 .ToList();
             var allGuids = sortedItems.Select(i => i.Id).ToArray();
 
-            // ================= 阶段 1：分块 upsert（引用列留 NULL）=================
+            // ================= 阶段 1：分块单阶段 upsert（引用列随行解析）=================
+            // 全局按引用依赖排序，父项/系列项一定先于子项落库（即使跨越块边界）。
             for (int start = 0; start < allRows.Count; start += BatchChunkSize)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -370,12 +372,8 @@ namespace Emby.Server.PgData
                 await UpsertItemsChunkAsync(rowChunk, extraChunk, cancellationToken).ConfigureAwait(false);
             }
 
-            // ================= 阶段 2：全局引用回填 =================
-            // 所有块已 upsert 完毕，父项/系列项必然存在（无论其落在哪个块）。
-            await BackfillReferencesAllAsync(allRows, cancellationToken).ConfigureAwait(false);
-
-            // ================= 阶段 3：全局闭包表重建（递归 CTE，含真实 distance）=================
-            // 所有块 upsert + 全局 parent_id 回填已完成，此时沿 parent_id 上溯必然可达。
+            // ================= 阶段 2：全局闭包表重建（递归 CTE，含真实 distance）=================
+            // 所有块 upsert 已完成，此时沿 parent_id 上溯必然可达。
             for (int start = 0; start < allGuids.Length; start += BatchChunkSize)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -387,6 +385,96 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
+        /// 按本批次内的 parent/series 引用把行排成拓扑序，并标记写入层级。
+        ///
+        /// 同一 INSERT ... SELECT 内的子查询看不到该语句自己刚插入的行（PG 的 MVCC 快照），
+        /// 所以「父项与子项在同一个 UNNEST 语句里」时内联解析必然得到 NULL。
+        /// 这里让被引用行排在引用行之前，并用 WriteLevel 把同一事务内的写入切成
+        /// 若干条 UNNEST 语句——每条语句只写一层，上一层已提交/已对本事务可见。
+        /// 层级相同的行互不引用，可安全放在同一条语句里。
+        ///
+        /// 引用指向本批之外的 GUID 不参与排序（由内联子查询从库里解析）。
+        /// 环（本批内互相引用）无法拓扑排序：这些行排到最后，内联解析得到 NULL，
+        /// 与「父项不存在」的语义一致。
+        /// </summary>
+        private static List<MediaItemBatchRow> OrderRowsByReferenceDependency(List<MediaItemBatchRow> rows)
+        {
+            var count = rows.Count;
+            var indexByGuid = new Dictionary<Guid, int>(count);
+            for (int i = 0; i < count; i++)
+            {
+                indexByGuid.TryAdd(rows[i].Guid, i);
+            }
+
+            var dependents = new List<int>[count];
+            var pending = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                dependents[i] = new List<int>();
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                AddDependency(rows[i].ParentGuid, i);
+                AddDependency(rows[i].SeriesGuid, i);
+            }
+
+            void AddDependency(Guid referencedGuid, int dependentIndex)
+            {
+                if (referencedGuid == Guid.Empty
+                    || !indexByGuid.TryGetValue(referencedGuid, out var referencedIndex)
+                    || referencedIndex == dependentIndex)
+                {
+                    return;
+                }
+
+                dependents[referencedIndex].Add(dependentIndex);
+                pending[dependentIndex]++;
+            }
+
+            // 层级优先、Guid 作为次级排序键：既保证父项先落库，也保持同层按 Guid 升序的加锁习惯。
+            var ready = new PriorityQueue<int, (int, Guid, int)>();
+            for (int i = 0; i < count; i++)
+            {
+                if (pending[i] == 0)
+                {
+                    ready.Enqueue(i, (rows[i].WriteLevel, rows[i].Guid, i));
+                }
+            }
+
+            var ordered = new List<MediaItemBatchRow>(count);
+            var cycleLevel = 0;
+            while (ready.TryDequeue(out var index, out _))
+            {
+                var row = rows[index];
+                ordered.Add(row);
+
+                foreach (var dependent in dependents[index])
+                {
+                    rows[dependent].WriteLevel = Math.Max(rows[dependent].WriteLevel, row.WriteLevel + 1);
+                    if (--pending[dependent] == 0)
+                    {
+                        ready.Enqueue(dependent, (rows[dependent].WriteLevel, rows[dependent].Guid, dependent));
+                    }
+                }
+
+                cycleLevel = Math.Max(cycleLevel, row.WriteLevel);
+            }
+
+            // 环内行无法由前置行解析；排在最后并按 Guid 稳定输出。
+            for (int i = 0; i < count; i++)
+            {
+                if (pending[i] > 0)
+                {
+                    rows[i].WriteLevel = cycleLevel + 1;
+                }
+            }
+
+            ordered.AddRange(rows.Where(r => r.WriteLevel == cycleLevel + 1).OrderBy(r => r.Guid));
+            return ordered;
+        }
+
+        /// <summary>
         /// 重建本批 item 的祖先闭包（含真实层级 distance）。
         ///
         /// 采用 **SQL 递归 CTE** 在数据库内沿 parent_id 上溯：
@@ -394,7 +482,7 @@ namespace Emby.Server.PgData
         ///   - 天然覆盖「父项在其它 chunk / 上一轮扫描」的情况；
         ///   - distance 由递归深度直接给出（父=1、祖父=2 …）。
         ///
-        /// 必须在所有 chunk upsert + 全局 parent_id 回填之后调用。
+        /// 必须在所有 chunk upsert 完成后调用。
         /// </summary>
         private static Task RebuildAncestorsAsync(
             NpgsqlConnection connection,
@@ -456,11 +544,10 @@ namespace Emby.Server.PgData
 
         /// <summary>
         /// 单块 upsert（一个短事务）：清理同 guid 异 type 历史行 → 解析 user_data_key →
-        /// UNNEST 批量 UPSERT → 批量写 extradata。
+        /// 按引用层级逐层 UNNEST 批量 UPSERT（每层内 parent_id/series_id 由语句内子查询解析）
+        /// → 批量写 extradata。
         ///
-        /// 注意：本阶段**不**写 parent_id / series_id / ancestor_ids —— 父项可能落在后续块，
-        /// 引用与闭包由全局阶段（<see cref="BackfillReferencesAllAsync"/> /
-        /// <see cref="WriteAncestorsAllAsync"/>）在所有块 upsert 完成后统一处理。
+        /// 本块不写 ancestor_ids：闭包由全局阶段在所有块 upsert 完成后统一重建。
         /// </summary>
         private Task UpsertItemsChunkAsync(
             List<MediaItemBatchRow> rows,
@@ -487,11 +574,26 @@ namespace Emby.Server.PgData
                 // ---- 2. 批量解析 user_data_key → id ----
                 var userDataKeyIdMap = await ResolveUserDataKeyIdsAsync(connection, transaction, rows, ct).ConfigureAwait(false);
 
-                // ---- 3. 单条 UNNEST 批量 UPSERT 全部媒体项（引用列先留 NULL）----
-                var insertedIds = await UpsertMediaItemsBatchAsync(connection, transaction, rows, userDataKeyIdMap, ct).ConfigureAwait(false);
-                for (int i = 0; i < rows.Count; i++)
+                // ---- 3. 逐层单阶段 UPSERT：被引用行先落库，引用行子查询可见 ----
+                for (int start = 0; start < rows.Count;)
                 {
-                    CacheGuidId(rows[i].Guid, insertedIds[i]);
+                    ct.ThrowIfCancellationRequested();
+
+                    var level = rows[start].WriteLevel;
+                    int end = start + 1;
+                    while (end < rows.Count && rows[end].WriteLevel == level)
+                    {
+                        end++;
+                    }
+
+                    var levelRows = rows.GetRange(start, end - start);
+                    var insertedIds = await UpsertMediaItemsBatchAsync(connection, transaction, levelRows, userDataKeyIdMap, ct).ConfigureAwait(false);
+                    for (int i = 0; i < levelRows.Count; i++)
+                    {
+                        CacheGuidId(levelRows[i].Guid, insertedIds[i]);
+                    }
+
+                    start = end;
                 }
 
                 // ---- 4. extradata 批量写入 ----
@@ -500,29 +602,12 @@ namespace Emby.Server.PgData
         }
 
         /// <summary>
-        /// 全局回填 parent_id / series_id：在所有块 upsert 完成后执行，
-        /// 保证父项无论落在哪个块都已存在（彻底消除跨块父子丢失）。
-        /// </summary>
-        private async Task BackfillReferencesAllAsync(
-            List<MediaItemBatchRow> allRows,
-            CancellationToken cancellationToken)
-        {
-            for (int start = 0; start < allRows.Count; start += BatchChunkSize)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var chunk = allRows.Skip(start).Take(BatchChunkSize).ToList();
-
-                await RunInTransactionAsync((connection, transaction, ct) =>
-                    BackfillReferencesAsync(connection, transaction, chunk, ct), cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        /// <summary>
         /// 单条媒体项 → 批量行快照（全部标量字段，事务外提取，避免持连接做序列化）。
         /// </summary>
         private sealed class MediaItemBatchRow
         {
             public Guid Guid;
+            public int WriteLevel;
             public int TypeCode;
             public string TypeName;
             public string Data;
@@ -742,7 +827,6 @@ namespace Emby.Server.PgData
             var type = new int[count];
             var typeName = new string[count];
             var data = new string[count];
-            var parentGuid = new Guid[count];
             var path = new string[count];
             var startDate = new object[count];
             var endDate = new object[count];
@@ -774,7 +858,6 @@ namespace Emby.Server.PgData
             var presentationUniqueKey = new string[count];
             var originalTitle = new string[count];
             var seriesName = new string[count];
-            var seriesGuid = new Guid[count];
             var tagline = new string[count];
             var providerIds = new string[count];
             var images = new string[count];
@@ -809,7 +892,6 @@ namespace Emby.Server.PgData
                 type[i] = r.TypeCode;
                 typeName[i] = r.TypeName;
                 data[i] = r.Data;
-                parentGuid[i] = r.ParentGuid;
                 path[i] = r.Path;
                 startDate[i] = ToDbValue(r.StartDate);
                 endDate[i] = ToDbValue(r.EndDate);
@@ -841,7 +923,6 @@ namespace Emby.Server.PgData
                 presentationUniqueKey[i] = r.PresentationUniqueKey;
                 originalTitle[i] = r.OriginalTitle;
                 seriesName[i] = r.SeriesName;
-                seriesGuid[i] = r.SeriesGuid;
                 tagline[i] = r.Tagline;
                 providerIds[i] = r.ProviderIds;
                 images[i] = r.Images;
@@ -876,7 +957,10 @@ namespace Emby.Server.PgData
             var sql = @"
                 INSERT INTO media_items (" + MediaItemsBatchColumns + @")
                 SELECT
-                    u.guid, u.type, u.type_name, u.data, u.parent_id, u.path, u.start_date, u.end_date,
+                    u.guid, u.type, u.type_name, u.data,
+                    CASE WHEN u.parent_guid = '00000000-0000-0000-0000-000000000000'::uuid THEN NULL
+                         ELSE (SELECT p.id FROM media_items p WHERE p.guid = u.parent_guid LIMIT 1) END,
+                    u.path, u.start_date, u.end_date,
                     u.is_movie, u.is_series, u.is_repeat, u.community_rating, u.custom_rating,
                     u.index_number, u.is_locked, u.name, u.official_rating, u.overview,
                     u.parent_index_number, u.premiere_date, u.production_year, u.sort_name,
@@ -884,14 +968,16 @@ namespace Emby.Server.PgData
                     u.preferred_metadata_country_code, u.date_last_refreshed, u.date_last_saved,
                     u.is_in_mixed_folder, u.locked_fields, u.inherited_parental_rating_value,
                     u.critic_rating, u.presentation_unique_key, u.original_title, u.series_name,
-                    u.series_id, u.album_id, u.tagline, u.provider_ids, u.images, u.production_locations,
+                    CASE WHEN u.series_guid = '00000000-0000-0000-0000-000000000000'::uuid THEN NULL
+                         ELSE (SELECT s.id FROM media_items s WHERE s.guid = u.series_guid LIMIT 1) END,
+                    u.album_id, u.tagline, u.provider_ids, u.images, u.production_locations,
                     u.total_bitrate, u.extra_type, u.series_presentation_unique_key, u.external_id,
                     u.width, u.height, u.size, u.container, u.user_data_key_id,
                     u.is_folder, u.is_virtual_item, u.media_type, u.channel_id, u.top_parent_id,
                     u.clean_name, u.album, u.extra_ids, u.unrated_type, u.trailer_types,
                     u.external_series_id, u.owner_id, u.date_last_media_added
                 FROM UNNEST(
-                    @guid, @type, @type_name, @data, @parent_id, @path, @start_date, @end_date,
+                    @guid, @type, @type_name, @data, @parent_guid, @path, @start_date, @end_date,
                     @is_movie, @is_series, @is_repeat, @community_rating, @custom_rating,
                     @index_number, @is_locked, @name, @official_rating, @overview,
                     @parent_index_number, @premiere_date, @production_year, @sort_name,
@@ -899,14 +985,14 @@ namespace Emby.Server.PgData
                     @preferred_metadata_country_code, @date_last_refreshed, @date_last_saved,
                     @is_in_mixed_folder, @locked_fields, @inherited_parental_rating_value,
                     @critic_rating, @presentation_unique_key, @original_title, @series_name,
-                    @series_id, @album_id, @tagline, @provider_ids, @images, @production_locations,
+                    @series_guid, @album_id, @tagline, @provider_ids, @images, @production_locations,
                     @total_bitrate, @extra_type, @series_presentation_unique_key, @external_id,
                     @width, @height, @size, @container, @user_data_key_id,
                     @is_folder, @is_virtual_item, @media_type, @channel_id, @top_parent_id,
                     @clean_name, @album, @extra_ids, @unrated_type, @trailer_types,
                     @external_series_id, @owner_id, @date_last_media_added
                 ) AS u(
-                    guid, type, type_name, data, parent_id, path, start_date, end_date,
+                    guid, type, type_name, data, parent_guid, path, start_date, end_date,
                     is_movie, is_series, is_repeat, community_rating, custom_rating,
                     index_number, is_locked, name, official_rating, overview,
                     parent_index_number, premiere_date, production_year, sort_name,
@@ -914,7 +1000,7 @@ namespace Emby.Server.PgData
                     preferred_metadata_country_code, date_last_refreshed, date_last_saved,
                     is_in_mixed_folder, locked_fields, inherited_parental_rating_value,
                     critic_rating, presentation_unique_key, original_title, series_name,
-                    series_id, album_id, tagline, provider_ids, images, production_locations,
+                    series_guid, album_id, tagline, provider_ids, images, production_locations,
                     total_bitrate, extra_type, series_presentation_unique_key, external_id,
                     width, height, size, container, user_data_key_id,
                     is_folder, is_virtual_item, media_type, channel_id, top_parent_id,
@@ -967,10 +1053,10 @@ namespace Emby.Server.PgData
             cmd.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = type });
             cmd.Parameters.Add(new NpgsqlParameter("type_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = typeName });
             cmd.Parameters.Add(new NpgsqlParameter("data", NpgsqlDbType.Array | NpgsqlDbType.Jsonb) { Value = data });
-            // parent_id 为 BIGINT 外键：本批次先写 NULL，由 BackfillReferencesAsync 统一解析回填
-            cmd.Parameters.Add(new NpgsqlParameter("parent_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+            // parent_id 在 INSERT 语句内按 guid 解析（同批父项已先于本层落库）
+            cmd.Parameters.Add(new NpgsqlParameter("parent_guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
             {
-                Value = new long?[count]
+                Value = rows.Select(r => r.ParentGuid).ToArray()
             });
             cmd.Parameters.Add(new NpgsqlParameter("path", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = path });
             cmd.Parameters.Add(new NpgsqlParameter("start_date", NpgsqlDbType.Array | NpgsqlDbType.TimestampTz) { Value = startDate });
@@ -1003,10 +1089,10 @@ namespace Emby.Server.PgData
             cmd.Parameters.Add(new NpgsqlParameter("presentation_unique_key", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = presentationUniqueKey });
             cmd.Parameters.Add(new NpgsqlParameter("original_title", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = originalTitle });
             cmd.Parameters.Add(new NpgsqlParameter("series_name", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = seriesName });
-            // series_id / album_id 为 BIGINT 外键：本批次先写 NULL，由 BackfillReferencesAsync 统一解析回填
-            cmd.Parameters.Add(new NpgsqlParameter("series_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+            // series_id 在 INSERT 语句内按 guid 解析；album_id 沿用写入时恒 NULL 的语义
+            cmd.Parameters.Add(new NpgsqlParameter("series_guid", NpgsqlDbType.Array | NpgsqlDbType.Uuid)
             {
-                Value = new long?[count]
+                Value = rows.Select(r => r.SeriesGuid).ToArray()
             });
             cmd.Parameters.Add(new NpgsqlParameter("album_id", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
             {
@@ -1069,38 +1155,6 @@ namespace Emby.Server.PgData
             }
 
             return result;
-        }
-
-        /// <summary>
-        /// 单条集合 UPDATE 回填 parent_id / series_id（子查询解析 GUID，块内拓扑顺序无关）。
-        /// </summary>
-        private static Task BackfillReferencesAsync(
-            NpgsqlConnection connection,
-            NpgsqlTransaction transaction,
-            List<MediaItemBatchRow> rows,
-            CancellationToken cancellationToken)
-        {
-            var count = rows.Count;
-            var guids = rows.Select(r => r.Guid).ToArray();
-            var parentGuids = rows.Select(r => r.ParentGuid).ToArray();
-            var seriesGuids = rows.Select(r => r.SeriesGuid).ToArray();
-
-            return ExecuteNonQueryAsync(
-                connection,
-                transaction,
-                @"UPDATE media_items m SET
-                      parent_id = CASE WHEN u.pg = '00000000-0000-0000-0000-000000000000'::uuid
-                                       THEN NULL
-                                       ELSE (SELECT p.id FROM media_items p WHERE p.guid = u.pg LIMIT 1) END,
-                      series_id = CASE WHEN u.sg = '00000000-0000-0000-0000-000000000000'::uuid
-                                       THEN NULL
-                                       ELSE (SELECT s.id FROM media_items s WHERE s.guid = u.sg LIMIT 1) END
-                  FROM UNNEST(@guids, @parent_guids, @series_guids) AS u(g, pg, sg)
-                  WHERE m.guid = u.g",
-                cancellationToken,
-                new NpgsqlParameter("guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = guids },
-                new NpgsqlParameter("parent_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = parentGuids },
-                new NpgsqlParameter("series_guids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = seriesGuids });
         }
 
         /// <summary>
