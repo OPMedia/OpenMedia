@@ -6,6 +6,9 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // VITE_BASE_PATH 必须同时作用于资源 URL，否则部署到子路径时 index.html 里的
+  // /assets/*.js 会 404（router 的 base 只管路由，管不到构建产物路径）。
+  base: process.env.VITE_BASE_PATH ?? '/',
   plugins: [
     vue(),
     vueDevTools(),
