@@ -15,6 +15,7 @@ using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.System;
 using MediaBrowser.Model.Tasks;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.ScheduledTasks
 {
@@ -23,6 +24,8 @@ namespace Emby.Server.Implementations.ScheduledTasks
     /// </summary>
     public class ScheduledTaskWorker : IScheduledTaskWorker
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         public event EventHandler<GenericEventArgs<double>> TaskProgress;
 
         /// <summary>
@@ -350,26 +353,39 @@ namespace Emby.Server.Implementations.ScheduledTasks
         /// </summary>
         /// <param name="sender">The source of the event.</param>
         /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
-        async void trigger_Triggered(object sender, EventArgs e)
+        void trigger_Triggered(object sender, EventArgs e)
         {
-            var trigger = (ITaskTrigger)sender;
+            // 触发器事件回调必须保持 void；异常由 TriggeredAsync 捕获并记录
+            _ = TriggeredAsync(sender);
+        }
 
-            var configurableTask = ScheduledTask as IConfigurableScheduledTask;
-
-            if (configurableTask != null && !configurableTask.IsEnabled)
+        private async Task TriggeredAsync(object sender)
+        {
+            try
             {
-                return;
+                var trigger = (ITaskTrigger)sender;
+
+                var configurableTask = ScheduledTask as IConfigurableScheduledTask;
+
+                if (configurableTask != null && !configurableTask.IsEnabled)
+                {
+                    return;
+                }
+
+                Logger.Info("{0} fired for task: {1}", trigger.GetType().Name, Name);
+
+                trigger.Stop();
+
+                TaskManager.QueueScheduledTask(ScheduledTask, trigger.TaskOptions);
+
+                await Task.Delay(1000).ConfigureAwait(false);
+
+                trigger.Start(LastExecutionResult, Logger, Name, false);
             }
-
-            Logger.Info("{0} fired for task: {1}", trigger.GetType().Name, Name);
-
-            trigger.Stop();
-
-            TaskManager.QueueScheduledTask(ScheduledTask, trigger.TaskOptions);
-
-            await Task.Delay(1000).ConfigureAwait(false);
-
-            trigger.Start(LastExecutionResult, Logger, Name, false);
+            catch (Exception ex)
+            {
+                Logger.ErrorException("Error handling task trigger", ex);
+            }
         }
 
         private Task _currentTask;
@@ -679,7 +695,28 @@ namespace Emby.Server.Implementations.ScheduledTasks
                     try
                     {
                         Logger.Info(Name + ": Waiting on Task");
-                        var exited = Task.WaitAll(new[] { task }, 2000);
+                        // 外部启动的任务不直接 await；用本地 TCS 把完成信号带进 Dispose 的上下文
+                        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _ = task.ContinueWith(_ => completion.TrySetResult(true), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+                        // Dispose 是同步契约；用 JTF.Run 安全等待，同时保留原有的 2 秒超时
+                        var exited = _joinableTaskFactory.Run(async () =>
+                        {
+                            try
+                            {
+                                await completion.Task.WaitAsync(TimeSpan.FromMilliseconds(2000)).ConfigureAwait(false);
+                                return true;
+                            }
+                            catch (TimeoutException)
+                            {
+                                return false;
+                            }
+                        });
+
+                        if (task.IsFaulted)
+                        {
+                            Logger.ErrorException("Error calling Task.WaitAll();", task.Exception);
+                        }
 
                         if (exited)
                         {
