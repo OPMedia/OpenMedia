@@ -221,7 +221,7 @@ namespace MediaBrowser.Providers.MediaInfo
 
             video.HasSubtitles = mediaStreams.Any(i => i.Type == MediaStreamType.Subtitle);
 
-            _itemRepo.SaveMediaStreams(video.Id, mediaStreams, cancellationToken);
+            await _itemRepo.SaveMediaStreamsAsync(video.Id, mediaStreams, cancellationToken).ConfigureAwait(false);
 
             if (options.MetadataRefreshMode == MetadataRefreshMode.FullRefresh ||
                 options.MetadataRefreshMode == MetadataRefreshMode.Default)

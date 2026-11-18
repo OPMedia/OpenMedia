@@ -3,6 +3,8 @@
   <PropertyGroup>
     <AssemblyName>MediaBrowser.Providers</AssemblyName>
     <RootNamespace>MediaBrowser.Providers</RootNamespace>
+    <!-- 线程分析器门禁：本工程内阻塞/死锁/崩溃类规则即为 error。 -->
+    <WarningsAsErrors>$(WarningsAsErrors);VSTHRD002;VSTHRD003;VSTHRD100;VSTHRD103;VSTHRD110</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
