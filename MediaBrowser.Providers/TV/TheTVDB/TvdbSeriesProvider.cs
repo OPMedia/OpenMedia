@@ -594,14 +594,15 @@ namespace MediaBrowser.Providers.TV
                     settings.CheckCharacters = false;
                     settings.IgnoreProcessingInstructions = true;
                     settings.IgnoreComments = true;
+                    settings.Async = true;
 
                     using (var streamReader = new StreamReader(stream, Encoding.UTF8))
                     {
                         // Use XmlReader for best performance
                         using (var reader = XmlReader.Create(streamReader, settings))
                         {
-                            reader.MoveToContent();
-                            reader.Read();
+                            await reader.MoveToContentAsync().ConfigureAwait(false);
+                            await reader.ReadAsync().ConfigureAwait(false);
 
                             // Loop through each element
                             while (!reader.EOF && reader.ReadState == ReadState.Interactive)
@@ -616,7 +617,7 @@ namespace MediaBrowser.Providers.TV
                                             {
                                                 if (reader.IsEmptyElement)
                                                 {
-                                                    reader.Read();
+                                                    await reader.ReadAsync().ConfigureAwait(false);
                                                     continue;
                                                 }
                                                 using (var subtree = reader.ReadSubtree())
@@ -632,13 +633,13 @@ namespace MediaBrowser.Providers.TV
                                             }
 
                                         default:
-                                            reader.Skip();
+                                            await reader.SkipAsync().ConfigureAwait(false);
                                             break;
                                     }
                                 }
                                 else
                                 {
-                                    reader.Read();
+                                    await reader.ReadAsync().ConfigureAwait(false);
                                 }
                             }
                         }
@@ -1372,6 +1373,7 @@ namespace MediaBrowser.Providers.TV
             settings.CheckCharacters = false;
             settings.IgnoreProcessingInstructions = true;
             settings.IgnoreComments = true;
+            settings.Async = true;
 
             using (var fileStream = _fileSystem.GetFileStream(xmlFile, FileOpenMode.Open, FileAccessMode.Read, FileShareMode.Read))
             {
@@ -1380,8 +1382,8 @@ namespace MediaBrowser.Providers.TV
                     // Use XmlReader for best performance
                     using (var reader = XmlReader.Create(streamReader, settings))
                     {
-                        reader.MoveToContent();
-                        reader.Read();
+                        await reader.MoveToContentAsync().ConfigureAwait(false);
+                        await reader.ReadAsync().ConfigureAwait(false);
 
                         // Loop through each element
                         while (!reader.EOF && reader.ReadState == ReadState.Interactive)
@@ -1392,20 +1394,20 @@ namespace MediaBrowser.Providers.TV
                                 {
                                     case "Episode":
                                         {
-                                            var outerXml = reader.ReadOuterXml();
+                                            var outerXml = await reader.ReadOuterXmlAsync().ConfigureAwait(false);
 
                                             await SaveEpsiodeXml(seriesDataPath, outerXml, lastTvDbUpdateTime).ConfigureAwait(false);
                                             break;
                                         }
 
                                     default:
-                                        reader.Skip();
+                                        await reader.SkipAsync().ConfigureAwait(false);
                                         break;
                                 }
                             }
                             else
                             {
-                                reader.Read();
+                                await reader.ReadAsync().ConfigureAwait(false);
                             }
                         }
                     }
@@ -1420,6 +1422,7 @@ namespace MediaBrowser.Providers.TV
             settings.CheckCharacters = false;
             settings.IgnoreProcessingInstructions = true;
             settings.IgnoreComments = true;
+            settings.Async = true;
 
             var seasonNumber = -1;
             var episodeNumber = -1;
@@ -1434,8 +1437,8 @@ namespace MediaBrowser.Providers.TV
                 // Use XmlReader for best performance
                 using (var reader = XmlReader.Create(streamReader, settings))
                 {
-                    reader.MoveToContent();
-                    reader.Read();
+                    await reader.MoveToContentAsync().ConfigureAwait(false);
+                    await reader.ReadAsync().ConfigureAwait(false);
 
                     // Loop through each element
                     while (!reader.EOF && reader.ReadState == ReadState.Interactive)
@@ -1446,13 +1449,13 @@ namespace MediaBrowser.Providers.TV
                             {
                                 case "lastupdated":
                                     {
-                                        lastUpdateString = reader.ReadElementContentAsString();
+                                        lastUpdateString = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
                                         break;
                                     }
 
                                 case "EpisodeNumber":
                                     {
-                                        var val = reader.ReadElementContentAsString();
+                                        var val = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
                                         if (!string.IsNullOrWhiteSpace(val))
                                         {
                                             int num;
@@ -1466,7 +1469,7 @@ namespace MediaBrowser.Providers.TV
 
                                 case "Combined_episodenumber":
                                     {
-                                        var val = reader.ReadElementContentAsString();
+                                        var val = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
 
                                         if (!string.IsNullOrWhiteSpace(val))
                                         {
@@ -1483,7 +1486,7 @@ namespace MediaBrowser.Providers.TV
 
                                 case "Combined_season":
                                     {
-                                        var val = reader.ReadElementContentAsString();
+                                        var val = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
 
                                         if (!string.IsNullOrWhiteSpace(val))
                                         {
@@ -1500,7 +1503,7 @@ namespace MediaBrowser.Providers.TV
 
                                 case "absolute_number":
                                     {
-                                        var val = reader.ReadElementContentAsString();
+                                        var val = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
                                         if (!string.IsNullOrWhiteSpace(val))
                                         {
                                             int num;
@@ -1514,7 +1517,7 @@ namespace MediaBrowser.Providers.TV
 
                                 case "SeasonNumber":
                                     {
-                                        var val = reader.ReadElementContentAsString();
+                                        var val = await reader.ReadElementContentAsStringAsync().ConfigureAwait(false);
                                         if (!string.IsNullOrWhiteSpace(val))
                                         {
                                             int num;
@@ -1527,13 +1530,13 @@ namespace MediaBrowser.Providers.TV
                                     }
 
                                 default:
-                                    reader.Skip();
+                                    await reader.SkipAsync().ConfigureAwait(false);
                                     break;
                             }
                         }
                         else
                         {
-                            reader.Read();
+                            await reader.ReadAsync().ConfigureAwait(false);
                         }
                     }
                 }

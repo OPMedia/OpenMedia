@@ -646,11 +646,12 @@ namespace MediaBrowser.Providers.Music
                         settings.CheckCharacters = false;
                         settings.IgnoreProcessingInstructions = true;
                         settings.IgnoreComments = true;
+                        settings.Async = true;
 
                         using (var reader = XmlReader.Create(oReader, settings))
                         {
-                            reader.MoveToContent();
-                            reader.Read();
+                            await reader.MoveToContentAsync().ConfigureAwait(false);
+                            await reader.ReadAsync().ConfigureAwait(false);
 
                             // Loop through each element
                             while (!reader.EOF && reader.ReadState == ReadState.Interactive)
@@ -663,7 +664,7 @@ namespace MediaBrowser.Providers.Music
                                             {
                                                 if (reader.IsEmptyElement)
                                                 {
-                                                    reader.Read();
+                                                    await reader.ReadAsync().ConfigureAwait(false);
                                                     continue;
                                                 }
                                                 using (var subReader = reader.ReadSubtree())
@@ -673,14 +674,14 @@ namespace MediaBrowser.Providers.Music
                                             }
                                         default:
                                             {
-                                                reader.Skip();
+                                                await reader.SkipAsync().ConfigureAwait(false);
                                                 break;
                                             }
                                     }
                                 }
                                 else
                                 {
-                                    reader.Read();
+                                    await reader.ReadAsync().ConfigureAwait(false);
                                 }
                             }
                             return null;

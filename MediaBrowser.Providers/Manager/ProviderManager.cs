@@ -1020,7 +1020,8 @@ namespace MediaBrowser.Providers.Manager
                 if (!_isProcessingRefreshQueue)
                 {
                     _isProcessingRefreshQueue = true;
-                    Task.Run(StartProcessingRefreshQueue);
+                    // 队列处理器内部捕获单项刷新异常；此处保留原有的后台处理方式。
+                    _ = Task.Run(StartProcessingRefreshQueue);
                 }
             }
         }

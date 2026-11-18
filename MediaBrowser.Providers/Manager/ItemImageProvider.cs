@@ -571,7 +571,7 @@ namespace MediaBrowser.Providers.Manager
                         {
                             if (item.GetImages(imageType).Any(i => _fileSystem.GetFileInfo(i.Path).Length == response.ContentLength.Value))
                             {
-                                response.Content.Dispose();
+                                await response.Content.DisposeAsync().ConfigureAwait(false);
                                 continue;
                             }
                         }

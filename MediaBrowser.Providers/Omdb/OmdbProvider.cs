@@ -225,7 +225,7 @@ namespace MediaBrowser.Providers.Omdb
             {
                 using (var reader = new StreamReader(stream, new UTF8Encoding(false)))
                 {
-                    resultString = reader.ReadToEnd();
+                    resultString = await reader.ReadToEndAsync().ConfigureAwait(false);
                     resultString = resultString.Replace("\"N/A\"", "\"\"");
                 }
             }
@@ -244,7 +244,7 @@ namespace MediaBrowser.Providers.Omdb
             {
                 using (var reader = new StreamReader(stream, new UTF8Encoding(false)))
                 {
-                    resultString = reader.ReadToEnd();
+                    resultString = await reader.ReadToEndAsync().ConfigureAwait(false);
                     resultString = resultString.Replace("\"N/A\"", "\"\"");
                 }
             }
