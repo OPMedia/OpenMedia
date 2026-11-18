@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace System.Net
+namespace Emby.Server.Implementations.Networking
 {
     using System;
     using System.Numerics;
