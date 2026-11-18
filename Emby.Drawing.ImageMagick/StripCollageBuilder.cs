@@ -81,7 +81,7 @@ namespace Emby.Drawing.ImageMagick
                         mwr.Resize(new MagickGeometry((uint)wandList.Width, (uint)(wandList.Height / 2)));
                         mwr.Flip();
 
-                        mwr.Alpha(AlphaOption.Opaque);
+                        mwr.Alpha(AlphaAction.Opaque);
                         // Old ColorizeImage(black, grey70): 70% blend toward black
                         mwr.Colorize(MagickColors.Black, new Percentage(70));
 
@@ -147,7 +147,7 @@ namespace Emby.Drawing.ImageMagick
                         mwr.Resize(new MagickGeometry((uint)wandList.Width, (uint)(wandList.Height / 2)));
                         mwr.Flip();
 
-                        mwr.Alpha(AlphaOption.Opaque);
+                        mwr.Alpha(AlphaAction.Opaque);
                         // Old ColorizeImage(black, grey70): 70% blend toward black
                         mwr.Colorize(MagickColors.Black, new Percentage(70));
 

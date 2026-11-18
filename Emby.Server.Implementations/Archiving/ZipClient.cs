@@ -43,15 +43,14 @@ namespace Emby.Server.Implementations.Archiving
         /// <param name="overwriteExistingFiles">if set to <c>true</c> [overwrite existing files].</param>
         public void ExtractAll(Stream source, string targetPath, bool overwriteExistingFiles)
         {
-            using (var reader = ReaderFactory.Open(source))
+            using (var reader = ReaderFactory.OpenReader(source))
             {
-                var options = new SharpCompress.Common.ExtractionOptions();
-                options.ExtractFullPath = true;
-
-                if (overwriteExistingFiles)
+                var options = new SharpCompress.Common.ExtractionOptions
                 {
-                    options.Overwrite = true;
-                }
+                    ExtractFullPath = true,
+                    Overwrite = overwriteExistingFiles,
+                    PreserveFileTime = false,
+                };
 
                 reader.WriteAllToDirectory(targetPath, options);
             }
@@ -59,15 +58,14 @@ namespace Emby.Server.Implementations.Archiving
 
         public void ExtractAllFromZip(Stream source, string targetPath, bool overwriteExistingFiles)
         {
-            using (var reader = ZipReader.Open(source))
+            using (var reader = ZipReader.OpenReader(source))
             {
-                var options = new SharpCompress.Common.ExtractionOptions();
-                options.ExtractFullPath = true;
-
-                if (overwriteExistingFiles)
+                var options = new SharpCompress.Common.ExtractionOptions
                 {
-                    options.Overwrite = true;
-                }
+                    ExtractFullPath = true,
+                    Overwrite = overwriteExistingFiles,
+                    PreserveFileTime = false,
+                };
 
                 reader.WriteAllToDirectory(targetPath, options);
             }
@@ -75,15 +73,14 @@ namespace Emby.Server.Implementations.Archiving
 
         public void ExtractAllFromGz(Stream source, string targetPath, bool overwriteExistingFiles)
         {
-            using (var reader = GZipReader.Open(source))
+            using (var reader = GZipReader.OpenReader(source))
             {
-                var options = new SharpCompress.Common.ExtractionOptions();
-                options.ExtractFullPath = true;
-
-                if (overwriteExistingFiles)
+                var options = new SharpCompress.Common.ExtractionOptions
                 {
-                    options.Overwrite = true;
-                }
+                    ExtractFullPath = true,
+                    Overwrite = overwriteExistingFiles,
+                    PreserveFileTime = false,
+                };
 
                 reader.WriteAllToDirectory(targetPath, options);
             }
@@ -91,7 +88,7 @@ namespace Emby.Server.Implementations.Archiving
 
         public void ExtractFirstFileFromGz(Stream source, string targetPath, string defaultFileName)
         {
-            using (var reader = GZipReader.Open(source))
+            using (var reader = GZipReader.OpenReader(source))
             {
                 if (reader.MoveToNextEntry())
                 {
@@ -129,17 +126,16 @@ namespace Emby.Server.Implementations.Archiving
         /// <param name="overwriteExistingFiles">if set to <c>true</c> [overwrite existing files].</param>
         public void ExtractAllFrom7z(Stream source, string targetPath, bool overwriteExistingFiles)
         {
-            using (var archive = SevenZipArchive.Open(source))
+            using (var archive = SevenZipArchive.OpenArchive(source))
             {
                 using (var reader = archive.ExtractAllEntries())
                 {
-                    var options = new SharpCompress.Common.ExtractionOptions();
-                    options.ExtractFullPath = true;
-
-                    if (overwriteExistingFiles)
+                    var options = new SharpCompress.Common.ExtractionOptions
                     {
-                        options.Overwrite = true;
-                    }
+                        ExtractFullPath = true,
+                        Overwrite = overwriteExistingFiles,
+                        PreserveFileTime = false,
+                    };
 
                     reader.WriteAllToDirectory(targetPath, options);
                 }
@@ -169,17 +165,16 @@ namespace Emby.Server.Implementations.Archiving
         /// <param name="overwriteExistingFiles">if set to <c>true</c> [overwrite existing files].</param>
         public void ExtractAllFromTar(Stream source, string targetPath, bool overwriteExistingFiles)
         {
-            using (var archive = TarArchive.Open(source))
+            using (var archive = TarArchive.OpenArchive(source))
             {
                 using (var reader = archive.ExtractAllEntries())
                 {
-                    var options = new SharpCompress.Common.ExtractionOptions();
-                    options.ExtractFullPath = true;
-
-                    if (overwriteExistingFiles)
+                    var options = new SharpCompress.Common.ExtractionOptions
                     {
-                        options.Overwrite = true;
-                    }
+                        ExtractFullPath = true,
+                        Overwrite = overwriteExistingFiles,
+                        PreserveFileTime = false,
+                    };
 
                     reader.WriteAllToDirectory(targetPath, options);
                 }
