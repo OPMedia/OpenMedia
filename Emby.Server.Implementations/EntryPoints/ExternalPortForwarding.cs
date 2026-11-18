@@ -101,7 +101,25 @@ namespace Emby.Server.Implementations.EntryPoints
             _lastConfigIdentifier = GetConfigIdentifier();
         }
 
-        private async void _deviceDiscovery_DeviceDiscovered(object sender, GenericEventArgs<UpnpDeviceInfo> e)
+        private void _deviceDiscovery_DeviceDiscovered(object sender, GenericEventArgs<UpnpDeviceInfo> e)
+        {
+            // 设备发现事件回调必须保持 void；异步处理在助手中完成
+            _ = DeviceDiscoveredAsync(e);
+        }
+
+        private async Task DeviceDiscoveredAsync(GenericEventArgs<UpnpDeviceInfo> e)
+        {
+            try
+            {
+                await HandleDeviceDiscoveredAsync(e).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error handling discovered NAT device", ex);
+            }
+        }
+
+        private async Task HandleDeviceDiscoveredAsync(GenericEventArgs<UpnpDeviceInfo> e)
         {
             if (_disposed)
             {
@@ -166,7 +184,7 @@ namespace Emby.Server.Implementations.EntryPoints
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     return;
                 }
@@ -213,7 +231,8 @@ namespace Emby.Server.Implementations.EntryPoints
             {
                 var device = e.Device;
 
-                CreateRules(device);
+                // 端口映射刻意后台执行；失败由 CreateRulesAsync 内部按原逻辑静默处理
+                _ = CreateRulesAsync(device);
             }
             catch
             {
@@ -224,46 +243,53 @@ namespace Emby.Server.Implementations.EntryPoints
 
         private List<string> _createdRules = new List<string>();
         private List<string> _usnsHandled = new List<string>();
-        private async void CreateRules(INatDevice device)
+        private async Task CreateRulesAsync(INatDevice device)
         {
-            if (_disposed)
+            try
             {
-                throw new ObjectDisposedException("PortMapper");
-            }
-
-            // On some systems the device discovered event seems to fire repeatedly
-            // This check will help ensure we're not trying to port map the same device over and over
-            var address = device.LocalAddress;
-
-            var addressString = address.ToString();
-
-            lock (_createdRules)
-            {
-                if (!_createdRules.Contains(addressString))
+                if (_disposed)
                 {
-                    _createdRules.Add(addressString);
+                    throw new ObjectDisposedException("PortMapper");
                 }
-                else
+
+                // On some systems the device discovered event seems to fire repeatedly
+                // This check will help ensure we're not trying to port map the same device over and over
+                var address = device.LocalAddress;
+
+                var addressString = address.ToString();
+
+                lock (_createdRules)
+                {
+                    if (!_createdRules.Contains(addressString))
+                    {
+                        _createdRules.Add(addressString);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+
+                try
+                {
+                    await CreatePortMap(device, _appHost.HttpPort, _config.Configuration.PublicPort).ConfigureAwait(false);
+                }
+                catch (Exception)
                 {
                     return;
                 }
-            }
 
-            try
-            {
-                await CreatePortMap(device, _appHost.HttpPort, _config.Configuration.PublicPort).ConfigureAwait(false);
+                try
+                {
+                    await CreatePortMap(device, _appHost.HttpsPort, _config.Configuration.PublicHttpsPort).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                return;
-            }
-
-            try
-            {
-                await CreatePortMap(device, _appHost.HttpsPort, _config.Configuration.PublicHttpsPort).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
+                // 与原调用方一致：端口映射失败属用户环境问题，保持静默
             }
         }
 

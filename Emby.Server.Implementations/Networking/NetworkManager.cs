@@ -100,6 +100,39 @@ namespace Emby.Server.Implementations.Networking
             }
         }
 
+        /// <summary>
+        /// 与 <see cref="GetLocalIpAddresses"/> 相同的缓存语义，但可 await。
+        ///
+        /// 局域网判定原本调用同步的 GetLocalIpAddresses()，值来自 _localIpAddresses 缓存；
+        /// 改成直接枚举内部实现会绕过缓存，让每次局域网判定都重新枚举网卡。
+        /// 这里保留"首次枚举、之后命中缓存"的语义。
+        /// 唯一差异：并发首调时可能枚举两次，结果等价且是只读操作。
+        /// </summary>
+        private async Task<IpAddressInfo[]> GetLocalIpAddressesCachedAsync()
+        {
+            lock (_localIpAddressSyncLock)
+            {
+                if (_localIpAddresses != null)
+                {
+                    return _localIpAddresses;
+                }
+            }
+
+            var addresses = (await GetLocalIpAddressesInternal().ConfigureAwait(false))
+                .Select(ToIpAddressInfo)
+                .ToArray();
+
+            lock (_localIpAddressSyncLock)
+            {
+                if (_localIpAddresses == null)
+                {
+                    _localIpAddresses = addresses;
+                }
+
+                return _localIpAddresses;
+            }
+        }
+
         private async Task<List<IPAddress>> GetLocalIpAddressesInternal()
         {
             var list = GetIPsDefault()
@@ -348,7 +381,7 @@ namespace Emby.Server.Implementations.Networking
                 {
                     var prefix = addressString.Substring(0, lengthMatch);
 
-                    var localAddresses = await GetLocalIpAddressesInternal().ConfigureAwait(false);
+                    var localAddresses = await GetLocalIpAddressesCachedAsync().ConfigureAwait(false);
                     if (localAddresses.Any(i => i.ToString().StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
                     {
                         return true;
