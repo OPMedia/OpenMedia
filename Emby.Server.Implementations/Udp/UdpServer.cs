@@ -52,7 +52,13 @@ namespace Emby.Server.Implementations.Udp
         /// <summary>
         /// Raises the <see cref="E:MessageReceived" /> event.
         /// </summary>
-        private async void OnMessageReceived(GenericEventArgs<SocketReceiveResult> e)
+        private void OnMessageReceived(GenericEventArgs<SocketReceiveResult> e)
+        {
+            // APM 回调入口必须保持 void；异步部分在 OnMessageReceivedAsync 中完整捕获异常
+            _ = OnMessageReceivedAsync(e);
+        }
+
+        private async Task OnMessageReceivedAsync(GenericEventArgs<SocketReceiveResult> e)
         {
             var message = e.Argument;
 
@@ -145,7 +151,8 @@ namespace Emby.Server.Implementations.Udp
         {
             _udpClient = _socketFactory.CreateUdpSocket(port);
 
-            Task.Run(() => BeginReceive());
+            // 接收循环是长生命周期的后台操作，刻意不等待其完成
+            _ = Task.Run(() => BeginReceive());
         }
 
         private readonly byte[] _receiveBuffer = new byte[8192];
