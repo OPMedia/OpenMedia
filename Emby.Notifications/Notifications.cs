@@ -80,45 +80,69 @@ namespace Emby.Notifications
             _activityManager.EntryCreated += _activityManager_EntryCreated;
         }
 
-        private async void _appHost_HasPendingRestartChanged(object sender, EventArgs e)
+        private void _appHost_HasPendingRestartChanged(object sender, EventArgs e)
         {
-            var type = NotificationType.ServerRestartRequired.ToString();
-
-            var notification = new NotificationRequest
-            {
-                NotificationType = type,
-                Name = string.Format(_localization.GetLocalizedString("ServerNameNeedsToBeRestarted"), _appHost.Name)
-            };
-
-            await SendNotification(notification, null).ConfigureAwait(false);
+            _ = SendPendingRestartNotificationAsync();
         }
 
-        private async void _activityManager_EntryCreated(object sender, GenericEventArgs<ActivityLogEntry> e)
+        private async Task SendPendingRestartNotificationAsync()
         {
-            var entry = e.Argument;
-
-            var type = entry.Type;
-
-            if (string.IsNullOrEmpty(type) || !_coreNotificationTypes.Contains(type, StringComparer.OrdinalIgnoreCase))
+            try
             {
-                return;
+                var type = NotificationType.ServerRestartRequired.ToString();
+
+                var notification = new NotificationRequest
+                {
+                    NotificationType = type,
+                    Name = string.Format(_localization.GetLocalizedString("ServerNameNeedsToBeRestarted"), _appHost.Name)
+                };
+
+                await SendNotification(notification, null).ConfigureAwait(false);
             }
-
-            var userId = e.Argument.UserId;
-
-            if (!userId.Equals(Guid.Empty) && !GetOptions().IsEnabledToMonitorUser(type, userId))
+            catch (Exception ex)
             {
-                return;
+                _logger.ErrorException("Error sending server restart notification", ex);
             }
+        }
 
-            var notification = new NotificationRequest
+        private void _activityManager_EntryCreated(object sender, GenericEventArgs<ActivityLogEntry> e)
+        {
+            _ = SendActivityNotificationAsync(e);
+        }
+
+        private async Task SendActivityNotificationAsync(GenericEventArgs<ActivityLogEntry> e)
+        {
+            try
             {
-                NotificationType = type,
-                Name = entry.Name,
-                Description = entry.Overview
-            };
+                var entry = e.Argument;
 
-            await SendNotification(notification, null).ConfigureAwait(false);
+                var type = entry.Type;
+
+                if (string.IsNullOrEmpty(type) || !_coreNotificationTypes.Contains(type, StringComparer.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                var userId = e.Argument.UserId;
+
+                if (!userId.Equals(Guid.Empty) && !GetOptions().IsEnabledToMonitorUser(type, userId))
+                {
+                    return;
+                }
+
+                var notification = new NotificationRequest
+                {
+                    NotificationType = type,
+                    Name = entry.Name,
+                    Description = entry.Overview
+                };
+
+                await SendNotification(notification, null).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error sending activity notification", ex);
+            }
         }
 
         private NotificationOptions GetOptions()
@@ -126,24 +150,36 @@ namespace Emby.Notifications
             return _config.GetConfiguration<NotificationOptions>("notifications");
         }
 
-        async void _appHost_HasUpdateAvailableChanged(object sender, EventArgs e)
+        void _appHost_HasUpdateAvailableChanged(object sender, EventArgs e)
         {
-            // This notification is for users who can't auto-update (aka running as service)
-            if (!_appHost.HasUpdateAvailable || _appHost.CanSelfUpdate)
+            _ = SendUpdateAvailableNotificationAsync();
+        }
+
+        private async Task SendUpdateAvailableNotificationAsync()
+        {
+            try
             {
-                return;
+                // This notification is for users who can't auto-update (aka running as service)
+                if (!_appHost.HasUpdateAvailable || _appHost.CanSelfUpdate)
+                {
+                    return;
+                }
+
+                var type = NotificationType.ApplicationUpdateAvailable.ToString();
+
+                var notification = new NotificationRequest
+                {
+                    Description = "Please see emby.media for details.",
+                    NotificationType = type,
+                    Name = _localization.GetLocalizedString("NewVersionIsAvailable")
+                };
+
+                await SendNotification(notification, null).ConfigureAwait(false);
             }
-
-            var type = NotificationType.ApplicationUpdateAvailable.ToString();
-
-            var notification = new NotificationRequest
+            catch (Exception ex)
             {
-                Description = "Please see emby.media for details.",
-                NotificationType = type,
-                Name = _localization.GetLocalizedString("NewVersionIsAvailable")
-            };
-
-            await SendNotification(notification, null).ConfigureAwait(false);
+                _logger.ErrorException("Error sending update notification", ex);
+            }
         }
 
         private readonly List<BaseItem> _itemsAdded = new List<BaseItem>();
@@ -190,29 +226,41 @@ namespace Emby.Notifications
             return item.SourceType == SourceType.Library;
         }
 
-        private async void LibraryUpdateTimerCallback(object state)
+        private void LibraryUpdateTimerCallback(object state)
         {
-            List<BaseItem> items;
+            _ = SendLibraryUpdateNotificationsAsync();
+        }
 
-            lock (_libraryChangedSyncLock)
+        private async Task SendLibraryUpdateNotificationsAsync()
+        {
+            try
             {
-                items = _itemsAdded.ToList();
-                _itemsAdded.Clear();
-                DisposeLibraryUpdateTimer();
-            }
+                List<BaseItem> items;
 
-            items = items.Take(10).ToList();
-
-            foreach (var item in items)
-            {
-                var notification = new NotificationRequest
+                lock (_libraryChangedSyncLock)
                 {
-                    NotificationType = NotificationType.NewLibraryContent.ToString(),
-                    Name = string.Format(_localization.GetLocalizedString("ValueHasBeenAddedToLibrary"), GetItemName(item)),
-                    Description = item.Overview
-                };
+                    items = _itemsAdded.ToList();
+                    _itemsAdded.Clear();
+                    DisposeLibraryUpdateTimer();
+                }
 
-                await SendNotification(notification, item).ConfigureAwait(false);
+                items = items.Take(10).ToList();
+
+                foreach (var item in items)
+                {
+                    var notification = new NotificationRequest
+                    {
+                        NotificationType = NotificationType.NewLibraryContent.ToString(),
+                        Name = string.Format(_localization.GetLocalizedString("ValueHasBeenAddedToLibrary"), GetItemName(item)),
+                        Description = item.Overview
+                    };
+
+                    await SendNotification(notification, item).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error sending library update notifications", ex);
             }
         }
 

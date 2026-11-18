@@ -290,7 +290,7 @@ namespace MediaBrowser.Api.Library
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
                     {
-                        _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None);
+                        await _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None).ConfigureAwait(false);
                     }
                     else
                     {
@@ -345,7 +345,7 @@ namespace MediaBrowser.Api.Library
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
                     {
-                        _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None);
+                        await _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None).ConfigureAwait(false);
                     }
                     else
                     {
@@ -396,7 +396,7 @@ namespace MediaBrowser.Api.Library
                     // No need to start if scanning the library because it will handle it
                     if (request.RefreshLibrary)
                     {
-                        _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None);
+                        await _libraryManager.ValidateMediaLibrary(new SimpleProgress<double>(), CancellationToken.None).ConfigureAwait(false);
                     }
                     else
                     {

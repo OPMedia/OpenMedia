@@ -436,10 +436,10 @@ namespace MediaBrowser.Tests.PgData
                 cmd.Parameters.Add(new NpgsqlParameter("k", NpgsqlDbType.Integer) { Value = keyId });
                 await using var r = await cmd.ExecuteReaderAsync();
                 Assert.IsTrue(await r.ReadAsync(), "首轮 UPSERT 未写入行");
-                Assert.IsTrue(r.IsDBNull(0), "rating 应为 NULL");
-                Assert.IsTrue(r.IsDBNull(1), "last_played_date 应为 NULL");
-                Assert.IsTrue(r.IsDBNull(2), "audio_stream_index 应为 NULL");
-                Assert.IsTrue(r.IsDBNull(3), "subtitle_stream_index 应为 NULL");
+                Assert.IsTrue(await r.IsDBNullAsync(0).ConfigureAwait(false), "rating 应为 NULL");
+                Assert.IsTrue(await r.IsDBNullAsync(1).ConfigureAwait(false), "last_played_date 应为 NULL");
+                Assert.IsTrue(await r.IsDBNullAsync(2).ConfigureAwait(false), "audio_stream_index 应为 NULL");
+                Assert.IsTrue(await r.IsDBNullAsync(3).ConfigureAwait(false), "subtitle_stream_index 应为 NULL");
                 Assert.AreEqual(3, r.GetInt32(4));
             }
 
@@ -472,7 +472,7 @@ namespace MediaBrowser.Tests.PgData
                 await using var r = await cmd.ExecuteReaderAsync();
                 Assert.IsTrue(await r.ReadAsync());
                 Assert.AreEqual(9.5, r.GetDouble(0), 1e-9);
-                Assert.IsFalse(r.IsDBNull(1), "last_played_date 应已被覆盖");
+                Assert.IsFalse(await r.IsDBNullAsync(1).ConfigureAwait(false), "last_played_date 应已被覆盖");
                 Assert.AreEqual((short)2, r.GetInt16(2));
                 Assert.AreEqual((short)5, r.GetInt16(3));
                 Assert.AreEqual(7, r.GetInt32(4));

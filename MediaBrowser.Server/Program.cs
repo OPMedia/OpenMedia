@@ -35,7 +35,7 @@ namespace MediaBrowser.Server.Mono
         private static readonly TaskCompletionSource<bool> ApplicationTaskCompletionSource = new TaskCompletionSource<bool>();
         private static bool _restartOnShutdown;
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var applicationPath = Assembly.GetEntryAssembly().Location;
 
@@ -52,8 +52,7 @@ namespace MediaBrowser.Server.Mono
             {
                 _logManager = logManager;
 
-                var task = logManager.ReloadLogger(LogSeverity.Debug, CancellationToken.None);
-                Task.WaitAll(task);
+                await logManager.ReloadLogger(LogSeverity.Debug, CancellationToken.None).ConfigureAwait(false);
                 logManager.AddConsoleOutput();
 
                 var logger = _logger = logManager.GetLogger("Main");
@@ -62,7 +61,7 @@ namespace MediaBrowser.Server.Mono
 
                 AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 
-                RunApplication(appPaths, logManager, options);
+                await RunApplication(appPaths, logManager, options).ConfigureAwait(false);
 
                 _logger.Info("Disposing app host");
 
@@ -86,7 +85,7 @@ namespace MediaBrowser.Server.Mono
             return new ServerApplicationPaths(programDataPath, appFolderPath, Path.GetDirectoryName(applicationPath));
         }
 
-        private static void RunApplication(ServerApplicationPaths appPaths, ILogManager logManager, StartupOptions options)
+        private static async Task RunApplication(ServerApplicationPaths appPaths, ILogManager logManager, StartupOptions options)
         {
             var environmentInfo = GetEnvironmentInfo(options);
 
@@ -119,12 +118,9 @@ namespace MediaBrowser.Server.Mono
 
                 Console.WriteLine("Running startup tasks");
 
-                var task = appHost.RunStartupTasks();
-                Task.WaitAll(task);
+                await appHost.RunStartupTasks().ConfigureAwait(false);
 
-                task = ApplicationTaskCompletionSource.Task;
-
-                Task.WaitAll(task);
+                await ApplicationTaskCompletionSource.Task.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
 
