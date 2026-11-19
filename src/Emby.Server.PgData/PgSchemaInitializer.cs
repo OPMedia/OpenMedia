@@ -396,7 +396,10 @@ namespace Emby.Server.PgData
             "CREATE INDEX IF NOT EXISTS idx_item_extradata_value ON item_extradata (extradata_type_id, value, item_id)",
             "CREATE INDEX IF NOT EXISTS idx_item_people_person_item ON item_people (person_id, item_id)",
             "CREATE INDEX IF NOT EXISTS idx_media_items_clean_name_trgm ON media_items USING gin (clean_name gin_trgm_ops)",
-            "CREATE INDEX IF NOT EXISTS idx_media_items_original_title_trgm ON media_items USING gin (original_title gin_trgm_ops)"
+            "CREATE INDEX IF NOT EXISTS idx_media_items_original_title_trgm ON media_items USING gin (original_title gin_trgm_ops)",
+            // date_created 原本只有 BRIN（范围扫描用）。API 常见 SortBy=DateCreated，
+            // ORDER BY ... LIMIT 用不上 BRIN，只能整分区排序（195k 实测 60ms → 0.2ms）
+            "CREATE INDEX IF NOT EXISTS idx_media_items_date_created_btree ON media_items (date_created DESC, id)"
         };
 
         private static readonly System.Action<string> _loggerRef = null; // 静态类无 logger——重试日志走异常消息
