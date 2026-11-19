@@ -25,7 +25,6 @@
     <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
     <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\Emby.XmlTv\Emby.XmlTv.csproj" />
-    <ProjectReference Include="..\..\DvdLib\DvdLib.csproj" />
   </ItemGroup>
 
 </Project>
