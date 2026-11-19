@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Plugins;
@@ -52,7 +53,13 @@ namespace Emby.Server.Implementations.EntryPoints
             SendMessage("TimerCancelled", e.Argument);
         }
 
-        private async void SendMessage(string name, TimerEventInfo info)
+        private void SendMessage(string name, TimerEventInfo info)
+        {
+            // LiveTv 事件处理器签名为 void；异步通知在助手中执行，异常由助手记录。
+            _ = SendMessageAsync(name, info);
+        }
+
+        private async Task SendMessageAsync(string name, TimerEventInfo info)
         {
             var users = _userManager.Users.Where(i => i.Policy.EnableLiveTvAccess).Select(i => i.Id).ToList();
 
