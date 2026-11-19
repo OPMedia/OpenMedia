@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
@@ -55,6 +56,40 @@ public interface IItemRepository : IRepository, IDisposable
 	Task<List<Guid>> GetItemIdsListAsync(InternalItemsQuery query, CancellationToken cancellationToken = default);
 
 	Task<List<PersonInfo>> GetPeopleAsync(InternalPeopleQuery query, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// 批量取一页条目的 People：默认实现逐条回退，仓储可用一次查询覆盖整页。
+	/// 返回字典包含全部请求过的 ID（无 People 的条目对应空列表）。
+	/// </summary>
+	async Task<Dictionary<Guid, List<PersonInfo>>> GetPeopleForItemsAsync(
+		IReadOnlyList<Guid> itemIds,
+		CancellationToken cancellationToken = default)
+	{
+		var result = new Dictionary<Guid, List<PersonInfo>>();
+		foreach (var itemId in itemIds.Distinct())
+		{
+			result[itemId] = await GetPeopleAsync(new InternalPeopleQuery { ItemId = itemId }, cancellationToken).ConfigureAwait(false);
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// 批量按 GUID 水合媒体项：默认实现逐条回退，仓储可用一次查询覆盖整批。
+	/// 返回字典包含全部请求过的 ID（库中不存在的条目对应 null）。
+	/// </summary>
+	async Task<Dictionary<Guid, BaseItem>> RetrieveItemsAsync(
+		IReadOnlyList<Guid> ids,
+		CancellationToken cancellationToken = default)
+	{
+		var result = new Dictionary<Guid, BaseItem>();
+		foreach (var id in ids.Distinct())
+		{
+			result[id] = await RetrieveItemAsync(id, cancellationToken).ConfigureAwait(false);
+		}
+
+		return result;
+	}
 
 	Task<List<string>> GetPeopleNamesAsync(InternalPeopleQuery query, CancellationToken cancellationToken = default);
 

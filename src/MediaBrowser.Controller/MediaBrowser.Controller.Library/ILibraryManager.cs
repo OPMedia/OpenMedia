@@ -160,6 +160,28 @@ public interface ILibraryManager
 
 	List<PersonInfo> GetPeople(InternalPeopleQuery query);
 
+	/// <summary>
+	/// 批量取一页条目的 People。默认实现逐条回退；返回字典含全部请求 ID。
+	/// </summary>
+	Dictionary<Guid, List<PersonInfo>> GetPeopleForItems(IReadOnlyList<Guid> itemIds)
+	{
+		var result = new Dictionary<Guid, List<PersonInfo>>();
+		foreach (var itemId in itemIds)
+		{
+			result[itemId] = GetPeople(new InternalPeopleQuery { ItemId = itemId });
+		}
+
+		return result;
+	}
+
+	/// <summary>
+	/// 在 DTO 批量入口一次性水合人名对应的 Person 实例，供后续 GetPerson(name) 命中。
+	/// 默认实现不缓存，GetPerson 仍按原路径逐条解析（行为不变）。
+	/// </summary>
+	void PrimePeopleByNameCache(IReadOnlyList<string> names)
+	{
+	}
+
 	List<Person> GetPeopleItems(InternalPeopleQuery query);
 
 	void UpdatePeople(BaseItem item, List<PersonInfo> people);
