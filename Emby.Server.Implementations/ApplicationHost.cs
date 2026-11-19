@@ -931,6 +931,7 @@ namespace Emby.Server.Implementations
             RegisterSingleInstance<IServerApplicationPaths>(ApplicationPaths);
 
             RegisterSingleInstance(ServerConfigurationManager);
+            RegisterSingleInstance<MediaBrowser.Api.System.IBackupService>(new Backup.BackupManager(Logger, GetPostgresConnectionString(), ApplicationPaths.ProgramDataPath, () => ServerConfigurationManager.Configuration.Backup, ApplicationVersion, ServerConfigurationManager.Configuration.SchemaVersion, this));
 
             IAssemblyInfo assemblyInfo = new AssemblyInfo();
             RegisterSingleInstance<IAssemblyInfo>(assemblyInfo);
