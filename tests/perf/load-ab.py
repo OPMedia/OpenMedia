@@ -15,6 +15,16 @@ Debug/Release 同口径 A/B 对比负载（短版）
   python tests/perf/load-ab.py --tag release --user ab-user-001
 """
 import json, time, threading, uuid, sys, os, argparse
+
+# Windows 上 PowerShell 捕获子进程 stdout 时用的是系统 ANSI 代码页，
+# 本脚本大量打印中文（场景名、提示），会直接 UnicodeEncodeError 崩掉，
+# 结果就是这个"跑冒烟负载"步骤什么都没产出却显示成功（外层没检查退出码）。
+# 显式把标准输出重设为 UTF-8，并对无法编码的字符降级替换而不是抛错。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 import http.client as hc
 from datetime import datetime
 

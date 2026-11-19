@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # OpenMedia CI —— GitHub Actions 主流水线
 #
 # 本文件每一行都对应一份"本机等价步骤"，见每 job 顶部注释与文件末尾的本机复现清单。
@@ -39,6 +39,7 @@ concurrency:
 
 env:
   DOTNET_NOLOGO: true
+  PYTHONIOENCODING: utf-8
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   SOLUTION: MediaBrowser.sln
   PG_DB: openmedia

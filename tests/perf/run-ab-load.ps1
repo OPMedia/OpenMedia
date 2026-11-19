@@ -67,12 +67,16 @@ Write-Host "健康 200 OK"
 Push-Location $PSScriptRoot
 try {
     python load-ab.py --tag "$Tag-warmup" --user $User --seconds 5 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "暖机失败（load-ab.py 退出码 $LASTEXITCODE）" }
 } finally { Pop-Location }
 Write-Host "暖机完成，开始正式测量"
 
 Push-Location $PSScriptRoot
 try {
     python load-ab.py --tag $Tag --user $User --seconds $Seconds
+    # 原生命令不会让 PowerShell 抛错，必须自己看退出码 ——
+    # 之前 python 崩了这一步照样显示成功，结果文件根本没生成。
+    if ($LASTEXITCODE -ne 0) { throw "load-ab.py 退出码 $LASTEXITCODE（性能数字未产出）" }
 } finally { Pop-Location }
 
 Write-Host ""
