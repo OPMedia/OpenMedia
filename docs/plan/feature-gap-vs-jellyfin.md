@@ -233,7 +233,7 @@ POST /UserFavoriteItems/{id}    缺     ← 收藏
 | **全量备份/恢复** | `pg_dump -Fc` + config + metadata + manifest（SHA-256）；恢复走「标记待恢复 + 下次启动」，**恢复前自动快照**，失败自动回滚 | 端到端：备份 → 删行 → 恢复 → 行回来；改一个字节 → 拒绝；并发第二个被拒 |
 | **去 Emby 激活/连接** | 删掉整层许可门禁（原来恒返回"有效"，全是空操作）、Connect 的 3 条陈旧路径 + 2 个 schema、mb3admin 调用 | 服务实测：登录/API/`/app/` 全 200，`/emby/Connect/*` 404 |
 
-**测试 222 → 261**，Debug/Release 0 警告 0 错误，CI 五绿。
+**测试 222 → 284**，Debug/Release 0 警告 0 错误，CI 五绿。
 
 ### 过程中挖出来的真问题（都不是我预先列出的）
 
@@ -247,11 +247,24 @@ POST /UserFavoriteItems/{id}    缺     ← 收藏
 4. **工具定位测试依赖运行环境**：它清空 `PATH` 断言"找不到"，但 locator 还有硬编码的
    `/usr/lib/postgresql` 等目录 —— CI 上照样找得到，测试反而红。已加 `includeSystemFallbacks` 开关。
 
+### 第二批（ffmpeg + HDR）
+
+| 项 | 内容 | 验证方式 |
+|---|---|---|
+| **换 ffmpeg** | 旧的 7.1.1 下载 URL 已 404、且只有 `vdpau`。换成 **jellyfin-ffmpeg 8.1.3-2**（60MB，不可变 release tag，sha256 校验，构建后自检 `tonemapx` 存在）。实测能力：`cuda vaapi qsv drm opencl vulkan amf` + `tonemap tonemapx zscale tonemap_opencl tonemap_vaapi tonemap_cuda libplacebo` | 三个候选实际下载并跑 `-hwaccels`/`-encoders`/`-filters` 对比 |
+| **编码能力探测** | `IMediaEncoder` 新增 `EncoderVersion`/`SupportsFilter`/`SupportsFilterWithOption`/`SupportsHwaccel`/`SupportsBitStreamFilterWithOption`；版本下限 7.0，低于即抛 | 在真实 jellyfin-ffmpeg 上跑探针，逐项输出 |
+| **CPU 版 HDR→SDR** | `VideoRangeType` 探测（smpte2084→HDR10、arib-std-b67→HLG、DoVi side_data→DolbyVision）、zscale+tonemap 链、四条能力门禁（zscale/tonemap/vaapi/dxva2） | **真实 ffmpeg 实跑**：构造带正确色彩标记的 HDR10/HLG 样本，链 exit 0；HLG 上四种算法全部 OK |
+
+**顺带发现**：源缺色彩元数据时 `zscale` 会失败（`no path between colorspaces`），
+而此时探测结果本来就是 SDR、不会插入滤镜 —— 两条路径自洽，不会把无元数据的片子搞坏。
+
 ### 仍未做（下一步）
 
-| 项 | 为什么还没做 |
+| 项 | 为什么 |
 |---|---|
-| **换 ffmpeg 发行版** | 进行中。这是 HDR/硬解的前置条件 0：当前锁的 7.1.1 URL 已 404，且那个静态包只有 `vdpau`，没有任何 GPU 编码器 |
-| **CPU 版 HDR 色调映射** | 等 ffmpeg 落地后做（两者都碰编码能力探测） |
-| `openapi.json` 登记 `/System/Backup` 系列 | 备份端点已实现但未登记；需要一次正确的生成步骤，不能手写 schema |
+| **客户端 HDR 协商** | `ProfileConditionValue.VideoRangeType` 与 `TranscodeReason` 枚举已加，但 StreamBuilder 的接线**撤回了**：早检查的返回语义没被 `BuildVideoItem` 采纳，改对要动协商主流程。加个不生效的检查比不加更糟 |
+| **GPU 版色调映射** | 本次只做 CPU（zscale+tonemap）。GPU 版要跨 opencl/vaapi/cuda/libplacebo 五条链，单独一轮 |
+| **DoVi RPU reshape** | 只按 base layer 降级处理，不支持动态元数据 |
+| `openapi.json` 登记 `/System/Backup` 系列 | 端点已实现但未登记；需要一次正确的生成步骤，不能手写 schema |
 | 版本号对外报什么 | **等你拍板**：Jellyfin 客户端要求 `>= 12.0.0.0`，我们仍是 `3.5.3.0` |
+| 真实设备验证 | SMB 接 NAS、真实 HDR 片源的画面对比、真实 DVD/蓝光 —— 我这边没有硬件 |
