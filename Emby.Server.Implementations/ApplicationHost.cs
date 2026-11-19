@@ -990,6 +990,8 @@ namespace Emby.Server.Implementations
                 GetParseFn);
 
             HttpServer.GlobalResponse = LocalizationManager.GetLocalizedString("StartupEmbyServerIsLoading");
+            // 运维端点注册钩子：readiness 探针沿用宿主的同一条 PG 连接串配置来源。
+            ((KestrelHost)HttpServer).ConfigureOps(GetPostgresConnectionString());
             RegisterSingleInstance(HttpServer);
 
             ImageProcessor = GetImageProcessor();

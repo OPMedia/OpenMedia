@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.HttpServer.Logging;
 using Emby.Server.HttpServer.Middleware;
+using Emby.Server.HttpServer.Observability;
 using Emby.Server.HttpServer.RequestResponse;
 using Emby.Server.HttpServer.Results;
 using Emby.Server.HttpServer.Routing;
@@ -50,6 +51,10 @@ namespace Emby.Server.HttpServer
 
         private IHost _webHost;
         private CancellationTokenSource _shutdownCts;
+        private PgHealthProbe _pgHealthProbe;
+        private volatile bool _applicationReady;
+        private OpsEndpointsOptions _opsOptions;
+        private TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
 
         private IWebSocketListener[] _webSocketListeners = Array.Empty<IWebSocketListener>();
         private readonly List<IWebSocketConnection> _webSocketConnections = new List<IWebSocketConnection>();
@@ -127,6 +132,47 @@ namespace Emby.Server.HttpServer
         }
 
         /// <summary>
+        /// 注册运维端点依赖（PG 探针连接串）。由 ApplicationHost 在宿主构建时调用。
+        /// </summary>
+        public void ConfigureOps(string postgresConnectionString)
+        {
+            _pgHealthProbe = new PgHealthProbe(postgresConnectionString);
+        }
+
+        /// <summary>
+        /// 启动任务完成后置 true；停机开始前置 false，供 readiness 判断。
+        /// </summary>
+        public void SetApplicationReady(bool ready)
+        {
+            _applicationReady = ready;
+        }
+
+        public TimeSpan ShutdownTimeout => _shutdownTimeout;
+
+        private OpsEndpointsOptions CreateOpsOptions()
+        {
+            var configuration = _config.Configuration;
+            var seconds = configuration.ShutdownTimeoutSeconds;
+            if (seconds < 1 || seconds > 300)
+            {
+                seconds = 10;
+            }
+
+            _shutdownTimeout = TimeSpan.FromSeconds(seconds);
+
+            return new OpsEndpointsOptions
+            {
+                EnableMetrics = configuration.EnableMetrics,
+                BaseUrl = configuration.BaseUrl,
+                DatabaseProbe = token => _pgHealthProbe != null
+                    ? _pgHealthProbe.ProbeAsync(token)
+                    : Task.FromResult(DatabaseHealthResult.Fail("数据库探针未配置")),
+                IsApplicationReady = () => _applicationReady,
+                IsShuttingDown = () => IsShuttingDown
+            };
+        }
+
+        /// <summary>
         /// 启动 Kestrel。等价旧 StartServer(urlPrefixes, IHttpListener)——IHttpListener 随 SocketHttpListener 退役。
         /// </summary>
         public void StartServer(string[] urlPrefixes, X509Certificate certificate = null)
@@ -134,6 +180,7 @@ namespace Emby.Server.HttpServer
             UrlPrefixes = urlPrefixes;
 
             _shutdownCts = new CancellationTokenSource();
+            _opsOptions = CreateOpsOptions();
 
             var hostBuilder = new HostBuilder()
                 .ConfigureWebHost(webBuilder =>
@@ -143,8 +190,18 @@ namespace Emby.Server.HttpServer
                         ConfigureListenEndpoints(options, urlPrefixes, certificate);
                     });
 
+                    // HostOptions 控制 StopAsync 等待在途请求的时长，与配置里的 ShutdownTimeout 同源。
+                    webBuilder.ConfigureServices(services =>
+                    {
+                        services.Configure<HostOptions>(options => options.ShutdownTimeout = _shutdownTimeout);
+                    });
+
                     webBuilder.Configure(app =>
                     {
+                        // 运维端点在自研 RouteTable 之前短路；不经过认证、不使用端点路由。
+                        app.UseMiddleware<OpsMetricsMiddleware>(_opsOptions);
+                        app.UseMiddleware<OpsEndpointsMiddleware>(_opsOptions);
+
                         // ASP.NET Core WebSocket 支持（注册 WebSocketManager 特性，
                         // IsWebSocketRequest/AcceptWebSocketAsync 依赖它——缺失时
                         // upgrade 请求被当普通 GET 走路由 → 404）
@@ -241,6 +298,8 @@ namespace Emby.Server.HttpServer
         /// </summary>
         public void Stop()
         {
+            _applicationReady = false;
+
             List<IWebSocketConnection> connections;
 
             lock (_webSocketLock)
@@ -264,12 +323,18 @@ namespace Emby.Server.HttpServer
 
             if (_webHost != null)
             {
-                _logger.Info("Stopping Kestrel host...");
+                _logger.Info("Stopping Kestrel host (shutdown timeout {0}s)...", _shutdownTimeout.TotalSeconds);
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     // IHttpServer.Stop() 是同步契约；JTF.Run 等待 Kestrel 停止，
                     // 允许延续任务回到原上下文，避免同步阻塞死锁。
-                    _joinableTaskFactory.Run(() => _webHost.StopAsync(TimeSpan.FromSeconds(5)));
+                    using var timeoutCts = new CancellationTokenSource(_shutdownTimeout);
+                    _joinableTaskFactory.Run(() => _webHost.StopAsync(timeoutCts.Token));
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.Warn("Kestrel stop timed out after {0}s; in-flight requests will be aborted", _shutdownTimeout.TotalSeconds);
                 }
                 catch (Exception ex)
                 {
@@ -280,7 +345,8 @@ namespace Emby.Server.HttpServer
                     _webHost.Dispose();
                     _webHost = null;
                 }
-                _logger.Info("Kestrel host stopped");
+
+                _logger.Info("Kestrel host stopped in {0} ms", stopwatch.ElapsedMilliseconds);
             }
         }
 
