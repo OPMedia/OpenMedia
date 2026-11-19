@@ -72,6 +72,17 @@ jobs:
       - name: Build Release
         run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore --nologo
 
+      # 本地/离线构建里 NU1900（审计连不上源）被 NoWarn 压掉了，
+      # 真正「有没有已知漏洞」的门禁放在这里：CI 有外网，能拉到审计数据。
+      - name: Vulnerability audit
+        run: |
+          out=$(dotnet list ${{ env.SOLUTION }} package --vulnerable --include-transitive)
+          echo "$out"
+          if echo "$out" | grep -q '>'; then
+            echo "::error::发现带已知漏洞的依赖包"
+            exit 1
+          fi
+
   # ------------------------------------------------------------
   # Job 2：测试（unit + 3 个 PG 集成用例）
   #   PG 用 GitHub Actions 的 postgres service container。

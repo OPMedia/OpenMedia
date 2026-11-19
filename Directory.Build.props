@@ -14,6 +14,13 @@
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
     <!-- 反编译恢复的代码大量使用旧式警告模式 -->
     <NoWarn>$(NoWarn);CS1591;CS0618;CS0672;CS0108;CS0114;CS0169;CS0649;CS0414;CS8632</NoWarn>
+    <!--
+      NU1900 = 「漏洞审计跑不起来」（连不上 api.nuget.org 的 service index），
+      不是「包有漏洞」。离线/受限网络构建时它每个项目刷一条，纯噪音。
+      只压这一条：NU1901/1902/1903（真实漏洞公告）仍然生效，一旦出现依旧告警。
+      真正的门禁放在 CI（有外网）：见 .github/workflows/ci.yml 的 vulnerability 检查步骤。
+    -->
+    <NoWarn>$(NoWarn);NU1900</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
