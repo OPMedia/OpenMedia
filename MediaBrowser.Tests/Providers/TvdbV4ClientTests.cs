@@ -145,6 +145,21 @@ public class TvdbV4ClientTests
         StringAssert.Contains(calls.Last(), "since=1699999999");
     }
 
+    [TestMethod]
+    public void CredentialResolution_ConfigWinsThenBuiltInThenEmpty()
+    {
+        // 配置优先
+        Assert.AreEqual("from-config", TvdbV4Client.Resolve("from-config", "built-in"));
+        // 配置为空 → 用内置
+        Assert.AreEqual("built-in", TvdbV4Client.Resolve("", "built-in"));
+        Assert.AreEqual("built-in", TvdbV4Client.Resolve("   ", "built-in"));
+        // 两边都没有 → 空（provider 明确禁用）
+        Assert.AreEqual(string.Empty, TvdbV4Client.Resolve(null, string.Empty));
+        Assert.AreEqual(string.Empty, TvdbV4Client.Resolve("  ", null));
+        // 内置值两端空白要裁掉
+        Assert.AreEqual("built-in", TvdbV4Client.Resolve(null, "  built-in  "));
+    }
+
     private static TvdbV4Client CreateClient(
         string apiKey,
         List<string> calls,

@@ -54,9 +54,23 @@ namespace MediaBrowser.Providers.TV
 
         internal bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
 
-        private string ApiKey => _config.Configuration?.TheTvdb?.ApiKey?.Trim();
+        // 优先级：配置里的 key → 编译期内置 key（TvdbDefaults）→ 都没有就禁用。
+        // 内置槽位是为了让「开箱可用」，配置始终优先，用户可以换成自己的额度。
+        private string ApiKey => Resolve(_config.Configuration?.TheTvdb?.ApiKey, TvdbDefaults.ApiKey);
 
-        private string Pin => _config.Configuration?.TheTvdb?.Pin?.Trim();
+        private string Pin => Resolve(_config.Configuration?.TheTvdb?.Pin, TvdbDefaults.Pin);
+
+        /// <summary>配置优先、内置兜底；两边都空则返回空字符串（= 禁用）。</summary>
+        internal static string Resolve(string configured, string builtIn)
+        {
+            var value = configured?.Trim();
+            if (!string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            return builtIn?.Trim() ?? string.Empty;
+        }
 
         private void WarnMissingKey()
         {
