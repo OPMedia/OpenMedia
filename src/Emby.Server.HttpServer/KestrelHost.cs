@@ -18,6 +18,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Events;
+using Microsoft.VisualStudio.Threading;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Services;
@@ -35,6 +36,8 @@ namespace Emby.Server.HttpServer
     /// </summary>
     public class KestrelHost : IHttpServer
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly string _defaultRedirectPath;
         private readonly ILogger _logger;
         private readonly IServerConfigurationManager _config;
@@ -261,7 +264,9 @@ namespace Emby.Server.HttpServer
                 _logger.Info("Stopping Kestrel host...");
                 try
                 {
-                    _webHost.StopAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                    // IHttpServer.Stop() 是同步契约；JTF.Run 等待 Kestrel 停止，
+                    // 允许延续任务回到原上下文，避免同步阻塞死锁。
+                    _joinableTaskFactory.Run(() => _webHost.StopAsync(TimeSpan.FromSeconds(5)));
                 }
                 catch (Exception ex)
                 {
