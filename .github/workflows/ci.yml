@@ -165,7 +165,6 @@ jobs:
         run: dotnet test MediaBrowser.Tests -c Release --nologo
         env:
           OPENMEDIA_PG_BIN: /usr/lib/postgresql/16/bin
-        env:
           OPENMEDIA_TEST_PGCONN: >-
             Host=localhost;Port=5432;Database=${{ env.PG_DB }};Username=${{ env.PG_USER }};Password=${{ env.PG_PASSWORD }}
 
