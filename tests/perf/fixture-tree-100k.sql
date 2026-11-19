@@ -219,6 +219,14 @@ SELECT m.id, :person_id_min + ((m.id * 13) % 100), 'Actor', 1, 1, 'Actor', 1 FRO
 INSERT INTO item_people (item_id, person_id, role, person_type, list_order, person_type_name, sort_order)
 SELECT m.id, :person_id_min + ((m.id * 29) % 100), 'Actor', 1, 2, 'Actor', 2 FROM media_items m WHERE m.type IN (2, 5) ON CONFLICT DO NOTHING;
 
+-- 10b. clean_name 回填
+-- 搜索（GetWhereClauses 的 NameContains / search_score）读的是 clean_name，
+-- 不填的话所有搜索请求都返回空结果 —— 本 fixture 早先就漏了这一步，
+-- 导致性能测试里"搜索"一档测的是一条永远返回 0 行的查询。
+UPDATE media_items
+SET clean_name = lower(coalesce(sort_name, name))
+WHERE clean_name IS NULL;
+
 -- 11. ancestor_ids 闭包（按树深：电影 2 / 系列 2 / 季 3 / 集 4）
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
 SELECT m.id, m.parent_id, 1 FROM media_items m WHERE m.type = 3 ON CONFLICT DO NOTHING;
