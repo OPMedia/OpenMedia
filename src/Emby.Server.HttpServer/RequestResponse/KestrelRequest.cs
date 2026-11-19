@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.VisualStudio.Threading;
 using Microsoft.Extensions.Primitives;
 using IHttpFile = MediaBrowser.Model.Services.IHttpFile;
@@ -350,7 +351,7 @@ namespace Emby.Server.HttpServer.RequestResponse
             {
                 if (_queryString == null)
                 {
-                    _queryString = MyHttpUtility.ParseQueryString(_context.Request.QueryString.Value ?? string.Empty);
+                    _queryString = QueryHelpers.ParseQuery(_context.Request.QueryString.Value ?? string.Empty).ToQueryParamCollection();
                 }
                 return _queryString;
             }
@@ -561,7 +562,7 @@ namespace Emby.Server.HttpServer.RequestResponse
                     _context.Request.Body.Position = 0;
                 }
 
-                return _formData = MyHttpUtility.ParseQueryString(bodyText);
+                return _formData = QueryHelpers.ParseQuery(bodyText).ToQueryParamCollection();
             }
 
             return _formData = new QueryParamCollection();

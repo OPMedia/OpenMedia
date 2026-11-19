@@ -863,7 +863,7 @@ namespace Emby.Server.Implementations.Library
 
         private async Task<PasswordPinCreationResult> CreatePasswordResetPin()
         {
-            var num = new Random().Next(1, 9999);
+            var num = Random.Shared.Next(1, 9999);
 
             var path = PasswordResetFile;
 

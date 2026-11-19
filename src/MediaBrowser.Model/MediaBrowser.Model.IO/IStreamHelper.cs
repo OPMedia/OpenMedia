@@ -13,7 +13,5 @@ public interface IStreamHelper
 
 	Task<int> CopyToAsync(Stream source, Stream destination, CancellationToken cancellationToken);
 
-	Task CopyToAsync(Stream source, Stream destination, long copyLength, CancellationToken cancellationToken);
-
 	Task CopyUntilCancelled(Stream source, Stream target, int bufferSize, CancellationToken cancellationToken);
 }

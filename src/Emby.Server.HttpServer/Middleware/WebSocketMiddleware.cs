@@ -4,6 +4,7 @@ using Emby.Server.HttpServer.WebSockets;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Emby.Server.HttpServer.Middleware
 {
@@ -43,7 +44,7 @@ namespace Emby.Server.HttpServer.Middleware
 
                 var url = context.Request.Path.Value + context.Request.QueryString.Value;
 
-                var queryString = MyHttpUtility.ParseQueryString(context.Request.QueryString.Value ?? string.Empty);
+                var queryString = QueryHelpers.ParseQuery(context.Request.QueryString.Value ?? string.Empty).ToQueryParamCollection();
 
                 var connectingArgs = new WebSocketConnectingEventArgs
                 {

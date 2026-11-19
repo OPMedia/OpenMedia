@@ -18,6 +18,7 @@ using MediaBrowser.Common.Security;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Emby.Server.HttpServer.Middleware
 {
@@ -573,7 +574,7 @@ namespace Emby.Server.HttpServer.Middleware
             var uri = new Uri(url);
 
             // this gets all the query string key value pairs as a collection
-            var newQueryString = MyHttpUtility.ParseQueryString(uri.Query);
+            var newQueryString = QueryHelpers.ParseQuery(uri.Query).ToQueryParamCollection();
 
             var originalCount = newQueryString.Count;
 
