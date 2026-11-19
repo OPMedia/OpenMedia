@@ -102,7 +102,13 @@ public abstract class BasePeriodicWebSocketListener<TReturnDataType, TStateType>
 		}
 	}
 
-	private async void SendData(Tuple<IWebSocketConnection, CancellationTokenSource, TStateType> tuple)
+	private void SendData(Tuple<IWebSocketConnection, CancellationTokenSource, TStateType> tuple)
+	{
+		// 发送循环为同步；异步发送在助手中执行并显式丢弃 Task，异常由助手记录。
+		_ = SendDataAsync(tuple);
+	}
+
+	private async Task SendDataAsync(Tuple<IWebSocketConnection, CancellationTokenSource, TStateType> tuple)
 	{
 		IWebSocketConnection connection = tuple.Item1;
 		try
