@@ -1,14 +1,10 @@
-using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Model.Services;
-using MediaBrowser.Common.Net;
-using System.Threading;
 
 namespace MediaBrowser.Api
 {
@@ -48,18 +44,12 @@ namespace MediaBrowser.Api
     public class StartupWizardService : BaseApiService
     {
         private readonly IServerConfigurationManager _config;
-        private readonly IServerApplicationHost _appHost;
         private readonly IUserManager _userManager;
-        private readonly IMediaEncoder _mediaEncoder;
-        private readonly IHttpClient _httpClient;
 
-        public StartupWizardService(IServerConfigurationManager config, IHttpClient httpClient, IServerApplicationHost appHost, IUserManager userManager, IMediaEncoder mediaEncoder)
+        public StartupWizardService(IServerConfigurationManager config, IUserManager userManager)
         {
             _config = config;
-            _appHost = appHost;
             _userManager = userManager;
-            _mediaEncoder = mediaEncoder;
-            _httpClient = httpClient;
         }
 
         public void Post(ReportStartupWizardComplete request)
@@ -68,34 +58,6 @@ namespace MediaBrowser.Api
             _config.SetOptimalValues();
             _config.SaveConfiguration();
 
-            // OpenMedia（去 Emby 化，用户决策）：向导完成后的 mb3admin.com 安装上报已移除（原 Task.Run(UpdateStats)）。
-        }
-
-        private async Task UpdateStats()
-        {
-            try
-            {
-                var url = string.Format("http://www.mb3admin.com/admin/service/package/installed?mac={0}&product=MBServer&operation=Install&version={1}",
-                    _appHost.SystemId,
-                    _appHost.ApplicationVersion.ToString());
-
-                using (var response = await _httpClient.SendAsync(new HttpRequestOptions
-                {
-
-                    Url = url,
-                    CancellationToken = CancellationToken.None,
-                    LogErrors = false,
-                    LogRequest = false
-
-                }, "GET").ConfigureAwait(false))
-                {
-
-                }
-            }
-            catch
-            {
-
-            }
         }
 
         public object Get(GetStartupConfiguration request)

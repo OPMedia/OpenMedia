@@ -11,7 +11,6 @@ using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Progress;
-using MediaBrowser.Common.Security;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Dto;
@@ -33,22 +32,19 @@ public class XmlTvProvider : IListingsProvider
 
 	private readonly IZipClient _zipClient;
 
-	private ISecurityManager _securityManager;
-
 	private SemaphoreSlim _downloadSemaphore = new SemaphoreSlim(1, 1);
 
 	public string Name => "XmlTV";
 
 	public string Type => "xmltv";
 
-	public XmlTvProvider(IServerConfigurationManager config, IHttpClient httpClient, ILogger logger, IFileSystem fileSystem, IZipClient zipClient, ISecurityManager securityManager)
+	public XmlTvProvider(IServerConfigurationManager config, IHttpClient httpClient, ILogger logger, IFileSystem fileSystem, IZipClient zipClient)
 	{
 		_config = config;
 		_httpClient = httpClient;
 		_logger = logger;
 		_fileSystem = fileSystem;
 		_zipClient = zipClient;
-		_securityManager = securityManager;
 	}
 
 	private string GetLanguage(ListingsProviderInfo info)
@@ -152,10 +148,6 @@ public class XmlTvProvider : IListingsProvider
 		if (string.IsNullOrEmpty(channelId))
 		{
 			throw new ArgumentNullException("channelId");
-		}
-		if (!(await _securityManager.GetRegistrationStatus("xmltv").ConfigureAwait(continueOnCapturedContext: false)).IsValid && (endDateUtc - startDateUtc).TotalDays > 1.0)
-		{
-			endDateUtc = startDateUtc.AddDays(1.0);
 		}
 		_logger.Debug("Getting xmltv programs for channel {0}", new object[1] { channelId });
 		string text = await GetXml(info, info.Path, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
