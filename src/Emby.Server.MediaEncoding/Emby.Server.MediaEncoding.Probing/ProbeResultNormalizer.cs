@@ -514,7 +514,8 @@ public class ProbeResultNormalizer
 			CodecTimeBase = streamInfo.codec_time_base,
 			ColorPrimaries = streamInfo.color_primaries,
 			ColorSpace = streamInfo.color_space,
-			ColorTransfer = streamInfo.color_transfer
+			ColorTransfer = streamInfo.color_transfer,
+			VideoRangeType = GetVideoRangeType(streamInfo)
 		};
 		if (string.Equals(streamInfo.is_avc, "true", StringComparison.OrdinalIgnoreCase) || string.Equals(streamInfo.is_avc, "1", StringComparison.OrdinalIgnoreCase))
 		{
@@ -1109,6 +1110,61 @@ public class ProbeResultNormalizer
 		}
 	}
 
+	/// <summary>
+	/// ffprobe 字段 → VideoRangeType 判定：
+	/// 1. 有 DOVI configuration record：profile 5 / 无BL → DolbyVision；PQ base → DolbyVisionWithHDR10；
+	///    SDR base → DolbyVisionWithSDR；HLG base 或信息不全 → DolbyVision（无专用枚举）。
+	/// 2. 无 DoVi：smpte2084 → HDR10；arib-std-b67 → HLG；其余 → SDR。
+	/// color_primaries 只做一致性参考：BT.2020 也存在 SDR 母版，不能单独据此判 HDR。
+	/// 本版本不支持 DoVi 动态元数据（RPU reshaping），仅按 base layer 归类。
+	/// </summary>
+	private VideoRangeType GetVideoRangeType(MediaStreamInfo streamInfo)
+	{
+		if (!string.Equals(streamInfo.codec_type, "video", StringComparison.OrdinalIgnoreCase))
+		{
+			return VideoRangeType.Unknown;
+		}
+
+		string transfer = streamInfo.color_transfer ?? string.Empty;
+		bool isPq = string.Equals(transfer, "smpte2084", StringComparison.OrdinalIgnoreCase);
+		bool isHlg = string.Equals(transfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase);
+		MediaStreamSideDataInfo dovi = streamInfo.side_data_list?.FirstOrDefault(item =>
+			item != null && string.Equals(item.side_data_type, "DOVI configuration record", StringComparison.OrdinalIgnoreCase));
+		if (dovi != null)
+		{
+			_logger.Warn("检测到 Dolby Vision（profile {0}），不支持动态元数据 RPU reshape，仅按 base layer 处理", dovi.dv_profile);
+			if (dovi.dv_profile == 5 || dovi.bl_present == 0)
+			{
+				return VideoRangeType.DolbyVision;
+			}
+
+			if (isPq)
+			{
+				return VideoRangeType.DolbyVisionWithHDR10;
+			}
+
+			if (isHlg || string.IsNullOrWhiteSpace(transfer))
+			{
+				return VideoRangeType.DolbyVision;
+			}
+
+			return VideoRangeType.DolbyVisionWithSDR;
+		}
+
+		_logger.Debug("Video range: transfer={0}, primaries={1}, space={2}", transfer, streamInfo.color_primaries ?? string.Empty, streamInfo.color_space ?? string.Empty);
+		if (isPq)
+		{
+			return VideoRangeType.HDR10;
+		}
+
+		if (isHlg)
+		{
+			return VideoRangeType.HLG;
+		}
+
+		return VideoRangeType.SDR;
+	}
+
 	private TransportStreamTimestamp GetMpegTimestamp(string path)
 	{
 		byte[] array = new byte[197];
@@ -1131,4 +1187,20 @@ public class ProbeResultNormalizer
 		}
 		return (TransportStreamTimestamp)0;
 	}
+}
+
+/// <summary>ffprobe side_data_list 中我们关心的 Dolby Vision 配置记录。</summary>
+public class MediaStreamSideDataInfo
+{
+	public string side_data_type { get; set; }
+
+	public int dv_profile { get; set; }
+
+	public int dv_level { get; set; }
+
+	public int bl_present { get; set; }
+
+	public int el_present { get; set; }
+
+	public int rpu_present { get; set; }
 }

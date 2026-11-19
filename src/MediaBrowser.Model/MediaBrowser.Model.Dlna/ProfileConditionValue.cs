@@ -24,5 +24,7 @@ public enum ProfileConditionValue
 	IsAvc = 20,
 	IsInterlaced = 21,
 	AudioSampleRate = 22,
-	AudioBitDepth = 23
+	AudioBitDepth = 23,
+	// Jellyfin 的 ProfileConditionValue.VideoRangeType 取值为 24，保持客户端 profile 可直接复用。
+	VideoRangeType = 24
 }

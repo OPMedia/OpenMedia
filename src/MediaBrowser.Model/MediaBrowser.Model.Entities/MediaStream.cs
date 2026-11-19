@@ -17,6 +17,8 @@ public class MediaStream
 
 	public string ColorTransfer { get; set; }
 
+	public VideoRangeType VideoRangeType { get; set; }
+
 	public string ColorPrimaries { get; set; }
 
 	public string ColorSpace { get; set; }

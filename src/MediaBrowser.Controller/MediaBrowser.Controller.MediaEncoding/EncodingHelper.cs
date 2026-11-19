@@ -12,6 +12,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Reflection;
 using Microsoft.VisualStudio.Threading;
@@ -22,7 +23,11 @@ public class EncodingHelper
 {
 	private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
 
+	private static readonly ILogger _nullLogger = new NullLogger();
+
 	private readonly CultureInfo _usCulture = new CultureInfo("en-US");
+
+	private readonly ILogger _logger;
 
 	private readonly IMediaEncoder _mediaEncoder;
 
@@ -34,13 +39,15 @@ public class EncodingHelper
 
 	private readonly IAssemblyInfo _assemblyInfo;
 
-	public EncodingHelper(IMediaEncoder mediaEncoder, IFileSystem fileSystem, ISubtitleEncoder subtitleEncoder, IApplicationPaths appPaths, IAssemblyInfo assemblyInfo)
+	// logger 作为可选尾参数：现有 5 参数调用点保持不变，测试可注入记录日志的桩。
+	public EncodingHelper(IMediaEncoder mediaEncoder, IFileSystem fileSystem, ISubtitleEncoder subtitleEncoder, IApplicationPaths appPaths, IAssemblyInfo assemblyInfo, ILogger logger = null)
 	{
 		_mediaEncoder = mediaEncoder;
 		_fileSystem = fileSystem;
 		_subtitleEncoder = subtitleEncoder;
 		_appPaths = appPaths;
 		_assemblyInfo = assemblyInfo;
+		_logger = logger ?? _nullLogger;
 	}
 
 	public string GetH264Encoder(EncodingJobInfo state, EncodingOptions encodingOptions)
@@ -378,13 +385,21 @@ public class EncodingHelper
 		}
 		if (state.IsVideoRequest && GetVideoEncoder(state, encodingOptions).IndexOf("vaapi", StringComparison.OrdinalIgnoreCase) != -1)
 		{
-			bool num2 = state.SubtitleStream != null && !state.SubtitleStream.IsTextSubtitleStream && (int)state.SubtitleDeliveryMethod == 0;
-			string text4 = "vaapi";
-			if (num2)
+			// 编码器名带 vaapi 不等于 ffmpeg 编译时启用了 vaapi 硬解；先探测 -hwaccels。
+			if (_mediaEncoder.SupportsHwaccel("vaapi"))
 			{
-				text4 = "yuv420p";
+				bool num2 = state.SubtitleStream != null && !state.SubtitleStream.IsTextSubtitleStream && (int)state.SubtitleDeliveryMethod == 0;
+				string text4 = "vaapi";
+				if (num2)
+				{
+					text4 = "yuv420p";
+				}
+				text = "-hwaccel vaapi -hwaccel_output_format " + text4 + " -vaapi_device " + encodingOptions.VaapiDevice + " " + text;
 			}
-			text = "-hwaccel vaapi -hwaccel_output_format " + text4 + " -vaapi_device " + encodingOptions.VaapiDevice + " " + text;
+			else
+			{
+				_logger.Warn("ffmpeg 不支持 vaapi 硬解，跳过 -hwaccel vaapi 注入，改用软件解码路径");
+			}
 		}
 		return text.Trim();
 	}
@@ -1201,6 +1216,109 @@ public class EncodingHelper
 		return string.Format(text, arg, arg2);
 	}
 
+	/// <summary>
+	/// CPU 色调映射：只在「源是 HDR 且目标不是 HDR」且 zscale/tonemap 都存在时插入。
+	/// 缺少任一滤镜时只记 Warn 并保持原链路，不静默产出直接裁切的“发灰”画面。
+	/// Dolby Vision 不支持动态元数据（RPU reshape），只按 base layer 归类处理。
+	/// </summary>
+	public string GetTonemapFilter(EncodingJobInfo state, EncodingOptions encodingOptions)
+	{
+		if (state == null || encodingOptions == null || !encodingOptions.EnableTonemapping)
+		{
+			return string.Empty;
+		}
+
+		MediaStream videoStream = state.VideoStream;
+		if (videoStream == null)
+		{
+			return string.Empty;
+		}
+
+		VideoRangeType sourceRange = GetSourceVideoRangeType(videoStream);
+		if (!IsHdrRange(sourceRange))
+		{
+			return string.Empty;
+		}
+
+		if (IsDolbyVisionRange(sourceRange))
+		{
+			_logger.Warn("Dolby Vision 源不支持动态元数据 RPU reshape，按 base layer 执行 HDR→SDR 色调映射");
+		}
+
+		// static/copy 的 TargetVideoRange 沿用源范围；重编码目标固定为 SDR。
+		bool targetIsHdr = state.BaseRequest != null && string.Equals(state.TargetVideoRange, "HDR", StringComparison.OrdinalIgnoreCase);
+		if (targetIsHdr)
+		{
+			return string.Empty;
+		}
+
+		bool hasZscale = _mediaEncoder.SupportsFilter("zscale");
+		bool hasTonemap = _mediaEncoder.SupportsFilter("tonemap");
+		if (!hasZscale || !hasTonemap)
+		{
+			string missing = !hasZscale && !hasTonemap ? "zscale 和 tonemap" : (!hasZscale ? "zscale" : "tonemap");
+			_logger.Warn("HDR→SDR 需要 zscale/tonemap，当前 ffmpeg 缺少 {0}；不插入色调映射滤镜，画面可能发灰或高光溢出", missing);
+			return string.Empty;
+		}
+
+		string algorithm = NormalizeTonemapAlgorithm(encodingOptions.TonemappingAlgorithm, _logger);
+		// t=linear+npl=1000：PQ/HLG 信号先转到线性光，1000nit 作为标称峰值；
+		// gbrpf32le 是 tonemap 唯一接受的浮点平面像素格式；p=bt709 在线性光下转换色域；
+		// desat=0.5 轻微去饱和以压住高光色偏；最后回 BT.709 传输/矩阵/有限范围并降到 yuv420p。
+		return "zscale=t=linear:npl=1000,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=" + algorithm
+			+ ":desat=0.5,zscale=t=bt709:m=bt709:r=tv,format=yuv420p";
+	}
+
+	private static VideoRangeType GetSourceVideoRangeType(MediaStream stream)
+	{
+		if (stream.VideoRangeType != VideoRangeType.Unknown)
+		{
+			return stream.VideoRangeType;
+		}
+
+		// 兼容尚未经过 ProbeResultNormalizer 的旧调用方（例如手动构造的 MediaStream）。
+		if (string.Equals(stream.ColorTransfer, "smpte2084", StringComparison.OrdinalIgnoreCase))
+		{
+			return VideoRangeType.HDR10;
+		}
+
+		if (string.Equals(stream.ColorTransfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase))
+		{
+			return VideoRangeType.HLG;
+		}
+
+		return stream.Type == MediaStreamType.Video ? VideoRangeType.SDR : VideoRangeType.Unknown;
+	}
+
+	private static bool IsHdrRange(VideoRangeType range)
+	{
+		return range is VideoRangeType.HDR10 or VideoRangeType.HLG or VideoRangeType.DolbyVision
+			or VideoRangeType.DolbyVisionWithHDR10;
+	}
+
+	private static bool IsDolbyVisionRange(VideoRangeType range)
+	{
+		return range is VideoRangeType.DolbyVision or VideoRangeType.DolbyVisionWithHDR10
+			or VideoRangeType.DolbyVisionWithSDR;
+	}
+
+	private static string NormalizeTonemapAlgorithm(string value, ILogger logger)
+	{
+		string algorithm = (value ?? string.Empty).Trim().ToLowerInvariant();
+		switch (algorithm)
+		{
+		case "hable":
+		case "mobius":
+		case "reinhard":
+		case "bt2390":
+		case "none":
+			return algorithm;
+		default:
+			logger.Warn("未知的色调映射算法 {0}，回退到 hable", value ?? "(null)");
+			return "hable";
+		}
+	}
+
 	public string GetOutputSizeParam(EncodingJobInfo state, EncodingOptions options, string outputVideoCodec, bool allowTimeStampCopy = true)
 	{
 		//IL_0176: Unknown result type (might be due to invalid IL or missing references)
@@ -1227,6 +1345,12 @@ public class EncodingHelper
 			{
 				list.Add("yadif=0:-1:0");
 			}
+		}
+		// 色调映射放在缩放前：先在原始分辨率的线性光里完成曲线与色域转换，再交给 scale。
+		string tonemapFilter = GetTonemapFilter(state, options);
+		if (!string.IsNullOrEmpty(tonemapFilter))
+		{
+			list.Add(tonemapFilter);
 		}
 		int? videoWidth = ((videoStream == null) ? ((int?)null) : videoStream.Width);
 		int? videoHeight = ((videoStream == null) ? ((int?)null) : videoStream.Height);
@@ -1583,6 +1707,26 @@ public class EncodingHelper
 		return GetHardwareAcceleratedVideoDecoder((VideoType)(((int?)state.MediaSource.VideoType) ?? 0), state.VideoStream, encodingOptions);
 	}
 
+	/// <summary>
+	/// AMF 在 Windows 上直接使用 dxva2 硬解；必须先经 -hwaccels 探测，不支持时返回 null 走软件路径。
+	/// platform 显式传参，便于在非 Windows 的测试机上覆盖 Win32NT 分支。
+	/// </summary>
+	public static string GetDxva2Decoder(IMediaEncoder mediaEncoder, PlatformID platform, ILogger logger)
+	{
+		if (platform != PlatformID.Win32NT)
+		{
+			return null;
+		}
+
+		if (mediaEncoder.SupportsHwaccel("dxva2"))
+		{
+			return "-hwaccel dxva2";
+		}
+
+		logger.Warn("ffmpeg 不支持 dxva2 硬解，AMF 分支跳过 -hwaccel dxva2，改用软件解码路径");
+		return null;
+	}
+
 	public string GetHardwareAcceleratedVideoDecoder(VideoType videoType, MediaStream videoStream, EncodingOptions encodingOptions)
 	{
 		//IL_0000: Unknown result type (might be due to invalid IL or missing references)
@@ -1730,12 +1874,13 @@ public class EncodingHelper
 					break;
 				}
 			}
-			else if (string.Equals(encodingOptions.HardwareAccelerationType, "amf", StringComparison.OrdinalIgnoreCase))
+		else if (string.Equals(encodingOptions.HardwareAccelerationType, "amf", StringComparison.OrdinalIgnoreCase))
+		{
+			string dxva2Decoder = GetDxva2Decoder(_mediaEncoder, Environment.OSVersion.Platform, _logger);
+			if (!string.IsNullOrEmpty(dxva2Decoder))
 			{
-				if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-				{
-					return "-hwaccel dxva2";
-				}
+				return dxva2Decoder;
+			}
 				switch (videoStream.Codec.ToLower())
 				{
 				case "avc":

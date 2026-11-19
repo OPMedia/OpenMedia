@@ -24,6 +24,12 @@ public class EncodingOptions
 
 	public bool EnableHardwareEncoding { get; set; }
 
+	/// <summary>CPU 路径的 HDR→SDR 色调映射开关；默认开启以避免 HDR 直接裁切导致的发灰/泛白。</summary>
+	public bool EnableTonemapping { get; set; }
+
+	/// <summary>hable / mobius / reinhard / bt2390 / none，大小写不敏感；未知值按 hable 处理。</summary>
+	public string TonemappingAlgorithm { get; set; }
+
 	public bool EnableSubtitleExtraction { get; set; }
 
 	public string[] HardwareDecodingCodecs { get; set; }
@@ -35,6 +41,8 @@ public class EncodingOptions
 		VaapiDevice = "/dev/dri/renderD128";
 		H264Crf = 23;
 		EnableHardwareEncoding = true;
+		EnableTonemapping = true;
+		TonemappingAlgorithm = "hable";
 		EnableSubtitleExtraction = true;
 		HardwareDecodingCodecs = new string[2] { "h264", "vc1" };
 	}
