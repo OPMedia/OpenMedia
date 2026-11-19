@@ -28,7 +28,13 @@ namespace MediaBrowser.Providers.Music
 {
     public class FanartArtistProvider : IRemoteImageProvider, IHasOrder
     {
-        internal const string ApiKey = "5c6b04c68e904cfed1e6cbc9a9e683d4";
+        /// <summary>
+        /// Fanart.tv key：构建期注入值优先（secrets.props 或 FANART_API_KEY），
+        /// 没有则回退到历史默认值 —— 不配置也能构建、能用。
+        /// </summary>
+        internal static string ApiKey => string.IsNullOrWhiteSpace(BuildSecrets.FanartApiKey)
+            ? "5c6b04c68e904cfed1e6cbc9a9e683d4"
+            : BuildSecrets.FanartApiKey;
         private const string FanArtBaseUrl = "https://webservice.fanart.tv/v3.1/music/{1}?api_key={0}";
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
