@@ -256,17 +256,27 @@ namespace MediaBrowser.Providers.Movies
         /// <param name="id">The identifier.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task.</returns>
-        internal async Task DownloadMovieJson(string id, CancellationToken cancellationToken)
+        /// <summary>
+        /// 拼 FanArt 电影查询 URL。抽出来是为了能断言「用的是哪把 key」——
+        /// key 本身不进仓库，URL 形态是这个模块唯一可确定性验证的部分。
+        /// </summary>
+        internal static string BuildMovieUrl(string apiKey, string id, string clientKey)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var url = string.Format(FanArtBaseUrl, FanartArtistProvider.ApiKey, id);
-
-            var clientKey = FanartSeriesProvider.Current.GetFanartOptions().UserApiKey;
+            var url = string.Format(FanArtBaseUrl, apiKey, id);
             if (!string.IsNullOrWhiteSpace(clientKey))
             {
                 url += "&client_key=" + clientKey;
             }
+
+            return url;
+        }
+
+        internal async Task DownloadMovieJson(string id, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var clientKey = FanartSeriesProvider.Current.GetFanartOptions().UserApiKey;
+            var url = BuildMovieUrl(FanartArtistProvider.ApiKey, id, clientKey);
 
             var path = GetFanartJsonPath(id);
 

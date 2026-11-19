@@ -32,9 +32,18 @@ namespace MediaBrowser.Providers.Music
         /// Fanart.tv key：构建期注入值优先（secrets.props 或 FANART_API_KEY），
         /// 没有则回退到历史默认值 —— 不配置也能构建、能用。
         /// </summary>
-        internal static string ApiKey => string.IsNullOrWhiteSpace(BuildSecrets.FanartApiKey)
-            ? "5c6b04c68e904cfed1e6cbc9a9e683d4"
-            : BuildSecrets.FanartApiKey;
+        internal static string ApiKey => ResolveApiKey(BuildSecrets.FanartApiKey);
+
+        /// <summary>
+        /// 注入值优先，空则回退历史默认值。抽成纯函数是为了能测两个分支 ——
+        /// 远端真实 key 不进仓库，测试只能验证解析规则。
+        /// </summary>
+        internal static string ResolveApiKey(string builtInKey)
+        {
+            return string.IsNullOrWhiteSpace(builtInKey)
+                ? "5c6b04c68e904cfed1e6cbc9a9e683d4"
+                : builtInKey;
+        }
         private const string FanArtBaseUrl = "https://webservice.fanart.tv/v3.1/music/{1}?api_key={0}";
 
         private readonly CultureInfo _usCulture = new CultureInfo("en-US");
