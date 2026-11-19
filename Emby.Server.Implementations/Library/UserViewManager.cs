@@ -16,11 +16,15 @@ using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Extensions;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Library
 {
     public class UserViewManager : IUserViewManager
     {
+        // IUserViewManager members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly ILibraryManager _libraryManager;
         private readonly ILocalizationManager _localizationManager;
         private readonly IUserManager _userManager;
@@ -240,7 +244,7 @@ namespace Emby.Server.Implementations.Library
                 var parentItemChannel = parentItem as Channel;
                 if (parentItemChannel != null)
                 {
-                    return _channelManager.GetLatestChannelItemsInternal(new InternalItemsQuery(user)
+                    return _joinableTaskFactory.Run(() => _channelManager.GetLatestChannelItemsInternal(new InternalItemsQuery(user)
                     {
                         ChannelIds = new [] { parentId },
                         IsPlayed = request.IsPlayed,
@@ -250,7 +254,7 @@ namespace Emby.Server.Implementations.Library
                         EnableTotalRecordCount = false
 
 
-                    }, CancellationToken.None).Result.Items.ToList();
+                    }, CancellationToken.None)).Items.ToList();
                 }
 
                 var parent = parentItem as Folder;
