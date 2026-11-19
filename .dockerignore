@@ -47,3 +47,11 @@ ProgramData-Server
 **/ProgramData-Server
 **/logs
 **/*.tmp
+
+# ffmpeg 二进制只允许从 ffmpeg-fetch 阶段下载并校验后进入镜像；
+# 宿主上残留的二进制不能混进构建上下文（也不提交进仓库）。
+ffmpeg
+ffprobe
+**/ffmpeg
+**/ffprobe
+**/ffmpeg-*.tar.xz
