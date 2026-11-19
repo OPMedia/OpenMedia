@@ -217,3 +217,41 @@ POST /UserFavoriteItems/{id}    缺     ← 收藏
 
 **未确认**（不编）：TVDB v1 空返回是永久下线还是临时故障；SAML 是否有成熟社区插件；
 我们的 license 是 GPL-2.0 only 还是 or later（决定能否引入 GPL-3.0 的 Jellyfin 官方插件代码）。
+
+---
+
+## 六、执行进度（2026-11-19）
+
+### 已完成
+
+| 项 | 内容 | 验证方式 |
+|---|---|---|
+| **P0 五个 bug** | fMP4 的 `Equals(text5,"m4s")` 写了两遍（实测复现：`-hls_segment_type mpegts` 配 `.mp4` 分片名）；`hevc`/`av1` 传非法编码器名；AMF 的 `mpeg2video` 返回 `mpeg2_mmal`；AudioDB key 404 + 搜索空实现；删掉「配置项在、实现不在」的转码节流 | 8 个测试**改前必红**，改后绿 |
+| **反代可信代理 + base URL** | `ForwardedHeadersPolicy`：`KnownProxies` 白名单，默认空 = 什么都不信（fail closed）；多级 XFF 链从右往左跳过可信代理；`X-Forwarded-Proto` 同样 trust-gated。base URL 支持 `/media/...` 前缀，旧的三前缀行为不变 | 改前必红（`RemoteIp` 被伪造成 10.0.0.1、scheme 被伪造成 https） |
+| **JF 路由垫片** | 10 条别名路由 + `ProductName` + `StartupWizardCompleted` | 起服务实测 11/11 返回 200；`/UserItems/Resume` 与旧路径返回**字节数完全一致** |
+| **通知 Webhook** | `INotificationService` 实现：POST JSON + 指数退避重试 + 事件过滤 + 5 种内置模板 | `/Notifications/Services` 实测返回 `[{"Name":"Webhook"}]` |
+| **全量备份/恢复** | `pg_dump -Fc` + config + metadata + manifest（SHA-256）；恢复走「标记待恢复 + 下次启动」，**恢复前自动快照**，失败自动回滚 | 端到端：备份 → 删行 → 恢复 → 行回来；改一个字节 → 拒绝；并发第二个被拒 |
+| **去 Emby 激活/连接** | 删掉整层许可门禁（原来恒返回"有效"，全是空操作）、Connect 的 3 条陈旧路径 + 2 个 schema、mb3admin 调用 | 服务实测：登录/API/`/app/` 全 200，`/emby/Connect/*` 404 |
+
+**测试 222 → 261**，Debug/Release 0 警告 0 错误，CI 五绿。
+
+### 过程中挖出来的真问题（都不是我预先列出的）
+
+1. **补路由垫片时服务起不来**：`UpdateUserItemData` 继承 `UserItemDataDto` 又自己声明 `ItemId`，
+   属性遮蔽让路由注册的大小写不敏感映射撞键 → `ArgumentException`，整个服务崩。
+   **构建和单测全绿**，因为没人覆盖路由注册。这说明「编译通过 + 单测绿」对路由/契约类改动毫无意义。
+2. **`.gitignore` 的 `Backup*/` 把源码目录吞了**：备份子系统的 5 个核心文件因此没进提交，
+   提交只剩 4 个外围文件。规则来自 VS 模板，本意是 IDE 转换项目产生的临时目录。
+3. **CI 的 PG 客户端/服务端版本错配**：runner 自带 `pg_dump` 17，service 是 16，
+   `SET transaction_timeout` 写进 dump 后恢复失败。已把 service 对齐到 17，并加一步打印版本。
+4. **工具定位测试依赖运行环境**：它清空 `PATH` 断言"找不到"，但 locator 还有硬编码的
+   `/usr/lib/postgresql` 等目录 —— CI 上照样找得到，测试反而红。已加 `includeSystemFallbacks` 开关。
+
+### 仍未做（下一步）
+
+| 项 | 为什么还没做 |
+|---|---|
+| **换 ffmpeg 发行版** | 进行中。这是 HDR/硬解的前置条件 0：当前锁的 7.1.1 URL 已 404，且那个静态包只有 `vdpau`，没有任何 GPU 编码器 |
+| **CPU 版 HDR 色调映射** | 等 ffmpeg 落地后做（两者都碰编码能力探测） |
+| `openapi.json` 登记 `/System/Backup` 系列 | 备份端点已实现但未登记；需要一次正确的生成步骤，不能手写 schema |
+| 版本号对外报什么 | **等你拍板**：Jellyfin 客户端要求 `>= 12.0.0.0`，我们仍是 `3.5.3.0` |
