@@ -49,4 +49,7 @@
     <EnableVSTHRDAnalyzers>true</EnableVSTHRDAnalyzers>
   </PropertyGroup>
 
+  <!-- 构建期凭据注入（见该文件注释：仓库只保留机制，值来自 secrets.props 或环境变量） -->
+  <Import Project="$(MSBuildThisFileDirectory)BuildSecrets.targets" />
+
 </Project>

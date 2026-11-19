@@ -168,7 +168,13 @@ namespace MediaBrowser.Providers.Movies
         private const string TmdbConfigUrl = BaseMovieDbUrl + "3/configuration?api_key={0}";
         private const string GetMovieInfo3 = BaseMovieDbUrl + @"3/movie/{0}?api_key={1}&append_to_response=casts,releases,images,keywords,trailers";
 
-        internal static string ApiKey = "f6bd687ffa63cd282b6ff2c6877f2669";
+        /// <summary>
+        /// TMDB key：构建期注入值优先（build/secrets.props 或 TMDB_API_KEY），
+        /// 没有则回退到历史默认值 —— 保证不配置也能构建、能用。
+        /// </summary>
+        internal static string ApiKey => string.IsNullOrWhiteSpace(BuildSecrets.TmdbApiKey)
+            ? "f6bd687ffa63cd282b6ff2c6877f2669"
+            : BuildSecrets.TmdbApiKey;
         internal static string AcceptHeader = "application/json,image/*";
 
         /// <summary>

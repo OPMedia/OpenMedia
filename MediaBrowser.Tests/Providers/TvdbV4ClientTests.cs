@@ -187,6 +187,11 @@ public class TvdbV4ClientTests
         var configManager = TestDoubles.ProxyStub<IServerConfigurationManager>.Create(
             ("get_Configuration", _ => configuration));
 
-        return new TvdbV4Client(httpClient, configManager, new MediaBrowser.Tests.PgData.FakeLogManager().GetLogger("tvdb-tests"));
+        // 显式关掉内置 key：本机有 secrets.props 时也不能影响这条用例的结论。
+        return new TvdbV4Client(
+            httpClient,
+            configManager,
+            new MediaBrowser.Tests.PgData.FakeLogManager().GetLogger("tvdb-tests"),
+            builtInApiKey: string.Empty);
     }
 }

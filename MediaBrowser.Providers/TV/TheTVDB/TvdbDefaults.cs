@@ -1,4 +1,4 @@
-namespace MediaBrowser.Providers.TV
+﻿namespace MediaBrowser.Providers.TV
 {
     /// <summary>
     /// TheTVDB 的编译期默认凭据。
@@ -15,10 +15,14 @@ namespace MediaBrowser.Providers.TV
     /// </summary>
     internal static class TvdbDefaults
     {
-        /// <summary>TheTVDB v4 API key（thetvdb.com 后台创建）。留空表示不内置。</summary>
-        internal const string ApiKey = "";
+        /// <summary>
+        /// TheTVDB v4 API key。来自构建期注入（build/secrets.props 或 TVDB_API_KEY 环境变量），
+        /// **不写在源码里** —— 本仓库公开，写进来等于公开发布。
+        /// 留空表示不内置，此时完全依赖配置里的 TheTvdb.ApiKey。
+        /// </summary>
+        internal static string ApiKey => BuildSecrets.TvdbApiKey;
 
-        /// <summary>可选的 subscriber PIN。</summary>
-        internal const string Pin = "";
+        /// <summary>可选的 subscriber PIN（同样来自配置，不内置）。</summary>
+        internal static string Pin => string.Empty;
     }
 }

@@ -241,3 +241,6 @@ MediaBrowser.WebDashboard/dashboard-ui/.idea/
 tests/livetv/guide.xml
 tests/livetv/channels.m3u
 .alma-snapshots
+
+# 构建期凭据（绝对不能进仓库；示例见 secrets.props.example）
+secrets.props

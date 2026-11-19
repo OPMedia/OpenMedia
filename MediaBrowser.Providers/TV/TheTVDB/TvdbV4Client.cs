@@ -37,6 +37,8 @@ namespace MediaBrowser.Providers.TV
         // produce a thousand "API key missing" lines.
         private static int _missingKeyWarningLogged;
 
+        private readonly string _builtInApiKey;
+        private readonly string _builtInPin;
         private readonly IHttpClient _httpClient;
         private readonly IServerConfigurationManager _config;
         private readonly ILogger _logger;
@@ -46,19 +48,31 @@ namespace MediaBrowser.Providers.TV
         private Dictionary<long, string> _artworkTypes;
 
         public TvdbV4Client(IHttpClient httpClient, IServerConfigurationManager config, ILogger logger)
+            : this(httpClient, config, logger, null)
+        {
+        }
+
+        /// <summary>
+        /// 额外接受一个「内置 key」参数：生产走默认（读构建期注入的 <see cref="BuildSecrets"/>），
+        /// 测试可以显式传空字符串，构造「确实没配也没内置」的确定性场景 ——
+        /// 否则本机有 key、CI 没 key 时同一个用例结论不同。
+        /// </summary>
+        internal TvdbV4Client(IHttpClient httpClient, IServerConfigurationManager config, ILogger logger, string builtInApiKey)
         {
             _httpClient = httpClient;
             _config = config;
             _logger = logger;
+            _builtInApiKey = builtInApiKey ?? BuildSecrets.TvdbApiKey;
+            _builtInPin = string.Empty;
         }
 
         internal bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
 
         // 优先级：配置里的 key → 编译期内置 key（TvdbDefaults）→ 都没有就禁用。
         // 内置槽位是为了让「开箱可用」，配置始终优先，用户可以换成自己的额度。
-        private string ApiKey => Resolve(_config.Configuration?.TheTvdb?.ApiKey, TvdbDefaults.ApiKey);
+        private string ApiKey => Resolve(_config.Configuration?.TheTvdb?.ApiKey, _builtInApiKey);
 
-        private string Pin => Resolve(_config.Configuration?.TheTvdb?.Pin, TvdbDefaults.Pin);
+        private string Pin => Resolve(_config.Configuration?.TheTvdb?.Pin, _builtInPin);
 
         /// <summary>配置优先、内置兜底；两边都空则返回空字符串（= 禁用）。</summary>
         internal static string Resolve(string configured, string builtIn)
