@@ -25,7 +25,6 @@
     <ProjectReference Include="..\src\Emby.Naming\Emby.Naming.csproj" />
     <ProjectReference Include="..\src\Emby.XmlTv\Emby.XmlTv.csproj" />
     <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />
-    <ProjectReference Include="..\BDInfo\BDInfo.csproj" />
     <ProjectReference Include="..\DvdLib\DvdLib.csproj" />
     <ProjectReference Include="..\Emby.Dlna\Emby.Dlna.csproj" />
     <ProjectReference Include="..\Emby.Drawing.ImageMagick\Emby.Drawing.ImageMagick.csproj" />

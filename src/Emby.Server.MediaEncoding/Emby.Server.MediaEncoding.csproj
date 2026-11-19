@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="BDInfo" Version="0.8.0" />
     <PackageReference Include="Microsoft.VisualStudio.Threading" Version="17.13.2" />
   </ItemGroup>
 
@@ -24,7 +25,6 @@
     <ProjectReference Include="..\MediaBrowser.Common\MediaBrowser.Common.csproj" />
     <ProjectReference Include="..\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\Emby.XmlTv\Emby.XmlTv.csproj" />
-    <ProjectReference Include="..\..\BDInfo\BDInfo.csproj" />
     <ProjectReference Include="..\..\DvdLib\DvdLib.csproj" />
   </ItemGroup>
 
