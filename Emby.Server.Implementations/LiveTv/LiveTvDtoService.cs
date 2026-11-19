@@ -168,7 +168,7 @@ namespace Emby.Server.Implementations.LiveTv
                         dto.ParentThumbImageTag = _imageProcessor.GetImageCacheTag(librarySeries, image);
                         dto.ParentThumbItemId = librarySeries.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -183,7 +183,7 @@ namespace Emby.Server.Implementations.LiveTv
                             };
                         dto.ParentBackdropItemId = librarySeries.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -210,7 +210,7 @@ namespace Emby.Server.Implementations.LiveTv
                         dto.ParentPrimaryImageTag = _imageProcessor.GetImageCacheTag(program, image);
                         dto.ParentPrimaryImageItemId = program.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -228,7 +228,7 @@ namespace Emby.Server.Implementations.LiveTv
                         };
                             dto.ParentBackdropItemId = program.Id.ToString("N");
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                         }
                     }
@@ -258,7 +258,7 @@ namespace Emby.Server.Implementations.LiveTv
                         dto.ParentThumbImageTag = _imageProcessor.GetImageCacheTag(librarySeries, image);
                         dto.ParentThumbItemId = librarySeries.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -273,7 +273,7 @@ namespace Emby.Server.Implementations.LiveTv
                             };
                         dto.ParentBackdropItemId = librarySeries.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -313,7 +313,7 @@ namespace Emby.Server.Implementations.LiveTv
                         dto.ParentPrimaryImageTag = _imageProcessor.GetImageCacheTag(program, image);
                         dto.ParentPrimaryImageItemId = program.Id.ToString("N");
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -331,7 +331,7 @@ namespace Emby.Server.Implementations.LiveTv
                         };
                             dto.ParentBackdropItemId = program.Id.ToString("N");
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                         }
                     }
