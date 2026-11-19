@@ -233,7 +233,7 @@ POST /UserFavoriteItems/{id}    缺     ← 收藏
 | **全量备份/恢复** | `pg_dump -Fc` + config + metadata + manifest（SHA-256）；恢复走「标记待恢复 + 下次启动」，**恢复前自动快照**，失败自动回滚 | 端到端：备份 → 删行 → 恢复 → 行回来；改一个字节 → 拒绝；并发第二个被拒 |
 | **去 Emby 激活/连接** | 删掉整层许可门禁（原来恒返回"有效"，全是空操作）、Connect 的 3 条陈旧路径 + 2 个 schema、mb3admin 调用 | 服务实测：登录/API/`/app/` 全 200，`/emby/Connect/*` 404 |
 
-**测试 222 → 284**，Debug/Release 0 警告 0 错误，CI 五绿。
+**测试 222 → 309**，Debug/Release 0 警告 0 错误，CI 五绿。
 
 ### 过程中挖出来的真问题（都不是我预先列出的）
 
@@ -258,11 +258,24 @@ POST /UserFavoriteItems/{id}    缺     ← 收藏
 **顺带发现**：源缺色彩元数据时 `zscale` 会失败（`no path between colorspaces`），
 而此时探测结果本来就是 SDR、不会插入滤镜 —— 两条路径自洽，不会把无元数据的片子搞坏。
 
+### 第三批（HDR 协商 / 运维 / TVDB）
+
+| 项 | 内容 | 验证方式 |
+|---|---|---|
+| **HDR 客户端协商** | 接在 `ConditionProcessor.IsVideoConditionSatisfied` 既有条件链上，失败时经 `GetTranscodeReasonForFailedCondition` 映射为 `VideoRangeTypeNotSupported` | 7 个用例，其中 HDR 源 + 只支持 SDR 的客户端**改前是红的** |
+| **运维三件套** | `/health/live`（不查 DB）、`/health/ready`（独立非池化连接 SELECT 1）、`/health`；Prometheus（默认关闭）；SIGTERM 优雅停机（10s 超时） | 实测：三端点 200、`/metrics` 系列随请求增长、SIGTERM **505ms 正常退出**且日志有 4 步停机 |
+| **TVDB v4** | 名称搜索、增量更新、按 ID/远程 ID 全换 v4；API key 改为用户自备（未配置则明确禁用且只 Warn 一次）；游标存 `cache/tvdb/time.txt` | 6 个假 handler 测试（未配 key 零请求、登录、401 重登、分页、updates、expiresIn 容错） |
+
+**昨天为什么撤回了协商（这个教训值得记）**：`PlayMethod` 枚举第一个值就是 `Transcode`，
+而 `GetVideoDirectPlayProfile` 只在 `Item1 == null` 时才把 reason 累积进 `StreamInfo.TranscodeReasons`。
+昨天的早检查放在函数开头，一旦把 SDR 也判成"不支持"，所有请求都落到 null 分支 →
+「连 SDR+SDR 都转码」。**接在既有条件链上才是对的。**
+
 ### 仍未做（下一步）
 
 | 项 | 为什么 |
 |---|---|
-| **客户端 HDR 协商** | `ProfileConditionValue.VideoRangeType` 与 `TranscodeReason` 枚举已加，但 StreamBuilder 的接线**撤回了**：早检查的返回语义没被 `BuildVideoItem` 采纳，改对要动协商主流程。加个不生效的检查比不加更糟 |
+| **真实 TVDB key 验证** | 6 个测试全是构造响应，真实字段名依据官方文档。配一个免费 key 跑一遍才算真验证 |
 | **GPU 版色调映射** | 本次只做 CPU（zscale+tonemap）。GPU 版要跨 opencl/vaapi/cuda/libplacebo 五条链，单独一轮 |
 | **DoVi RPU reshape** | 只按 base layer 降级处理，不支持动态元数据 |
 | `openapi.json` 登记 `/System/Backup` 系列 | 端点已实现但未登记；需要一次正确的生成步骤，不能手写 schema |
