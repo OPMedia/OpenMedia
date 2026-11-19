@@ -39,8 +39,11 @@ pnpm dev          # http://localhost:5173
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `VITE_ENABLE_MOCK` | 开启 | 显式设为 `false` 才关闭 MSW，接真实后端 |
-| `VITE_API_PREFIX` | `/emby` | 后端 API 前缀 |
-| `VITE_BASE_PATH` | `/` | 路由 base，部署到子路径时改这里 |
+| `VITE_API_PREFIX` | `/emby` | 后端 API 前缀；子路径部署写 `/<BaseUrl>/emby`（例如 `/media/emby`） |
+| `VITE_BASE_PATH` | `/` | 路由与资源 base；子路径部署写 `/<BaseUrl>/app/`（例如 `/media/app/`），未设时由 `VITE_API_PREFIX` 推导 |
+
+服务端 `BaseUrl=/media` 时，构建用 `VITE_API_PREFIX=/media/emby`（或显式
+`VITE_BASE_PATH=/media/app/`）：API、Vue history base、Vite 资源 base 会同时带上 `/media`。
 
 ## 目录
 

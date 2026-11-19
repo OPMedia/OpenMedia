@@ -27,7 +27,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\src\MediaBrowser.Model\MediaBrowser.Model.csproj" />
+    <ProjectReference Include="..\src\Emby.Server.HttpServer\Emby.Server.HttpServer.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Common\MediaBrowser.Common.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />

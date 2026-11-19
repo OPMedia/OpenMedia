@@ -17,13 +17,18 @@ namespace Emby.Server.HttpServer.Routing
     {
         private readonly Func<Type, object> _createInstanceFn;
         private readonly Func<Type, Func<string, object>> _getParseFn;
+        private readonly string _baseUrl;
 
         private readonly Dictionary<Type, Type> ServiceOperationsMap = new Dictionary<Type, Type>();
 
-        public RouteTable(Func<Type, object> createInstanceFn, Func<Type, Func<string, object>> getParseFn)
+        public RouteTable(
+            Func<Type, object> createInstanceFn,
+            Func<Type, Func<string, object>> getParseFn,
+            string baseUrl = null)
         {
             _createInstanceFn = createInstanceFn;
             _getParseFn = getParseFn;
+            _baseUrl = BaseUrlHelper.Normalize(baseUrl);
         }
 
         public readonly RestPath.RestPathMap RestPathMap = new RestPath.RestPathMap();
@@ -110,6 +115,22 @@ namespace Emby.Server.HttpServer.Routing
                     Priority = route.Priority,
                     Summary = route.Summary
                 });
+            }
+
+            // BaseUrl 只新增前缀版本，原有 /emby、/mediabrowser、裸根三前缀保持可用。
+            if (_baseUrl.Length > 0)
+            {
+                foreach (var route in routes.ToArray())
+                {
+                    routes.Add(new RouteAttribute(BaseUrlHelper.Prepend(_baseUrl, route.Path), route.Verbs)
+                    {
+                        Notes = route.Notes,
+                        Priority = route.Priority,
+                        Summary = route.Summary,
+                        Description = route.Description,
+                        IsHidden = route.IsHidden
+                    });
+                }
             }
 
             return routes.ToArray();

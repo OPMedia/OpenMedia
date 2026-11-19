@@ -113,6 +113,17 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public string[] LocalNetworkAddresses { get; set; }
 
+	/// <summary>
+	/// 允许提供 X-Forwarded-* 头的直连代理地址（IP / CIDR，可带端口后缀）。
+	/// 默认空表示不信任任何代理，忽略全部转发头。
+	/// </summary>
+	public string[] KnownProxies { get; set; }
+
+	/// <summary>
+	/// 服务端部署前缀（例如 /media）。默认空字符串表示根路径部署。
+	/// </summary>
+	public string BaseUrl { get; set; }
+
 	public bool EnableExternalContentInSuggestions { get; set; }
 
 	public bool RequireHttps { get; set; }
@@ -139,6 +150,8 @@ public class ServerConfiguration : BaseApplicationConfiguration
 		RemoteIPFilter = Array.Empty<string>();
 		LocalNetworkSubnets = Array.Empty<string>();
 		LocalNetworkAddresses = Array.Empty<string>();
+		KnownProxies = Array.Empty<string>();
+		BaseUrl = string.Empty;
 		ImageExtractionTimeoutMs = 0;
 		PathSubstitutions = new PathSubstitution[0];
 		EnableSimpleArtistDetection = true;
