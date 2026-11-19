@@ -123,6 +123,7 @@ namespace Emby.Notifications
                 Level = request.Level,
                 Name = title,
                 Url = request.Url,
+                NotificationType = request.NotificationType,
                 User = user
             };
 
