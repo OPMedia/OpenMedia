@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MediaBrowser.Model.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.Extensions.Primitives;
 using IHttpFile = MediaBrowser.Model.Services.IHttpFile;
 using IHttpRequest = MediaBrowser.Model.Services.IHttpRequest;
@@ -21,6 +22,9 @@ namespace Emby.Server.HttpServer.RequestResponse
     /// </summary>
     public class KestrelRequest : IHttpRequest
     {
+        // IHttpRequest.Files 是同步属性；表单解析在同步边界用 JTF.Run 完成。
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly HttpContext _context;
         private readonly IHttpResponse _response;
 
@@ -428,7 +432,7 @@ namespace Emby.Server.HttpServer.RequestResponse
             {
                 if (_httpFiles == null)
                 {
-                    var form = GetParsedFormAsync().GetAwaiter().GetResult();
+                    var form = _joinableTaskFactory.Run(() => GetParsedFormAsync());
                     if (form == null || form.Files.Count == 0)
                     {
                         return _httpFiles = Array.Empty<IHttpFile>();
