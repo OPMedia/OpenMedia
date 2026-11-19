@@ -78,6 +78,7 @@ L "ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS person_type_name    TEXT;
 L "ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS sort_order          INTEGER;"
 L "ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS codec_time_base     TEXT;"
 L "ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS is_avc              BOOLEAN;"
+L "ALTER TABLE item_extradata  ADD COLUMN IF NOT EXISTS clean_value         TEXT;"
 L ""
 L "\timing on"
 L ""
