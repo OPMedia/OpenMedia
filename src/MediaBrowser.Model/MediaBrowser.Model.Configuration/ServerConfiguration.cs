@@ -144,8 +144,11 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public string[] UninstalledPlugins { get; set; }
 
+	public BackupOptions Backup { get; set; }
+
 	public ServerConfiguration()
 	{
+		Backup = new BackupOptions();
 		UninstalledPlugins = Array.Empty<string>();
 		RemoteIPFilter = Array.Empty<string>();
 		LocalNetworkSubnets = Array.Empty<string>();
