@@ -190,7 +190,11 @@ public class User : BaseItem
 		{
 			if (string.IsNullOrEmpty(username))
 			{
-				throw new ArgumentNullException("username");
+				// 一条 Name 缺失的用户记录曾经能让整个服务起不来：
+				// UserManager.Initialize 会遍历所有用户读 Policy，而 Policy 走
+				// Path → ConfigurationDirectoryPath，这里抛异常直接终止启动。
+				// 数据缺字段是运维现实，不该等于全站宕机——退回按 Id 的路径。
+				return System.IO.Path.Combine(userConfigurationDirectoryPath, Id.ToString("N"));
 			}
 			string validFilename = BaseItem.FileSystem.GetValidFilename(username);
 			return System.IO.Path.Combine(BaseItem.ConfigurationManager.ApplicationPaths.UserConfigurationDirectoryPath, validFilename);

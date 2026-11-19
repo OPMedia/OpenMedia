@@ -339,3 +339,58 @@ presentation_unique_key 反规范化进 user_datas。**未动**，因为会改 A
 `#if NETSTANDARD2_0`；`-enablegdi` 开关在 `Emby.Drawing.Net` 删除后只会选中 `NullImageEncoder`
 （等于关掉所有图片）；8 个只写不读的配置项；以及 `SetOptimalValues()` 里为「相机上传」这种
 早已删除的功能做的迁移标记。
+
+---
+
+## 十一、第三轮（a/b/c 三条线并行）
+
+### (a) 删历史包袱 —— 结论和考古报告相反
+
+考古报告列的五个"可移除"子系统，**四个其实都活着**：
+
+| 子系统 | 宣称 | 实测证据 | 处置 |
+|---|---|---|---|
+| `IO/SharpCifs` 38k | 死代码 | `Program.cs:92`→`ManagedFileSystem.cs:46` 构造；`SharpCifsFileSystem.cs:22-27` 匹配 `smb://`/`\\UNC`；~30 处 `IsEnabledForPath` 分支。默认配置走不到，但用户显式输入可达 | **保留**（产品决策） |
+| `BDInfo`+`DvdLib` 7.5k | 死代码 | `ApplicationHost.cs:944` 注册 `IBlurayExaminer`；`FFProbeVideoInfo` 取 BluRay 流/时长/章节；`MediaEncoder` 用 `DvdLib.Ifo.Dvd` 定位 VOB | **保留**（会破坏 ISO/DVD） |
+| `Mono.Nat` 1.6k | 默认已关 | `ExternalPortForwarding` 是 `IServerEntryPoint`，`EnableUPnP && EnableRemoteAccess` 默认均 `true` | **保留**（默认开启） |
+| `TheTVDB` 4k | `api.thetvdb.com` 已死 | 实际请求 `www.thetvdb.com`；默认禁用但用户可启用；`MissingEpisodeProvider` 等静态引用 `TvdbSeriesProvider.Current` | **保留**（应迁移到 api4，不是删） |
+| `Updates` + `GithubUpdater` | 自更新无效 | `CanSelfUpdate` 恒 false，`GithubUpdater` 唯一调用点就是发 HTTP 取上游 Emby 版本 | **已删 307 行**，`CheckForApplicationUpdate` 改为诚实返回"无更新"；路由与 DTO 未动 |
+
+**教训：考古报告能给方向，不能当判决。** 每一条都得用注册路径 + 配置路径 + 调用点三件事重新证一遍。
+
+### (b) Resume 计数 —— 覆盖索引
+
+`count(DISTINCT presentation_unique_key) ... LEFT JOIN user_datas` 需要回表读两列，旧索引只有 `user_data_key_id` 一列。
+改成 `(user_data_key_id) INCLUDE (presentation_unique_key, is_virtual_item)` 后走 Index Only Scan：
+
+| 场景 | 前 | 后 |
+|---|---|---|
+| 17,400 条续播（病态） | 317 ms | **45~53 ms** |
+| 50 条续播（真实） | 2~3 ms | 2~3 ms |
+
+语义零变化：`TotalRecordCount` 17400 → 17400，接口响应 **sha256 完全一致**（`34fc1e09…`）。
+索引建在 `PgSchemaInitializer` 而非 dump —— 它依赖补列 `is_virtual_item`，放 dump 里会在补列前执行而失败（踩了一次，已修）。
+
+### (c) `-enablegdi` 陷阱
+
+那个开关原本选 GDI 后端；`Emby.Drawing.Net` 删除后，带上它等于**跳过 Skia 和 ImageMagick，直接返回 `NullImageEncoder`** —— 图片全关。
+现在开关被移除：无论传不传，都是 Skia → ImageMagick → Null 的正常降级链。旧脚本传该参数不会报错，也不会再导致无图。
+
+同批清理：`CodecsUsed` 配置属性（唯一不在 `openapi.json` 契约里的那个）、`SetOptimalValues` 里与迁移入口冲突的两个完成标记、`#if TRAVISCI` 10 处、`ManagedFileSystem` 的 Mono 注释。
+
+### 附带的健壮性缺陷
+
+测试中发现：**一条 `Name` 为空的用户记录能让服务起不来** —— `UserManager.Initialize` 遍历用户读 Policy，Policy 走 `Path` → `ConfigurationDirectoryPath` → `throw new ArgumentNullException("username")`，直接终止启动。
+已改为：用户名缺失时回退到按 Id 的路径。数据缺字段是运维现实，不该等于全站宕机。
+
+### 最终端到端（6 并发 25s，195k 库）
+
+| 指标 | 起点 | 现在 |
+|---|---|---|
+| 吞吐 | 21.4 rps | **102.4 rps**（4.8×） |
+| ALL p95 | 1213 ms | **218.8 ms** |
+| 列表 p95 | 21.1 | **20.1 ms** |
+| 列表+人名字段 p95 | 1523 | **96.5 ms** |
+| 剧集 p95 | 350 | **26.9 ms** |
+| 继续观看 p95 | 1015 | **94.8 ms** |
+| 搜索 p95（6 万命中，病态） | 536 | 259 ms |
