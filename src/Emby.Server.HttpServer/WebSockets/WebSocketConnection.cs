@@ -138,7 +138,9 @@ namespace Emby.Server.HttpServer.WebSockets
                     Connection = this
                 };
 
-                OnReceive(info);
+                // 接收回调签名为 void；处理器（KestrelHost.ProcessWebSocketMessageReceived）
+                // 内部已捕获并记录异常，这里显式丢弃其 Task，不阻塞接收循环。
+                _ = OnReceive(info);
             }
             catch (Exception ex)
             {
