@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.MediaInfo;
 
@@ -7,10 +8,11 @@ namespace MediaBrowser.Model.Dlna;
 
 public class ConditionProcessor
 {
-	public bool IsVideoConditionSatisfied(ProfileCondition condition, int? width, int? height, int? videoBitDepth, int? videoBitrate, string videoProfile, double? videoLevel, float videoFramerate, int? packetLength, TransportStreamTimestamp? timestamp, bool? isAnamorphic, bool? isInterlaced, int? refFrames, int? numVideoStreams, int? numAudioStreams, string videoCodecTag, bool? isAvc)
+	public bool IsVideoConditionSatisfied(ProfileCondition condition, int? width, int? height, int? videoBitDepth, int? videoBitrate, string videoProfile, double? videoLevel, float videoFramerate, int? packetLength, TransportStreamTimestamp? timestamp, bool? isAnamorphic, bool? isInterlaced, int? refFrames, int? numVideoStreams, int? numAudioStreams, string videoCodecTag, bool? isAvc, VideoRangeType? videoRangeType = null)
 	{
 		return condition.Property switch
 		{
+			ProfileConditionValue.VideoRangeType => IsConditionSatisfied(condition, videoRangeType),
 			ProfileConditionValue.IsInterlaced => IsConditionSatisfied(condition, isInterlaced), 
 			ProfileConditionValue.IsAnamorphic => IsConditionSatisfied(condition, isAnamorphic), 
 			ProfileConditionValue.IsAvc => IsConditionSatisfied(condition, isAvc), 
@@ -91,6 +93,52 @@ public class ConditionProcessor
 			}
 		}
 		return false;
+	}
+
+	private bool IsConditionSatisfied(ProfileCondition condition, VideoRangeType? currentValue)
+	{
+		// SDR 是所有客户端的基线动态范围，未知来源也不做限制；声明的 VideoRangeType 只约束 HDR 来源。
+		if (!currentValue.HasValue || currentValue.Value == VideoRangeType.Unknown || currentValue.Value == VideoRangeType.SDR)
+		{
+			return true;
+		}
+		switch (condition.Condition)
+		{
+		case ProfileConditionType.EqualsAny:
+			foreach (string candidate in condition.Value?.Split('|') ?? Array.Empty<string>())
+			{
+				if (VideoRangeMatches(currentValue.Value, candidate.Trim()))
+				{
+					return true;
+				}
+			}
+			return false;
+		case ProfileConditionType.Equals:
+			return VideoRangeMatches(currentValue.Value, condition.Value?.Trim());
+		case ProfileConditionType.NotEquals:
+			return !VideoRangeMatches(currentValue.Value, condition.Value?.Trim());
+		default:
+			throw new InvalidOperationException("Unexpected ProfileConditionType: " + condition.Condition);
+		}
+	}
+
+	private static bool VideoRangeMatches(VideoRangeType source, string declared)
+	{
+		if (string.IsNullOrEmpty(declared))
+		{
+			return false;
+		}
+		if (StringHelper.EqualsIgnoreCase(declared, "HDR"))
+		{
+			return IsHdrRange(source);
+		}
+		return Enum.TryParse(declared, ignoreCase: true, out VideoRangeType declaredRange) && declaredRange == source;
+	}
+
+	private static bool IsHdrRange(VideoRangeType range)
+	{
+		return range is VideoRangeType.HDR10 or VideoRangeType.HLG or VideoRangeType.DolbyVision
+			or VideoRangeType.DolbyVisionWithHDR10 or VideoRangeType.DolbyVisionWithSDR;
 	}
 
 	private bool IsConditionSatisfied(ProfileCondition condition, string currentValue)
