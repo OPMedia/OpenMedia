@@ -395,7 +395,8 @@ namespace Emby.Server.PgData
             "CREATE INDEX IF NOT EXISTS idx_media_items_data_placeholder ON media_items ((data->>'IsPlaceHolder'))",
             "CREATE INDEX IF NOT EXISTS idx_item_extradata_value ON item_extradata (extradata_type_id, value, item_id)",
             "CREATE INDEX IF NOT EXISTS idx_item_people_person_item ON item_people (person_id, item_id)",
-            "CREATE INDEX IF NOT EXISTS idx_media_items_clean_name_trgm ON media_items USING gin (clean_name gin_trgm_ops)"
+            "CREATE INDEX IF NOT EXISTS idx_media_items_clean_name_trgm ON media_items USING gin (clean_name gin_trgm_ops)",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_original_title_trgm ON media_items USING gin (original_title gin_trgm_ops)"
         };
 
         private static readonly System.Action<string> _loggerRef = null; // 静态类无 logger——重试日志走异常消息
