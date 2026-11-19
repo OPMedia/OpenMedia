@@ -155,3 +155,42 @@
 | 日期 | Unix 时间转换 **0 处手写** |
 | 并发 | 无手写线程池/定时器；`Thread.Sleep` 只有 2 处 |
 | 字符串 | Base64Url **0 处手写** |
+
+---
+
+## 8. 第一批执行结果（已完成）
+
+| 分支 | 改动 | 净删 | 测试 |
+|---|---|---:|---|
+| `refactor/ipnetwork` | `IPNetwork/` 5 文件删除；`NetworkManager` 改用 BCL + `TryParse` 防护；私网判定 CIDR 化 | **−3,184** | 112 → 145 |
+| `refactor/bdinfo` | `BDInfo/` 21 文件删除；新增 156 行 IO 适配 + 91 行测试 | **−6,869** | 112 → 114 |
+| `refactor/deadcode` | `EncryptionManager`、`MyHttpUtility`、`LocalizablePluginHelper` 删除；`Random.Shared` | **−591** | 112 |
+| `fix(subtitles)` | 编码 provider 注册 + UTF-16 修复 | +~40 | 112 → **124** |
+
+合并后：**0 警告 0 错误，159 个测试全过**，`/app/` 与带查询串的 API 端点实测 200。
+
+本次总计：217,002 → **207,303 行**（−9,699），1,532 → 1,510 个 `.cs`。
+
+### 三处被 agent 推翻的判断（记录在案，避免以后再犯）
+
+调研报告基于静态 grep，有 3 条是假阳性，实施时被逐一推翻：
+
+| 报告的判断 | 实际情况 | 证据 |
+|---|---|---|
+| 3 份 `Replace` 扩展方法全是死码 | 只有 1 份是（`Emby.Naming.Extensions/`）。`Emby.Naming/StringExtensions` 被 `SeasonPathParser.cs:60` **静态调用**；`StringHelper.Replace` 有 **12 处**静态调用 | 静态调用 `StringExtensions.Replace(...)` 不经过实例方法绑定 |
+| `StreamHelper.cs:69` 是死重载 | 活的，`ProgressiveFileCopier.cs:95` 通过注入的 `_streamHelper` 字段调用 | 调用方是字段注入，不是直接方法名 |
+| `MediaBrowser.Controller/StringExtensions.cs` 存在 | 该路径不存在；实际是 `MediaBrowser.Controller.Extensions.StringExtensions`，只有活着的 `RemoveDiacritics` | — |
+
+**教训**：`扩展方法` 和 `字段注入` 这两类调用，静态 grep 按方法名搜会漏。判定死代码必须同时查 `类名.方法名(`、接口实现、字段类型。
+
+### 其他被推翻/修正的
+
+- `UserManager.cs:866` 的 `new Random()` 不是设备 ID 后缀，是**密码重置 PIN** —— 碰撞缺陷成立，结论不变
+- BDInfo 0.8.0 的 API 一开始被误判为"被砍了"（反射只看属性），补查 **public 字段**后确认全覆盖
+- `Mono.Nat` 最新版是 **3.0.4**，不是调研里猜的 10.x
+
+### 仍然待办
+
+- 第二批：`UTF.Unknown`（9,093 行 + 2.1MB）、`NLangDetect` 去留、`DvdLib` 去留 —— 需要产品/法务拍板
+- 第三批：`PriorityQueue`（775）、`ItemLruCache`（154）、`MimeTypes`（256）、Polly
+- 独立工单：无盐 SHA1 密码（C）、`MovieDbProvider` 节流竞态（D）、`FilterIpAddress` 里残留的 `StartsWith("169.")`
