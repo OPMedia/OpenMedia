@@ -3045,6 +3045,72 @@ namespace Emby.Server.Implementations.Library
             return new List<PersonInfo>();
         }
 
+        /// <summary>
+        /// 批量取 People：一页条目一次 item_people 查询（默认接口实现逐条回退）。
+        /// </summary>
+        public Dictionary<Guid, List<PersonInfo>> GetPeopleForItems(IReadOnlyList<Guid> itemIds)
+        {
+            return _joinableTaskFactory.Run(() => ItemRepository.GetPeopleForItemsAsync(itemIds));
+        }
+
+        /// <summary>
+        /// 批量水合人名对应的 Person 实体：按 GetPerson(name) 完全相同的确定性 ID
+        /// 一次取回，填入当前 BeginByNameBatch scope。库中缺失或未取到的人名不填，
+        /// 后续 GetPerson 仍走原路径（含内存创建），保证语义不变。
+        /// </summary>
+        public void PrimePeopleByNameCache(IReadOnlyList<string> names)
+        {
+            var batchCache = _personBatchCache.Value;
+            if (batchCache == null || names.Count == 0)
+            {
+                return;
+            }
+
+            var pairs = new List<KeyValuePair<string, Guid>>();
+            var ids = new HashSet<Guid>();
+            foreach (var name in names)
+            {
+                if (batchCache.ContainsKey(name))
+                {
+                    continue;
+                }
+
+                var id = GetItemByNameId<Person>(Person.GetPath, name);
+
+                // 已在内存缓存中的 Person 由 GetPerson 直接返回，保持同一实例。
+                if (LibraryItemsCache.TryGet(id, out var cached) && cached is Person)
+                {
+                    batchCache[name] = (Person)cached;
+                    continue;
+                }
+
+                pairs.Add(new KeyValuePair<string, Guid>(name, id));
+                ids.Add(id);
+            }
+
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var items = _joinableTaskFactory.Run(() => ItemRepository.RetrieveItemsAsync(ids.ToList()));
+                foreach (var pair in pairs)
+                {
+                    if (items.TryGetValue(pair.Value, out var item) && item is Person person && !batchCache.ContainsKey(pair.Key))
+                    {
+                        batchCache[pair.Key] = person;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 批量失败不能打断 DTO 序列化：退回逐条 GetPerson 原路径。
+                _logger.ErrorException("Error bulk hydrating people", ex);
+            }
+        }
+
         public List<Person> GetPeopleItems(InternalPeopleQuery query)
         {
             return ItemRepository.GetPeopleNames(query).Select(i =>

@@ -103,6 +103,8 @@ namespace Emby.Server.Implementations.Dto
             var programTuples = new List<Tuple<BaseItem, BaseItemDto>>();
             var channelTuples = new List<Tuple<BaseItemDto, LiveTvChannel>>();
 
+            var itemList = items as IList<BaseItem> ?? items.ToList();
+
             var index = 0;
             var allCollectionFolders = _libraryManager.GetUserRootFolder().Children.OfType<Folder>().ToList();
 
@@ -114,9 +116,31 @@ namespace Emby.Server.Implementations.Dto
             // 等），必须先把 scope 字典换成 ConcurrentDictionary，否则静默踩雷。
             using (LibraryManager.BeginByNameBatch())
             {
-                foreach (var item in items)
+                // 整页 People/Person 批量水合：2 条 SQL 取代逐条 GetPeople(item)/GetPerson 的 N+1。
+                // 失败时保留字典为 null，AttachPeople 走原逐条路径，行为不变。
+                Dictionary<Guid, List<PersonInfo>> peopleByItem = null;
+                if (options.ContainsField(ItemFields.People))
                 {
-                    var dto = GetBaseItemDtoInternal(item, options, allCollectionFolders, user, owner);
+                    try
+                    {
+                        var itemIds = itemList.Where(i => i.SupportsPeople).Select(i => i.Id).Distinct().ToList();
+                        peopleByItem = _libraryManager.GetPeopleForItems(itemIds);
+                        var names = peopleByItem.Values.SelectMany(i => i)
+                            .Select(i => i.Name)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
+                        _libraryManager.PrimePeopleByNameCache(names);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.ErrorException("Error bulk hydrating people", ex);
+                        peopleByItem = null;
+                    }
+                }
+
+                foreach (var item in itemList)
+                {
+                    var dto = GetBaseItemDtoInternal(item, options, allCollectionFolders, user, owner, peopleByItem);
 
                     var tvChannel = item as LiveTvChannel;
                     if (tvChannel != null)
@@ -210,7 +234,7 @@ namespace Emby.Server.Implementations.Dto
             });
         }
 
-        private BaseItemDto GetBaseItemDtoInternal(BaseItem item, DtoOptions options, List<Folder> allCollectionFolders, User user = null, BaseItem owner = null)
+        private BaseItemDto GetBaseItemDtoInternal(BaseItem item, DtoOptions options, List<Folder> allCollectionFolders, User user = null, BaseItem owner = null, IReadOnlyDictionary<Guid, List<PersonInfo>> peopleByItem = null)
         {
             var dto = new BaseItemDto
             {
@@ -224,7 +248,7 @@ namespace Emby.Server.Implementations.Dto
 
             if (options.ContainsField(ItemFields.People))
             {
-                AttachPeople(dto, item);
+                AttachPeople(dto, item, peopleByItem);
             }
 
             if (options.ContainsField(ItemFields.PrimaryImageAspectRatio))
@@ -582,12 +606,18 @@ namespace Emby.Server.Implementations.Dto
         /// <param name="dto">The dto.</param>
         /// <param name="item">The item.</param>
         /// <returns>Task.</returns>
-        private void AttachPeople(BaseItemDto dto, BaseItem item)
+        private void AttachPeople(BaseItemDto dto, BaseItem item, IReadOnlyDictionary<Guid, List<PersonInfo>> peopleByItem = null)
         {
             // Ordering by person type to ensure actors and artists are at the front.
             // This is taking advantage of the fact that they both begin with A
             // This should be improved in the future
-            var people = _libraryManager.GetPeople(item).OrderBy(i => i.SortOrder ?? int.MaxValue)
+            List<PersonInfo> itemPeople;
+            if (peopleByItem == null || !peopleByItem.TryGetValue(item.Id, out itemPeople))
+            {
+                itemPeople = _libraryManager.GetPeople(item);
+            }
+
+            var people = itemPeople.OrderBy(i => i.SortOrder ?? int.MaxValue)
                 .ThenBy(i =>
                 {
                     if (i.IsType(PersonType.Actor))
