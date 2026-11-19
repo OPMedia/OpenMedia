@@ -100,7 +100,13 @@ namespace Emby.Server.Implementations.EntryPoints
         /// <summary>
         /// Called when [timer fired].
         /// </summary>
-        private async void OnTimerFired()
+        private void OnTimerFired()
+        {
+            // 定时器回调签名为 void；遥测上报在助手中执行并显式丢弃 Task。
+            _ = OnTimerFiredAsync();
+        }
+
+        private async Task OnTimerFiredAsync()
         {
             if (!_config.Configuration.EnableAnonymousUsageReporting)
             {

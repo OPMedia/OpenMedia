@@ -109,7 +109,8 @@ namespace Emby.Server.Implementations.EntryPoints
 
             try
             {
-                _sessionManager.SendMessageToAdminSessions("RefreshProgress", dict, CancellationToken.None);
+                // 进度通知不阻塞刷新回调；原有 try/catch 仅处理同步异常，显式丢弃 Task 保持语义。
+                _ = _sessionManager.SendMessageToAdminSessions("RefreshProgress", dict, CancellationToken.None);
             }
             catch
             {
@@ -125,7 +126,8 @@ namespace Emby.Server.Implementations.EntryPoints
 
                 try
                 {
-                    _sessionManager.SendMessageToAdminSessions("RefreshProgress", collectionFolderDict, CancellationToken.None);
+                    // 同上：不阻塞刷新回调，显式丢弃通知 Task。
+                    _ = _sessionManager.SendMessageToAdminSessions("RefreshProgress", collectionFolderDict, CancellationToken.None);
                 }
                 catch
                 {
@@ -315,7 +317,13 @@ namespace Emby.Server.Implementations.EntryPoints
         /// <param name="foldersAddedTo">The folders added to.</param>
         /// <param name="foldersRemovedFrom">The folders removed from.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
-        private async void SendChangeNotifications(List<BaseItem> itemsAdded, List<BaseItem> itemsUpdated, List<BaseItem> itemsRemoved, List<Folder> foldersAddedTo, List<Folder> foldersRemovedFrom, CancellationToken cancellationToken)
+        private void SendChangeNotifications(List<BaseItem> itemsAdded, List<BaseItem> itemsUpdated, List<BaseItem> itemsRemoved, List<Folder> foldersAddedTo, List<Folder> foldersRemovedFrom, CancellationToken cancellationToken)
+        {
+            // ITimer 回调签名为 void；异步通知在助手中执行，异常由助手内部记录。
+            _ = SendChangeNotificationsAsync(itemsAdded, itemsUpdated, itemsRemoved, foldersAddedTo, foldersRemovedFrom, cancellationToken);
+        }
+
+        private async Task SendChangeNotificationsAsync(List<BaseItem> itemsAdded, List<BaseItem> itemsUpdated, List<BaseItem> itemsRemoved, List<Folder> foldersAddedTo, List<Folder> foldersRemovedFrom, CancellationToken cancellationToken)
         {
             var userIds = _sessionManager.Sessions
                 .Select(i => i.UserId)

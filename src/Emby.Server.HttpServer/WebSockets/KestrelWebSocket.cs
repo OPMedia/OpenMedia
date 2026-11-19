@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.HttpServer.WebSockets
 {
@@ -29,8 +30,10 @@ namespace Emby.Server.HttpServer.WebSockets
     /// </summary>
     public class KestrelWebSocket : IWebSocket
     {
+        // IDisposable.Dispose 是同步契约：关闭握手必须先于 socket.Dispose 完成。
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly System.Net.WebSockets.WebSocket _socket;
-        private readonly TaskCompletionSource<bool> _taskCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
 
         public event EventHandler<EventArgs> Closed;
@@ -49,8 +52,9 @@ namespace Emby.Server.HttpServer.WebSockets
         /// </summary>
         public Task StartReceive(CancellationToken cancellationToken)
         {
-            _ = ReceiveLoopAsync(cancellationToken);
-            return _taskCompletionSource.Task;
+            // 接收循环由本实例通过 JTF.RunAsync 启动；返回的 JoinableTask 被
+            // 跟踪为当前上下文的工作，等待其完成不会引入外来 Task 的死锁风险。
+            return _joinableTaskFactory.RunAsync(() => ReceiveLoopAsync(cancellationToken)).Task;
         }
 
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
@@ -74,7 +78,7 @@ namespace Emby.Server.HttpServer.WebSockets
                                 return;
                             }
 
-                            messageStream.Write(buffer, 0, result.Count);
+                            await messageStream.WriteAsync(buffer, 0, result.Count).ConfigureAwait(false);
                         }
                         while (!result.EndOfMessage);
 
@@ -99,7 +103,6 @@ namespace Emby.Server.HttpServer.WebSockets
             }
             finally
             {
-                _taskCompletionSource.TrySetResult(true);
                 Closed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -183,7 +186,8 @@ namespace Emby.Server.HttpServer.WebSockets
                 {
                     if (_socket.State == WebSocketState.Open)
                     {
-                        _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None).GetAwaiter().GetResult();
+                        // Dispose 为同步边界；JTF.Run 在等待关闭握手时允许延续任务回到原上下文。
+                        _joinableTaskFactory.Run(() => _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by server", CancellationToken.None));
                     }
                 }
                 catch

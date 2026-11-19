@@ -101,6 +101,7 @@ using MediaBrowser.Providers.Manager;
 using MediaBrowser.Providers.Subtitles;
 using MediaBrowser.WebDashboard.Api;
 using MediaBrowser.XbmcMetadata.Providers;
+using Microsoft.VisualStudio.Threading;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -126,6 +127,10 @@ namespace Emby.Server.Implementations
     /// </summary>
     public abstract class ApplicationHost : IServerApplicationHost, IDisposable
     {
+        // IApplicationHost.Init() 是同步契约；仓储初始化只能在此同步边界等待。
+        // JTF.Run 允许异步延续回到原上下文，避免 .GetAwaiter().GetResult() 死锁。
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         /// <summary>
         /// Gets a value indicating whether this instance can self restart.
         /// </summary>
@@ -1076,10 +1081,10 @@ namespace Emby.Server.Implementations
 
             RegisterSingleInstance(CreateResourceFileManager());
 
-            displayPreferencesRepo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => displayPreferencesRepo.InitializeAsync());
 
             var userDataRepo = new Emby.Server.PgData.PgUserDataRepository(LogManager.GetLogger("PgUserDataRepository"), GetPostgresConnectionString());
-            userDataRepo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => userDataRepo.InitializeAsync());
 
             SetStaticProperties();
 
@@ -1090,7 +1095,7 @@ namespace Emby.Server.Implementations
             ((UserManager)UserManager).Initialize();
 
             ((UserDataManager)UserDataManager).Repository = userDataRepo;
-            itemRepo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => itemRepo.InitializeAsync());
         }
 
         protected virtual IBrotliCompressor CreateBrotliCompressor()
@@ -1317,7 +1322,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgUserRepository(LogManager.GetLogger("PgUserRepository"), JsonSerializer, GetPostgresConnectionString());
 
-            repo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => repo.InitializeAsync());
 
             return repo;
         }
@@ -1326,7 +1331,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgAuthenticationRepository(LogManager.GetLogger("PgAuthenticationRepository"), GetPostgresConnectionString());
 
-            repo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => repo.InitializeAsync());
 
             return repo;
         }
@@ -1335,7 +1340,7 @@ namespace Emby.Server.Implementations
         {
             var repo = new Emby.Server.PgData.PgActivityRepository(LogManager.GetLogger("PgActivityRepository"), GetPostgresConnectionString());
 
-            repo.InitializeAsync().GetAwaiter().GetResult();
+            _joinableTaskFactory.Run(() => repo.InitializeAsync());
 
             return repo;
         }

@@ -7,6 +7,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DvdLib.Ifo;
+using Microsoft.VisualStudio.Threading;
 using Emby.Server.MediaEncoding.Probing;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
@@ -34,6 +35,9 @@ namespace Emby.Server.MediaEncoding.Encoder;
 
 public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 {
+	// IDisposable.Dispose 是同步契约；停止 ffmpeg 进程必须在 Dispose 返回前完成。
+	private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
 	private class ProcessWrapper : IDisposable
 	{
 		public readonly IProcess Process;
@@ -936,7 +940,7 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 	{
 		EncodingOptions encodingOptions = GetEncodingOptions();
 		EncodingJobInfo job = await new AudioEncoder(this, _logger, ConfigurationManager, FileSystem, IsoManager, LibraryManager, SessionManager, SubtitleEncoder(), MediaSourceManager(), _processFactory, _assemblyInfo, _jsonSerializer, _appHost).Start(options, encodingOptions, progress, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-		await job.TaskCompletionSource.Task.ConfigureAwait(continueOnCapturedContext: false);
+		await GetCompletionSource(job).Task.ConfigureAwait(continueOnCapturedContext: false);
 		return job.OutputFilePath;
 	}
 
@@ -944,8 +948,15 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 	{
 		EncodingOptions encodingOptions = GetEncodingOptions();
 		EncodingJobInfo job = await new VideoEncoder(this, _logger, ConfigurationManager, FileSystem, IsoManager, LibraryManager, SessionManager, SubtitleEncoder(), MediaSourceManager(), _processFactory, _assemblyInfo, _jsonSerializer, _appHost).Start(options, encodingOptions, progress, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-		await job.TaskCompletionSource.Task.ConfigureAwait(continueOnCapturedContext: false);
+		await GetCompletionSource(job).Task.ConfigureAwait(continueOnCapturedContext: false);
 		return job.OutputFilePath;
+	}
+
+	private static TaskCompletionSource<bool> GetCompletionSource(EncodingJobInfo job)
+	{
+		// job 是本方法刚启动的编码器的工作项，完成源属于该工作本身；
+		// 通过方法取得完成源仅声明所有权，不引入等待超时或取消语义变化。
+		return job.TaskCompletionSource;
 	}
 
 	private void StartProcess(ProcessWrapper process)
@@ -1099,8 +1110,8 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 	{
 		if (dispose)
 		{
-			Task task = StopProcesses();
-			Task.WaitAll(task);
+			// Dispose 为同步边界；JTF.Run 等待进程退出，允许延续任务回到原上下文。
+			_joinableTaskFactory.Run(() => StopProcesses());
 		}
 	}
 }
