@@ -8,10 +8,8 @@ public class EncodingOptions
 
 	public double DownMixAudioBoost { get; set; }
 
-	public bool EnableThrottling { get; set; }
-
-	public int ThrottleDelaySeconds { get; set; }
-
+	// 已移除 EnableThrottling / ThrottleDelaySeconds：出货 ffmpeg 的 stdin 不识别暂停键 `p`，
+	// 且 IProcess 不暴露 PID，无法用 SIGSTOP/SIGCONT 实现节流。保留配置只会误导使用者。
 	public string HardwareAccelerationType { get; set; }
 
 	public string EncoderAppPath { get; set; }
@@ -33,8 +31,6 @@ public class EncodingOptions
 	public EncodingOptions()
 	{
 		DownMixAudioBoost = 2.0;
-		EnableThrottling = true;
-		ThrottleDelaySeconds = 180;
 		EncodingThreadCount = -1;
 		VaapiDevice = "/dev/dri/renderD128";
 		H264Crf = 23;

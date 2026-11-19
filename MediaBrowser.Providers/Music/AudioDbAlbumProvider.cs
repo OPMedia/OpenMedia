@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -40,9 +41,53 @@ namespace MediaBrowser.Providers.Music
             Current = this;
         }
 
-        public Task<IEnumerable<RemoteSearchResult>> GetSearchResults(AlbumInfo searchInfo, CancellationToken cancellationToken)
+        public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(AlbumInfo searchInfo, CancellationToken cancellationToken)
         {
-            return Task.FromResult((IEnumerable<RemoteSearchResult>)new List<RemoteSearchResult>());
+            if (string.IsNullOrWhiteSpace(searchInfo.Name))
+            {
+                return new List<RemoteSearchResult>();
+            }
+
+            var artist = searchInfo.GetAlbumArtist();
+            var album = WebUtility.UrlEncode(searchInfo.Name);
+            var baseUrl = AudioDbArtistProvider.BaseUrl;
+            var url = string.IsNullOrWhiteSpace(artist)
+                ? baseUrl + "/searchalbum.php?a=" + album
+                : baseUrl + "/searchalbum.php?s=" + WebUtility.UrlEncode(artist) + "&a=" + album;
+
+            using (var response = await _httpClient.SendAsync(new HttpRequestOptions
+            {
+                Url = url,
+                CancellationToken = cancellationToken,
+                BufferContent = true
+            }, "GET").ConfigureAwait(false))
+            {
+                using (var stream = response.Content)
+                {
+                    var obj = await _json.DeserializeFromStreamAsync<RootObject>(stream).ConfigureAwait(false);
+                    var results = new List<RemoteSearchResult>();
+                    if (obj != null && obj.album != null)
+                    {
+                        foreach (var albumResult in obj.album)
+                        {
+                            var item = new RemoteSearchResult
+                            {
+                                Name = albumResult.strAlbum,
+                                ImageUrl = albumResult.strAlbumThumb,
+                                SearchProviderName = Name,
+                                ProductionYear = int.TryParse(albumResult.intYearReleased, NumberStyles.Integer, _usCulture, out var year) ? year : (int?)null,
+                                AlbumArtist = new RemoteSearchResult { Name = albumResult.strArtist, SearchProviderName = Name }
+                            };
+                            item.SetProviderId(MetadataProviders.AudioDbAlbum, albumResult.idAlbum);
+                            item.SetProviderId(MetadataProviders.AudioDbArtist, albumResult.idArtist);
+                            item.SetProviderId(MetadataProviders.MusicBrainzReleaseGroup, albumResult.strMusicBrainzID);
+                            results.Add(item);
+                        }
+                    }
+
+                    return results;
+                }
+            }
         }
 
         public async Task<MetadataResult<MusicAlbum>> GetMetadata(AlbumInfo info, CancellationToken cancellationToken)

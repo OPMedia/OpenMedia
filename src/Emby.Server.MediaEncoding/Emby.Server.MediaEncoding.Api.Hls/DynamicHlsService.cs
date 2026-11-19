@@ -840,7 +840,7 @@ public class DynamicHlsService : BaseHlsService
 		}
 		list.Add("temp_file");
 		string text8 = ((list.Count == 0) ? "" : ("-hls_flags " + string.Join("+", list.ToArray())));
-		string text9 = ((string.Equals(text5, "m4s", StringComparison.OrdinalIgnoreCase) || string.Equals(text5, "m4s", StringComparison.OrdinalIgnoreCase)) ? "fmp4" : "mpegts");
+		string text9 = ((string.Equals(text5, "m4s", StringComparison.OrdinalIgnoreCase) || string.Equals(text5, "mp4", StringComparison.OrdinalIgnoreCase)) ? "fmp4" : "mpegts");
 		return string.Format("{0} {1} -map_metadata -1 -map_chapters -1 -threads {2} {3} {4} {5} -max_delay 5000000 -avoid_negative_ts disabled -start_at_zero -hls_segment_type {13} -hls_time {6} {10} -individual_header_trailer 0 -start_number {7} -hls_list_size {8} -hls_segment_filename \"{12}\" -hls_fmp4_init_filename \"{11}\" -y \"{9}\"", inputModifier, EncodingHelper.GetInputArgument((EncodingJobInfo)(object)state, encodingOptions), numberOfThreads, text2, GetVideoArguments(state, encodingOptions), GetAudioArguments(state, encodingOptions), state.SegmentLength.ToString(UsCulture), text, ((EncodingJobInfo)state).HlsListSize.ToString(UsCulture), outputPath, text8, text7, text3, text9).Trim();
 	}
 }

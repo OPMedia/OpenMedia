@@ -77,8 +77,6 @@ export const serverConfig: Record<string, string | number | boolean> = {
   hardwareDecoder: '自动',
   hardwareEncoder: '自动',
   softwareEncoder: 'H.264 (AVC)',
-  enableThrottling: true,
-  throttleDelaySeconds: 180,
   transcodingTempPath: '',
   downMixAudioBoost: 2,
   enableAudioVbrEncoding: true,
@@ -139,8 +137,6 @@ export const serverConfigFields: { section: string; legend: string; fields: { ke
     legend: '软件编码器',
     fields: [
       { key: 'softwareEncoder', label: 'H.264 编码器', kind: 'select', options: ['H.264 (AVC)', 'H.265 (HEVC)'] },
-      { key: 'enableThrottling', label: '启用转码限速', kind: 'toggle', desc: '限制转码速度以降低 CPU 占用。' },
-      { key: 'throttleDelaySeconds', label: '限速延时（秒）', kind: 'number' },
     ],
   },
   {

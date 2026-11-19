@@ -106,6 +106,17 @@ public class EncodingHelper
 			{
 				return GetH264Encoder(state, encodingOptions);
 			}
+			if (string.Equals(outputVideoCodec, "hevc", StringComparison.OrdinalIgnoreCase))
+			{
+				// ffmpeg 没有名为 hevc 的编码器；始终给出合法名，缺失时由 ffmpeg 明确报错。
+				return "libx265";
+			}
+			if (string.Equals(outputVideoCodec, "av1", StringComparison.OrdinalIgnoreCase))
+			{
+				// 优先 SVT-AV1；出货 ffmpeg 没有它时退到 libaom-av1。两个都缺时仍返回
+				// 合法编码器名，让 ffmpeg 明确失败，而不是静默产出坏流。
+				return _mediaEncoder.SupportsEncoder("libsvtav1") ? "libsvtav1" : "libaom-av1";
+			}
 			if (string.Equals(outputVideoCodec, "vpx", StringComparison.OrdinalIgnoreCase))
 			{
 				return "libvpx";
@@ -1735,11 +1746,12 @@ public class EncodingHelper
 					}
 					break;
 				case "mpeg2video":
-					if (_mediaEncoder.SupportsDecoder("hevc_amf") && encodingOptions.HardwareDecodingCodecs.Contains("mpeg2video", StringComparer.OrdinalIgnoreCase))
-					{
-						return "-c:v mpeg2_mmal";
-					}
-					break;
+					// AMF 没有 MPEG-2 解码器（既没有 mpeg2_amf，也不该借用 hevc_amf / mpeg2_mmal）。
+					// 只摘掉这一项，避免上层误以为 AMF 能解码 MPEG-2；本流回退软件解码。
+					encodingOptions.HardwareDecodingCodecs = encodingOptions.HardwareDecodingCodecs
+						.Where(codec => !string.Equals(codec, "mpeg2video", StringComparison.OrdinalIgnoreCase))
+						.ToArray();
+					return null;
 				}
 			}
 		}

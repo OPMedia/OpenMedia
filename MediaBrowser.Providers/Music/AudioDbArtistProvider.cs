@@ -10,6 +10,7 @@ using MediaBrowser.Model.Serialization;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -27,7 +28,8 @@ namespace MediaBrowser.Providers.Music
 
         public static AudioDbArtistProvider Current;
 
-        private const string ApiKey = "49jhsf8248yfahka89724011";
+        // AudioDB 的公开测试 key（官方文档示例值），无需私密凭据。
+        private const string ApiKey = "123";
         public const string BaseUrl = "https://www.theaudiodb.com/api/v1/json/" + ApiKey;
 
         public AudioDbArtistProvider(IServerConfigurationManager config, IFileSystem fileSystem, IHttpClient httpClient, IJsonSerializer json)
@@ -39,9 +41,44 @@ namespace MediaBrowser.Providers.Music
             Current = this;
         }
 
-        public Task<IEnumerable<RemoteSearchResult>> GetSearchResults(ArtistInfo searchInfo, CancellationToken cancellationToken)
+        public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(ArtistInfo searchInfo, CancellationToken cancellationToken)
         {
-            return Task.FromResult((IEnumerable<RemoteSearchResult>)new List<RemoteSearchResult>());
+            if (string.IsNullOrWhiteSpace(searchInfo.Name))
+            {
+                return new List<RemoteSearchResult>();
+            }
+
+            var url = BaseUrl + "/search.php?s=" + WebUtility.UrlEncode(searchInfo.Name);
+            using (var response = await _httpClient.SendAsync(new HttpRequestOptions
+            {
+                Url = url,
+                CancellationToken = cancellationToken,
+                BufferContent = true
+            }, "GET").ConfigureAwait(false))
+            {
+                using (var stream = response.Content)
+                {
+                    var obj = await _json.DeserializeFromStreamAsync<RootObject>(stream).ConfigureAwait(false);
+                    var results = new List<RemoteSearchResult>();
+                    if (obj != null && obj.artists != null)
+                    {
+                        foreach (var artist in obj.artists)
+                        {
+                            var item = new RemoteSearchResult
+                            {
+                                Name = artist.strArtist,
+                                ImageUrl = artist.strArtistThumb,
+                                SearchProviderName = Name
+                            };
+                            item.SetProviderId(MetadataProviders.AudioDbArtist, artist.idArtist);
+                            item.SetProviderId(MetadataProviders.MusicBrainzArtist, artist.strMusicBrainzID);
+                            results.Add(item);
+                        }
+                    }
+
+                    return results;
+                }
+            }
         }
 
         public async Task<MetadataResult<MusicArtist>> GetMetadata(ArtistInfo info, CancellationToken cancellationToken)
