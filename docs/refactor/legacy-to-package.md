@@ -255,3 +255,71 @@ Jellyfin 的 `GetPrimaryPlaylistVobFiles` 用文件名的**最后一个下划线
 ### 顺带确认的事实
 
 Jellyfin 的密码体系（`PasswordHash` + `ICryptoProvider.CreatePasswordHash` + PBKDF2 + 登录时惰性 rehash）**在我们的 2018 年 Emby 代码里不存在** —— 我们的 `CryptographyProvider` 只有 `GetMD5`/`ComputeSHA1`/`ComputeMD5`。修无盐 SHA1 是要移植这套体系，不是一个「换依赖」，属独立工单。
+
+---
+
+## 10. 第三批 + 安全（已完成）
+
+### 10.1 密码：无盐 SHA1 → PBKDF2-SHA512（带惰性迁移）
+
+这是全仓库唯一一个真·安全问题，不是代码卫生。
+
+原状（`DefaultAuthenticationProvider.cs:93`）：`User.Salt` 字段存在但**从未用于加盐**，
+BCrypt 分支被注释掉，所有密码都是裸 `SHA1(UTF-8)` 的十六进制。
+
+现在：
+- 版本化格式 `$PBKDF2-SHA512$<iterations>$<salt-b64>$<hash-b64>`，盐内嵌，**不改表结构**
+- BCL `Rfc2898DeriveBytes.Pbkdf2`，210,000 迭代（写进串里，将来能升）
+- 校验改 `CryptographicOperations.FixedTimeEquals`（原来是比较字符串）
+- **登录时惰性迁移**：识别 legacy → 用明文重算 PBKDF2 并落库，用户无感
+- 三条校验入口（明文密码 / 本地密码 / hashedPassword）都接了升级，只在 success 时落库
+
+**真实服务上验证过**（不是单元测试）：`perf-user-001` 存量是 40 位 SHA1 →
+用旧密码登录 `200` → 库里变成 `$PBKDF2-SHA512$210000$…` → 同密码再登 `200` → 错密码 `401`。
+
+已知限制：只传 `hashedPassword` 的旧客户端无法迁移（SHA1 不可逆，服务端拿不到明文），
+那条路径改为恒定时间校验，等用户下次提供明文时升级。
+
+### 10.2 测试 schema 改由真实初始化器派生（挖出测试有效性大问题）
+
+原来 `ProductionSchemaTestBase` 用「嵌入 dump + 一份**手写 ALTER 子集**」造测试 schema。
+改成直接调 `PgSchemaInitializer.Initialize` 后，逐项对比发现旧 fixture 和生产**结构上差得远**：
+
+| 项 | 旧测试 schema | 生产 |
+|---|---|---|
+| 分区 | 25 张普通表，`relkind=r` | 26 个分区父表 + 53 个分区子表 |
+| 物化视图 | 0 | 2（`mv_library_stats`、`mv_continue_watching`） |
+| 索引 | 93 | 525 |
+| `display_preferences` 表 | 缺 | 有 |
+
+**列层面完全一致** —— 这才是那些差分测试一直绿着、却没人发现结构漂移的原因。
+也就是说查询引擎的 EXPLAIN/计划相关用例，此前一直在**没有分区、索引少 432 个**的库上跑。
+
+因为 `PgSchemaInitializer` 硬编码检查 `public.media_items`（`FixItemExtradata` 同理），
+测试侧改为「每用例一个独立数据库，其 `public` 就是测试 schema」，`DROP DATABASE ... WITH (FORCE)` 收尾。
+
+### 10.3 队列与缓存
+
+- 775 行 BlueRaja 优先队列 → BCL `PriorityQueue` 包一层 68 行的 `StablePriorityQueue`。
+  坑：vendored 版用 `InsertionIndex` 保证**同优先级 FIFO**，BCL 版不稳定 →
+  用 `(Priority, Sequence)` 复合键保住，5 个测试钉住。
+- 154 行手写 LRU → `Microsoft.Extensions.Caching.Memory`。
+  坑：MemoryCache 满容量时会**拒绝新条目**并在后台压实（实测新条目丢失、旧条目留下），
+  所以写入前显式 `Compact(...)`。`GetStats()` 查证只有一处日志消费，直接删。
+
+### 10.4 小 bug
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| TMDB 节流 | `static long _lastRequestTicks` 无同步，并发下节流失效 | `Interlocked.CompareExchange` 原子预留槽位 |
+| `FilterIpAddress` | `StartsWith("169.")` → 整个 169/8 被丢 | 只丢 `169.254.0.0/16`（链路本地） |
+| `MakeRelativePath` | 手算相对路径，跨 scheme 原样返回 | `Path.GetRelativePath`，URL/UNC 保留旧分支 |
+| `GetHostFromUrl` | `Split('/')` → userinfo/端口/IPv6 全进 HttpClient 缓存键 | `new Uri(url).Host`（超时封禁按主机共享） |
+| 重复 URL 拆解 ×2 | 两份逐字节相同 | 合并到 `UrlPathParser` |
+
+### 10.5 主动砍掉的两项
+
+- **`MimeTypes`（256 行）**：换 `FileExtensionContentTypeProvider` 要给 `MediaBrowser.Model`
+  这个契约程序集加 ASP.NET 框架引用，且它的表缺 `.dvr-ms`/`.wtv`/`.mk3d`，得逐条补。
+  收益对不起这个风险，留到最后。
+- **Polly**：只有 2 个调用点、约 60 行。为它引一个依赖不如把那个真实竞态修掉（已修）。
