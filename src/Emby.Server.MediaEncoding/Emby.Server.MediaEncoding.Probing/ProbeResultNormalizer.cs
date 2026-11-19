@@ -1114,7 +1114,8 @@ public class ProbeResultNormalizer
 		byte[] array = new byte[197];
 		using (Stream stream = _fileSystem.GetFileStream(path, (FileOpenMode)3, (FileAccessMode)1, (FileShareMode)1, false))
 		{
-			stream.Read(array, 0, array.Length);
+			// TS 包头需要 197 字节；ReadAtLeast 在短文件上保留原有的零填充判断。
+			stream.ReadAtLeast(array, array.Length, throwOnEndOfStream: false);
 		}
 		if (array[0] != 71)
 		{
