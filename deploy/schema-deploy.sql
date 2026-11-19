@@ -275,9 +275,9 @@ CREATE TABLE media_items_other     PARTITION OF media_items DEFAULT;
 -- 分区内索引 (每个分区自动继承)
 -- 唯一：仓储层媒体项 upsert 走 ON CONFLICT (guid, type)；分区表唯一索引必须含分区键 type
 CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_guid ON media_items (guid, type);
--- 外键列索引：避免父表 user_data_keys 更新时子表退化为全表 ShareLock
-CREATE INDEX idx_media_items_user_data_key_id                ON media_items (user_data_key_id)
-    WHERE user_data_key_id IS NOT NULL;
+-- 外键列索引：避免父表 user_data_keys 更新时子表退化为全表 ShareLock。
+-- Resume/IsResumable 计数还要读 presentation_unique_key/is_virtual_item，放进 INCLUDE
+-- 后可走 Index Only Scan（替代原单列索引，避免重复写放大）。
 CREATE INDEX idx_media_items_parent_id                       ON media_items (parent_id);
 CREATE INDEX idx_media_items_name                            ON media_items (name);
 CREATE INDEX idx_media_items_sort_name                       ON media_items (sort_name);

@@ -306,6 +306,8 @@ namespace Emby.Drawing
                 // Decoder failed to decode it
 #if DEBUG
                 _logger.ErrorException("Error encoding image", ex);
+#else
+                _ = ex;
 #endif
                 // Just spit out the original file if all the options are default
                 return new Tuple<string, string, DateTime>(originalImagePath, MimeTypes.GetMimeType(originalImagePath), dateModified);

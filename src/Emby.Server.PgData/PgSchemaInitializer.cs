@@ -22,6 +22,10 @@ namespace Emby.Server.PgData
     {
         private const string SchemaResourceName = "Emby.Server.PgData.emby_pgsql_dump_schema_optimized.sql";
 
+        private const string ResumeCountIndexDdl =
+            "CREATE INDEX IF NOT EXISTS idx_media_items_udk_resume_cover ON media_items (user_data_key_id) " +
+            "INCLUDE (presentation_unique_key, is_virtual_item) WHERE user_data_key_id IS NOT NULL";
+
         /// <summary>
         /// 初始化数据库结构（幂等，可重复调用）。
         /// </summary>
@@ -241,8 +245,21 @@ namespace Emby.Server.PgData
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_reported_device_id_unique ON devices (reported_device_id)");
 
             // ========== 外键缺失索引补齐（消除级联更新或父表更新导致的全表 ShareLock） ==========
-            Execute(connection, "CREATE INDEX IF NOT EXISTS idx_media_items_user_data_key_id ON media_items (user_data_key_id) WHERE user_data_key_id IS NOT NULL");
+            EnsureUserDataKeyCoveringIndex(connection);
             Execute(connection, "CREATE INDEX IF NOT EXISTS idx_user_settings_key_id ON user_settings (user_settings_key_id)");
+        }
+
+        /// <summary>
+        /// Resume/IsResumable 计数需要把 media_items.user_data_key_id 与 user_datas 连接后
+        /// 读取 presentation_unique_key/is_virtual_item；旧索引只有 udk 一列，仍需回 heap。
+        /// 195k 库、17.4k 续播条目实测旧索引 317ms，改走 Index Only Scan 后约 45ms；
+        /// 少量续播条目（50 行）原本走嵌套循环约 2-3ms，新索引下保持不变。
+        /// 新索引替代旧索引而不是并存，避免每条目写多维护一份索引。
+        /// </summary>
+        private static void EnsureUserDataKeyCoveringIndex(NpgsqlConnection connection)
+        {
+            Execute(connection, ResumeCountIndexDdl);
+            Execute(connection, "DROP INDEX IF EXISTS idx_media_items_user_data_key_id");
         }
 
         /// <summary>

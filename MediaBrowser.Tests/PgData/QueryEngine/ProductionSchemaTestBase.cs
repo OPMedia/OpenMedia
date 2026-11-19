@@ -216,7 +216,8 @@ namespace MediaBrowser.Tests.PgData
                 "ALTER TABLE media_streams ADD COLUMN IF NOT EXISTS codec_time_base TEXT",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_log_types_name ON activity_log_types (name)",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_reported_device_id_unique ON devices (reported_device_id)",
-                "CREATE INDEX IF NOT EXISTS idx_media_items_user_data_key_id ON media_items (user_data_key_id) WHERE user_data_key_id IS NOT NULL",
+                "CREATE INDEX IF NOT EXISTS idx_media_items_udk_resume_cover ON media_items (user_data_key_id) INCLUDE (presentation_unique_key, is_virtual_item) WHERE user_data_key_id IS NOT NULL",
+                "DROP INDEX IF EXISTS idx_media_items_user_data_key_id",
                 "CREATE INDEX IF NOT EXISTS idx_user_settings_key_id ON user_settings (user_settings_key_id)"
             };
 
