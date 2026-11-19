@@ -173,11 +173,23 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 
 	private string[] _inputProtocols = Array.Empty<string>();
 
+	private string[] _filters = Array.Empty<string>();
+
+	private string[] _hwaccels = Array.Empty<string>();
+
+	private string[] _bitStreamFilters = Array.Empty<string>();
+
+	private EncoderValidator _validator;
+
 	protected readonly CultureInfo UsCulture = new CultureInfo("en-US");
 
 	public string FFMpegPath { get; private set; }
 
 	public string FFProbePath { get; private set; }
+
+	public Version? EncoderVersion { get; private set; }
+
+	public Version MinimumEncoderVersion => EncoderValidator.MinimumEncoderVersion;
 
 	public string EncoderLocationType
 	{
@@ -263,10 +275,16 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 				SetExecutable(FFMpegPath);
 				SetExecutable(FFProbePath);
 			}
-			Tuple<List<string>, List<string>, List<string>> tuple = new EncoderValidator(_logger, _processFactory).Validate(FFMpegPath);
+			_validator = new EncoderValidator(_logger, _processFactory);
+			Tuple<List<string>, List<string>, List<string>> tuple = _validator.Validate(FFMpegPath);
 			SetAvailableDecoders(tuple.Item1.ToArray());
 			SetAvailableEncoders(tuple.Item2.ToArray());
 			SetAvailableInputProtocols(tuple.Item3.ToArray());
+			SetAvailableFilters(_validator.Filters.ToArray());
+			SetAvailableHwaccels(_validator.Hwaccels.ToArray());
+			SetAvailableBitStreamFilters(_validator.BitStreamFilters.ToArray());
+			EncoderVersion = _validator.GetMediaEncoderVersion();
+			_validator.EnsureEncoderVersion();
 		}
 	}
 
@@ -340,7 +358,7 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 		path = tuple.Item1;
 		if (!ValidateVersion(path, logOutput: true))
 		{
-			throw new ResourceNotFoundException("ffmpeg version 3.0 or greater is required.");
+			throw new ResourceNotFoundException($"ffmpeg version {MinimumEncoderVersion} or greater is required.");
 		}
 		EncodingOptions encodingOptions = GetEncodingOptions();
 		encodingOptions.EncoderAppPath = path;
@@ -473,6 +491,41 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 	public bool SupportsDecoder(string decoder)
 	{
 		return _decoders.Contains(decoder, StringComparer.OrdinalIgnoreCase);
+	}
+
+	public void SetAvailableFilters(string[] list)
+	{
+		_filters = list;
+	}
+
+	public void SetAvailableHwaccels(string[] list)
+	{
+		_hwaccels = list;
+	}
+
+	public void SetAvailableBitStreamFilters(string[] list)
+	{
+		_bitStreamFilters = list;
+	}
+
+	public bool SupportsFilter(string filter)
+	{
+		return !string.IsNullOrWhiteSpace(filter) && _filters.Contains(filter, StringComparer.OrdinalIgnoreCase);
+	}
+
+	public bool SupportsFilterWithOption(string filter, string option, string value = null)
+	{
+		return _validator != null && _validator.SupportsFilterWithOption(filter, option, value);
+	}
+
+	public bool SupportsHwaccel(string hwaccel)
+	{
+		return !string.IsNullOrWhiteSpace(hwaccel) && _hwaccels.Contains(hwaccel, StringComparer.OrdinalIgnoreCase);
+	}
+
+	public bool SupportsBitStreamFilterWithOption(string name, string option, string value = null)
+	{
+		return _validator != null && _validator.SupportsBitStreamFilterWithOption(name, option, value);
 	}
 
 	public bool CanEncodeToAudioCodec(string codec)
