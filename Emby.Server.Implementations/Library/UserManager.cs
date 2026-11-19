@@ -258,6 +258,7 @@ namespace Emby.Server.Implementations.Library
                 .FirstOrDefault(i => string.Equals(username, i.Name, StringComparison.OrdinalIgnoreCase));
 
             var success = false;
+            var passwordUpgraded = false;
             IAuthenticationProvider authenticationProvider = null;
 
             if (user != null)
@@ -265,6 +266,7 @@ namespace Emby.Server.Implementations.Library
                 var authResult = await AuthenticateLocalUser(username, password, hashedPassword, user, remoteEndPoint).ConfigureAwait(false);
                 authenticationProvider = authResult.Item1;
                 success = authResult.Item2;
+                passwordUpgraded = authResult.Item3;
             }
             else
             {
@@ -272,6 +274,7 @@ namespace Emby.Server.Implementations.Library
                 var authResult = await AuthenticateLocalUser(username, password, hashedPassword, null, remoteEndPoint).ConfigureAwait(false);
                 authenticationProvider = authResult.Item1;
                 success = authResult.Item2;
+                passwordUpgraded = authResult.Item3;
 
                 if (success && authenticationProvider != null && !(authenticationProvider is DefaultAuthenticationProvider))
                 {
@@ -326,8 +329,14 @@ namespace Emby.Server.Implementations.Library
                 if (isUserSession)
                 {
                     user.LastActivityDate = user.LastLoginDate = DateTime.UtcNow;
+                }
+
+                // Persist lazy PBKDF2 upgrades even when this is not a new session.
+                if (isUserSession || passwordUpgraded)
+                {
                     UpdateUser(user);
                 }
+
                 UpdateInvalidLoginAttemptCount(user, 0);
             }
             else
@@ -393,21 +402,18 @@ namespace Emby.Server.Implementations.Library
             }
         }
 
-        private async Task<Tuple<IAuthenticationProvider, bool>> AuthenticateLocalUser(string username, string password, string hashedPassword, User user, string remoteEndPoint)
+        private async Task<Tuple<IAuthenticationProvider, bool, bool>> AuthenticateLocalUser(string username, string password, string hashedPassword, User user, string remoteEndPoint)
         {
             bool success = false;
             IAuthenticationProvider authenticationProvider = null;
-
-            if (password != null && user != null)
-            {
-                // Doesn't look like this is even possible to be used, because of password == null checks below
-                hashedPassword = _defaultAuthenticationProvider.GetHashedString(user, password);
-            }
+            var passwordUpgraded = false;
 
             if (password == null)
             {
-                // legacy
-                success = string.Equals(_defaultAuthenticationProvider.GetPasswordHash(user), hashedPassword.Replace("-", string.Empty), StringComparison.OrdinalIgnoreCase);
+                // Legacy clients send a SHA1 hex string instead of the plaintext.
+                // The plaintext is unavailable, so this path cannot re-hash the stored value.
+                success = user != null && hashedPassword != null
+                    && _defaultAuthenticationProvider.VerifyHashString(_defaultAuthenticationProvider.GetPasswordHash(user), hashedPassword);
             }
             else
             {
@@ -423,23 +429,37 @@ namespace Emby.Server.Implementations.Library
                 }
             }
 
+            if (success && user != null && authenticationProvider is DefaultAuthenticationProvider
+                && _defaultAuthenticationProvider.IsLegacyHash(user.Password))
+            {
+                _defaultAuthenticationProvider.UpgradePassword(user, password);
+                passwordUpgraded = true;
+            }
+
             if (user != null)
             {
                 if (!success && _networkManager.IsInLocalNetwork(remoteEndPoint) && user.Configuration.EnableLocalPassword)
                 {
+                    var localPasswordHash = GetLocalPasswordHash(user);
+
                     if (password == null)
                     {
-                        // legacy
-                        success = string.Equals(GetLocalPasswordHash(user), hashedPassword.Replace("-", string.Empty), StringComparison.OrdinalIgnoreCase);
+                        success = hashedPassword != null && _defaultAuthenticationProvider.VerifyHashString(localPasswordHash, hashedPassword);
                     }
                     else
                     {
-                        success = string.Equals(GetLocalPasswordHash(user), _defaultAuthenticationProvider.GetHashedString(user, password), StringComparison.OrdinalIgnoreCase);
+                        success = _defaultAuthenticationProvider.Verify(localPasswordHash, password);
+                    }
+
+                    if (success && password != null && _defaultAuthenticationProvider.IsLegacyHash(user.EasyPassword))
+                    {
+                        user.EasyPassword = _defaultAuthenticationProvider.GetHashedString(user, password);
+                        passwordUpgraded = true;
                     }
                 }
             }
 
-            return new Tuple<IAuthenticationProvider, bool>(authenticationProvider, success);
+            return new Tuple<IAuthenticationProvider, bool, bool>(authenticationProvider, success, passwordUpgraded);
         }
 
         private void UpdateInvalidLoginAttemptCount(User user, int newValue)
@@ -483,7 +503,7 @@ namespace Emby.Server.Implementations.Library
 
         private bool IsPasswordEmpty(User user, string passwordHash)
         {
-            return string.Equals(passwordHash, _defaultAuthenticationProvider.GetEmptyHashedString(user), StringComparison.OrdinalIgnoreCase);
+            return _defaultAuthenticationProvider.IsEmptyPassword(passwordHash);
         }
 
         /// <summary>

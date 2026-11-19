@@ -21,6 +21,11 @@ namespace Emby.Server.Implementations.Cryptography
             }
         }
 
+        public byte[] CreatePasswordHash(string password, byte[] salt, int iterations)
+        {
+            return Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA512, 64);
+        }
+
         public byte[] ComputeMD5(Stream str)
         {
             using (var provider = MD5.Create())
