@@ -159,6 +159,7 @@ namespace Emby.Server.PgData
             // §5.2-3: guid 唯一索引（分区表唯一索引必须含分区键 type；guid 为最左前缀可服务 GUID 查找）
             Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_guid ON media_items (guid, type)");
 
+
             // §5.2-4: item_extradata 主键修正为 (item_id, extradata_type_id, value) + clean_value 列
             FixItemExtradata(connection);
 
@@ -216,6 +217,15 @@ namespace Emby.Server.PgData
 
             Execute(connection, "ALTER TABLE item_people ADD COLUMN IF NOT EXISTS person_type_name TEXT");
             Execute(connection, "ALTER TABLE item_people ADD COLUMN IF NOT EXISTS sort_order INTEGER");
+
+            // 过滤/排序热路径索引。必须放在所有 ADD COLUMN 之后：其中几条依赖
+            // is_folder / data / clean_name 这些由本方法补的列。
+            // 195k 条目实测（tests/perf/explain-matrix.sql）：is_locked 127ms→0.1ms、
+            // 日期过滤 172ms→10ms、data 字段过滤 500ms→0ms、Genres 过滤 141ms→0.2ms。
+            foreach (var ddl in HotPathIndexDdl)
+            {
+                Execute(connection, ddl);
+            }
 
             // ========== media_streams 补充列（旧 mediastreams 的 IsAvc/CodecTimeBase 在优化 schema 中缺失） ==========
 
@@ -369,6 +379,24 @@ namespace Emby.Server.PgData
                 }
             }
         }
+
+        /// <summary>
+        /// 过滤/排序热路径索引。195k 条目实测（tests/perf/explain-matrix.sql）：
+        /// is_locked 127ms→0.1ms、日期过滤 172ms→10ms、data 字段过滤 500ms→0ms。
+        /// 全部 IF NOT EXISTS，对既有库幂等补齐。
+        /// </summary>
+        private static readonly string[] HotPathIndexDdl =
+        {
+            "CREATE INDEX IF NOT EXISTS idx_media_items_is_locked ON media_items (id) WHERE is_locked",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_list_kind ON media_items (sort_name) WHERE is_movie AND NOT is_folder AND NOT is_virtual_item",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_date_last_saved ON media_items (date_last_saved) WHERE date_last_saved IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_data_status ON media_items ((data->>'Status'))",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_data_videotype ON media_items ((data->>'VideoType'))",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_data_placeholder ON media_items ((data->>'IsPlaceHolder'))",
+            "CREATE INDEX IF NOT EXISTS idx_item_extradata_value ON item_extradata (extradata_type_id, value, item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_item_people_person_item ON item_people (person_id, item_id)",
+            "CREATE INDEX IF NOT EXISTS idx_media_items_clean_name_trgm ON media_items USING gin (clean_name gin_trgm_ops)"
+        };
 
         private static readonly System.Action<string> _loggerRef = null; // 静态类无 logger——重试日志走异常消息
 

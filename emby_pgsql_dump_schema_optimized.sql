@@ -58,6 +58,9 @@ BEGIN;
 -- 确保 pgcrypto 可用 (UUID 生成)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- 中文/模糊检索（NameContains / Similar）依赖 pg_trgm
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- ###########################################################
 -- Database: activitylog
 -- ###########################################################
@@ -292,6 +295,11 @@ CREATE INDEX idx_media_items_images_gin                      ON media_items USIN
 CREATE INDEX idx_media_items_list_cover                      ON media_items (type, parent_id)
     INCLUDE (name, sort_name, index_number, production_year, community_rating, runtime_ticks);
 
+-- 热路径索引（195k 实测：is_locked 127ms→0.1ms，日期过滤 172ms→10ms）
+-- 依赖 data/clean_name/is_folder 列的那些由 PgSchemaInitializer 在补列之后创建
+CREATE INDEX IF NOT EXISTS idx_media_items_is_locked        ON media_items (id) WHERE is_locked;
+CREATE INDEX IF NOT EXISTS idx_media_items_date_last_saved ON media_items (date_last_saved) WHERE date_last_saved IS NOT NULL;
+
 COMMENT ON TABLE  media_items IS '媒体项核心表 — LIST分区by type, PK=(id, type)';
 COMMENT ON COLUMN media_items.runtime_ticks           IS '运行时长(ticks), 1 tick = 100ns';
 COMMENT ON COLUMN media_items.provider_ids            IS '外部提供商标识 JSONB, 如 {"Imdb":"tt123456","Tmdb":"1234"}';
@@ -458,6 +466,8 @@ CREATE TABLE item_people_p6 PARTITION OF item_people FOR VALUES WITH (MODULUS 8,
 CREATE TABLE item_people_p7 PARTITION OF item_people FOR VALUES WITH (MODULUS 8, REMAINDER 7);
 
 CREATE INDEX idx_item_people_person_id   ON item_people (person_id);
+-- 覆盖索引：PersonName 过滤（195k 实测 410ms→33ms，配合查询侧 OFFSET 0 物化屏障）
+CREATE INDEX IF NOT EXISTS idx_item_people_person_item ON item_people (person_id, item_id);
 CREATE UNIQUE INDEX idx_item_people_unique ON item_people (item_id, person_id, person_type);
 -- 覆盖索引: 获取某项的演员列表 (按排序)
 CREATE INDEX idx_item_people_cover       ON item_people (item_id, list_order)
@@ -501,6 +511,8 @@ CREATE TABLE IF NOT EXISTS item_extradata (
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_item_extradata_type_id ON item_extradata (extradata_type_id);
+-- 值 + 类型 + 条目：Genres/Tags/Studios 的 EXISTS 过滤（131ms→0.2ms）
+CREATE INDEX IF NOT EXISTS idx_item_extradata_value     ON item_extradata (extradata_type_id, value, item_id);
 
 -- ===========================================================
 -- imported_collections (小表)

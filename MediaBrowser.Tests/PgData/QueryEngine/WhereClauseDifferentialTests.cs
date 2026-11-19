@@ -253,25 +253,25 @@ namespace MediaBrowser.Tests.PgData
             await SeedDiffFixtureAsync().ConfigureAwait(false);
 
             // 旧: @Tag0 in (select CleanValue from itemvalues where ItemId=Guid and Type=4)
-            // 新: @Tag0 IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4)
+            // 新: EXISTS (SELECT 1 FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4 AND clean_value = @Tag0)
             await RunDiffAsync(new DiffCase(
                 "W-Tags", "Tags OR list via extradata type 4",
                 q => q.Tags = new[] { "Sports" },
-                "IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4)",
+                "EXISTS (SELECT 1 FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4 AND clean_value = @Tag0)",
                 "SELECT m.name FROM media_items m WHERE 'sports' IN (SELECT clean_value FROM item_extradata WHERE item_id = m.id AND extradata_type_id = 4) ORDER BY name")).ConfigureAwait(false);
 
             // 旧: @ExcludeTag0 not in (... Type=4)
             await RunDiffAsync(new DiffCase(
                 "W-ExcludeTags", "ExcludeTags via extradata type 4",
                 q => q.ExcludeTags = new[] { "Sports" },
-                "NOT IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4)",
+                "NOT EXISTS (SELECT 1 FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4 AND clean_value = @ExcludeTag0)",
                 "SELECT m.name FROM media_items m WHERE 'sports' NOT IN (SELECT clean_value FROM item_extradata WHERE item_id = m.id AND extradata_type_id = 4) ORDER BY name")).ConfigureAwait(false);
 
             // 旧: @Genre0 in (select CleanValue from itemvalues where ItemId=Guid and Type=2)
             await RunDiffAsync(new DiffCase(
                 "W-Genres", "Genres OR list via extradata type 2",
                 q => q.Genres = new[] { "Action" },
-                "IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 2)",
+                "EXISTS (SELECT 1 FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 2 AND clean_value = @Genre0)",
                 "SELECT m.name FROM media_items m WHERE 'action' IN (SELECT clean_value FROM item_extradata WHERE item_id = m.id AND extradata_type_id = 2) ORDER BY name")).ConfigureAwait(false);
 
             // 旧: guid in (select itemid from itemvalues where CleanValue=(select CleanName ...) and Type=3)

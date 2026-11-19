@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 树形合成 fixture：150 库 x (电影 400 + 系列 20x4季x10集)
 -- 生成器：tests\perf\fixture-100k-tree.ps1（勿手改，改生成器参数重跑）
 -- 形态：root(1) -> CollectionFolder(150) -> {Movie|Series->Season->Episode}
@@ -17,8 +17,9 @@ INSERT INTO media_items (guid, type, type_name, name, path, is_folder, data, pre
 VALUES (gen_random_uuid(), 24, 'MediaBrowser.Controller.Entities.AggregateFolder', 'perf-tree-root', 'D:\perf-tree', true,
         '{}'::jsonb, 'perf-tree-root', 'perf-tree-root');
 
-INSERT INTO media_items (guid, type, type_name, name, path, is_folder, data, presentation_unique_key, sort_name, top_parent_id)
+INSERT INTO media_items (guid, type, type_name, parent_id, name, path, is_folder, data, presentation_unique_key, sort_name, top_parent_id)
 SELECT gen_random_uuid(), 0, 'MediaBrowser.Controller.Entities.CollectionFolder',
+       (SELECT id FROM media_items WHERE type = 24 ORDER BY id LIMIT 1),
        'perf-lib-' || lpad(k::text, 3, '0'),
        'D:\perf-tree\perf-lib-' || lpad(k::text, 3, '0'),
        true, '{}'::jsonb,
@@ -53,6 +54,7 @@ SELECT
     (36000000000 + (n % 90) * 60000000000)::bigint,
     now() - ((n % 20000) || ' days')::interval,
     now() - ((n % 3650) || ' days')::interval,
+    now() - ((n % 365) || ' days')::interval,
     now() - ((n % 365) || ' days')::interval,
     now() - ((n % 365) || ' days')::interval,
     'pf-mv-' || lpad(n::text, 6, '0'),
@@ -223,23 +225,23 @@ SELECT m.id, m.parent_id, 1 FROM media_items m WHERE m.type = 3 ON CONFLICT DO N
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
 SELECT m.id, m.parent_id, 1 FROM media_items m WHERE m.type = 2 ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 2 ON CONFLICT DO NOTHING;
+SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 2 AND s.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 3 ON CONFLICT DO NOTHING;
+SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 3 AND s.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
 SELECT m.id, m.parent_id, 1 FROM media_items m WHERE m.type = 4 ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 4 ON CONFLICT DO NOTHING;
+SELECT m.id, s.parent_id, 2 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 4 AND s.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT m.id, s.parent_id, 3 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 4 ON CONFLICT DO NOTHING;
+SELECT m.id, s.parent_id, 3 FROM media_items m JOIN media_items s ON s.id = m.parent_id WHERE m.type = 4 AND s.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
 SELECT m.id, m.parent_id, 1 FROM media_items m WHERE m.type = 5 ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT m.id, sn.parent_id, 2 FROM media_items m JOIN media_items sn ON sn.id = m.parent_id WHERE m.type = 5 ON CONFLICT DO NOTHING;
+SELECT m.id, sn.parent_id, 2 FROM media_items m JOIN media_items sn ON sn.id = m.parent_id WHERE m.type = 5 AND sn.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT e.id, s.parent_id, 2 FROM media_items e JOIN media_items s ON s.id = e.series_id WHERE e.type = 5 ON CONFLICT DO NOTHING;
+SELECT e.id, s.parent_id, 2 FROM media_items e JOIN media_items s ON s.id = e.series_id WHERE e.type = 5 AND s.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 INSERT INTO ancestor_ids (item_id, ancestor_id, distance)
-SELECT e.id, sr.parent_id, 3 FROM media_items e JOIN media_items s ON s.id = e.series_id JOIN media_items sr ON sr.id = s.parent_id WHERE e.type = 5 ON CONFLICT DO NOTHING;
+SELECT e.id, sr.parent_id, 3 FROM media_items e JOIN media_items s ON s.id = e.series_id JOIN media_items sr ON sr.id = s.parent_id WHERE e.type = 5 AND sr.parent_id IS NOT NULL ON CONFLICT DO NOTHING;
 
 -- 12. media_streams（电影/集 x2 + 无音频流）
 INSERT INTO media_streams (item_id, stream_index, stream_type, codec, language, profile, width, height, is_interlaced, bit_rate)

@@ -87,8 +87,8 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT A.id, A.name FROM media_items A LEFT JOIN user
 \echo === BRANCH-24: GenreIds（IN 子查询，clean_value 精确）
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.id IN (SELECT iv.item_id FROM item_extradata iv WHERE iv.clean_value = 'genre5' AND iv.extradata_type_id = 2) ORDER BY A.sort_name LIMIT 100;
 
-\echo === BRANCH-25: Genres 名称（相关子查询：'x' IN (SELECT clean_value ... WHERE item_id = A.id)）
-EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND 'genre5' IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 2) ORDER BY A.sort_name LIMIT 100;
+\echo === BRANCH-25: Genres 名称（相关 EXISTS + clean_value 等值）
+EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND EXISTS (SELECT 1 FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 2 AND clean_value = 'genre5') ORDER BY A.sort_name LIMIT 100;
 
 \echo === BRANCH-26: Tags
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND 'tag7' IN (SELECT clean_value FROM item_extradata WHERE item_id = A.id AND extradata_type_id = 4) ORDER BY A.sort_name LIMIT 100;
@@ -104,7 +104,7 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND '
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.id IN (SELECT ip.item_id FROM item_people ip WHERE ip.person_id = 123) ORDER BY A.sort_name LIMIT 100;
 
 \echo === BRANCH-30: PersonName（join + name 过滤）
-EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.id IN (SELECT ip.item_id FROM item_people ip JOIN media_items p ON p.id = ip.person_id WHERE p.name = 'Person-001') ORDER BY A.sort_name LIMIT 100;
+EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.id IN (SELECT ip.item_id FROM item_people ip JOIN media_items p ON p.id = ip.person_id WHERE p.name = 'Person-001' OFFSET 0) ORDER BY A.sort_name LIMIT 100;
 
 -- ---------- 层级族 ----------
 \echo === BRANCH-31: AncestorId（ancestor_ids 闭包表）
@@ -124,11 +124,11 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND (
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND EXISTS (SELECT 1 FROM media_streams WHERE item_id = A.id AND stream_type = 2) ORDER BY A.sort_name LIMIT 100;
 
 -- ---------- jsonb / LIKE-on-blob 族 ----------
-\echo === BRANCH-36: VideoType（A.data::text LIKE）
-EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND (A.data::text LIKE '%"VideoType":"Bluray"%' OR A.data::text LIKE '%"VideoType":"Dvd"%') ORDER BY A.sort_name LIMIT 100;
+\echo === BRANCH-36: VideoType（data->>'VideoType' = 参数）
+EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND (A.data->>'VideoType' = 'Bluray' OR A.data->>'VideoType' = 'Dvd') ORDER BY A.sort_name LIMIT 100;
 
-\echo === BRANCH-37: SeriesStatus（A.data::text LIKE）
-EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.data::text LIKE '%"Status":"Continuing"%' ORDER BY A.sort_name LIMIT 100;
+\echo === BRANCH-37: SeriesStatus（data->>'Status' = 参数）
+EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.data->>'Status' = 'Continuing' ORDER BY A.sort_name LIMIT 100;
 
 \echo === BRANCH-38: ProviderIds jsonb（->>'Imdb' IS NOT NULL）
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.provider_ids->>'Imdb' IS NOT NULL ORDER BY A.sort_name LIMIT 100;
