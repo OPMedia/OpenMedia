@@ -50,7 +50,9 @@ namespace Emby.Server.Implementations.TextEncoding
             if (count >= 3)
             {
                 if (buffer[0] == 0x2b && buffer[1] == 0x2f && buffer[2] == 0x76)
+#pragma warning disable SYSLIB0001 // UTF-7 是旧字幕文件的既有编码，改 UTF-8 会错解码 +base64- 转义
                     return Encoding.UTF7;
+#pragma warning restore SYSLIB0001
             }
 
             var result = new TextEncodingDetect().DetectEncoding(buffer, count);
@@ -135,7 +137,7 @@ namespace Emby.Server.Implementations.TextEncoding
             {
                 return LanguageDetector.DetectLanguage(Encoding.UTF8.GetString(bytes, index, count));
             }
-            catch (NLangDetectException ex)
+            catch (NLangDetectException)
             {
             }
 
@@ -143,7 +145,7 @@ namespace Emby.Server.Implementations.TextEncoding
             {
                 return LanguageDetector.DetectLanguage(Encoding.ASCII.GetString(bytes, index, count));
             }
-            catch (NLangDetectException ex)
+            catch (NLangDetectException)
             {
             }
 
@@ -151,7 +153,7 @@ namespace Emby.Server.Implementations.TextEncoding
             {
                 return LanguageDetector.DetectLanguage(Encoding.Unicode.GetString(bytes, index, count));
             }
-            catch (NLangDetectException ex)
+            catch (NLangDetectException)
             {
             }
 

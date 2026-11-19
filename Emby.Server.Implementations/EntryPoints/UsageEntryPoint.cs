@@ -86,9 +86,9 @@ namespace Emby.Server.Implementations.EntryPoints
                     .ReportAppUsage(client, CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                //_logger.ErrorException("Error sending anonymous usage statistics.", ex);
+                // 匿名统计的失败被有意忽略，不记录（保持原有行为）
             }
         }
 
@@ -119,9 +119,9 @@ namespace Emby.Server.Implementations.EntryPoints
                     .ReportServerUsage(CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                //_logger.ErrorException("Error sending anonymous usage statistics.", ex);
+                // 匿名统计的失败被有意忽略，不记录（保持原有行为）
             }
         }
 

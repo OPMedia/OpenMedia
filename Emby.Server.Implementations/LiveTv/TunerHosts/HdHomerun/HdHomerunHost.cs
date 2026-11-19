@@ -207,9 +207,10 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
                 var tuners = new List<LiveTvTunerInfo>();
                 using (var sr = new StreamReader(stream, System.Text.Encoding.UTF8))
                 {
-                    while (!sr.EndOfStream)
+                    string rawLine;
+                    while ((rawLine = await sr.ReadLineAsync().ConfigureAwait(false)) != null)
                     {
-                        string line = StripXML(await sr.ReadLineAsync().ConfigureAwait(false));
+                        string line = StripXML(rawLine);
                         if (line.Contains("Channel"))
                         {
                             LiveTvTunerStatus status;

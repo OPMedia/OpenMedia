@@ -1157,15 +1157,10 @@ namespace Emby.Server.Implementations
 
         private void SetHttpLimit()
         {
-            try
-            {
-                // Increase the max http request limit
-                ServicePointManager.DefaultConnectionLimit = Math.Max(96, ServicePointManager.DefaultConnectionLimit);
-            }
-            catch (Exception ex)
-            {
-                Logger.ErrorException("Error setting http limit", ex);
-            }
+            // ServicePointManager 只对 .NET Framework 的 HttpWebRequest 生效，
+            // .NET Core/.NET 10 的 SocketsHttpHandler 完全无视它（SYSLIB0014）。
+            // 每条连接上限已改为在 HttpClientManager 创建 handler 时设置
+            // SocketsHttpHandler.MaxConnectionsPerServer，语义等价且真正生效。
         }
 
         protected string GetDefaultUserAgent()
@@ -1211,7 +1206,13 @@ namespace Emby.Server.Implementations
                 // Don't use an empty string password
                 var password = string.IsNullOrWhiteSpace(info.Password) ? null : info.Password;
 
-                X509Certificate2 localCert = new X509Certificate2(certificateLocation, password);
+                // SYSLIB0057：旧构造函数已过时。按文件格式走对应的 loader。
+                var isPkcs12 = certificateLocation.EndsWith(".pfx", StringComparison.OrdinalIgnoreCase)
+                    || certificateLocation.EndsWith(".p12", StringComparison.OrdinalIgnoreCase);
+
+                X509Certificate2 localCert = isPkcs12
+                    ? X509CertificateLoader.LoadPkcs12FromFile(certificateLocation, password)
+                    : X509CertificateLoader.LoadCertificateFromFile(certificateLocation);
                 //localCert.PrivateKey = PrivateKey.CreateFromFile(pvk_file).RSA;
                 if (!localCert.HasPrivateKey)
                 {

@@ -99,7 +99,10 @@ namespace Emby.Server.Implementations.HttpClientManager
                     AutomaticDecompression = enableHttpCompression
                         ? DecompressionMethods.GZip | DecompressionMethods.Deflate
                         : DecompressionMethods.None,
-                    UseCookies = false
+                    UseCookies = false,
+                    // 取代 ApplicationHost 里对 ServicePointManager.DefaultConnectionLimit 的设置
+                    // （.NET Core 起该设置不再影响 HttpClient，SYSLIB0014）
+                    MaxConnectionsPerServer = 96
                 };
 
                 client.HttpClient = new HttpClient(handler);

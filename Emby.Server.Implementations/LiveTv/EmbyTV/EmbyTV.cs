@@ -72,7 +72,15 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
 
         public static EmbyTV Current;
 
-        public event EventHandler DataSourceChanged;
+        // 是 ILiveTvService 的公开订阅面；当前没有稳定可证的 raise 点，
+        // 保留订阅能力、用显式访问器消除「事件从未使用」告警。
+        private EventHandler _dataSourceChanged;
+
+        public event EventHandler DataSourceChanged
+        {
+            add { _dataSourceChanged += value; }
+            remove { _dataSourceChanged -= value; }
+        }
         public event EventHandler<GenericEventArgs<TimerInfo>> TimerCreated;
         public event EventHandler<GenericEventArgs<string>> TimerCancelled;
 
@@ -104,7 +112,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
 
             _seriesTimerProvider = new SeriesTimerManager(fileSystem, jsonSerializer, _logger, Path.Combine(DataPath, "seriestimers"));
             _timerProvider = new TimerManager(fileSystem, jsonSerializer, _logger, Path.Combine(DataPath, "timers"), _logger, timerFactory, powerManagement);
-            _timerProvider.TimerFired += _timerProvider_TimerFired;
+            _timerProvider.TimerFired += (sender, e) => _ = TimerFiredAsync(e);
 
             _config.NamedConfigurationUpdated += _config_NamedConfigurationUpdated;
         }
@@ -117,12 +125,26 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             }
         }
 
-        public async void Start()
+        public void Start()
         {
             _timerProvider.RestartTimers();
 
             _systemEvents.Resume += _systemEvents_Resume;
-            await CreateRecordingFolders().ConfigureAwait(false);
+
+            // IServerEntryPoint.Run() 是同步契约，启动期的目录创建放到后台完成
+            _ = StartInternalAsync();
+        }
+
+        private async Task StartInternalAsync()
+        {
+            try
+            {
+                await CreateRecordingFolders().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error creating recording folders on startup", ex);
+            }
         }
 
         private void _systemEvents_Resume(object sender, EventArgs e)
@@ -130,9 +152,21 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             _timerProvider.RestartTimers();
         }
 
-        private async void OnRecordingFoldersChanged()
+        private void OnRecordingFoldersChanged()
         {
-            await CreateRecordingFolders().ConfigureAwait(false);
+            _ = OnRecordingFoldersChangedAsync();
+        }
+
+        private async Task OnRecordingFoldersChangedAsync()
+        {
+            try
+            {
+                await CreateRecordingFolders().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error creating recording folders after config change", ex);
+            }
         }
 
         internal async Task CreateRecordingFolders()
@@ -244,7 +278,8 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
 
             if (requiresRefresh)
             {
-                _libraryManager.ValidateMediaLibrary(new SimpleProgress<Double>(), CancellationToken.None);
+                // 库刷新是后台任务，录制流程不等待其完成
+                _ = _libraryManager.ValidateMediaLibrary(new SimpleProgress<Double>(), CancellationToken.None);
             }
         }
 
@@ -1171,7 +1206,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             return Task.FromResult(0);
         }
 
-        async void _timerProvider_TimerFired(object sender, GenericEventArgs<TimerInfo> e)
+        private async Task TimerFiredAsync(GenericEventArgs<TimerInfo> e)
         {
             var timer = e.Argument;
 
@@ -1395,7 +1430,9 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
 
                 _logger.Info("Writing file to path: " + recordPath);
 
-                Action onStarted = async () =>
+                // IRecorder.Record 要求 Action；同步部分保持不变，
+                // 异步收尾工作转入有异常处理的私有方法（原实现是 async void lambda）
+                Action onStarted = () =>
                 {
                     activeRecordingInfo.Path = recordPath;
 
@@ -1404,12 +1441,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
                     timer.Status = RecordingStatus.InProgress;
                     _timerProvider.AddOrUpdate(timer, false);
 
-                    await SaveRecordingMetadata(timer, recordPath, seriesPath).ConfigureAwait(false);
-
-                    await CreateRecordingFolders().ConfigureAwait(false);
-
-                    TriggerRefresh(recordPath);
-                    EnforceKeepUpTo(timer, seriesPath);
+                    _ = CompleteRecordingStartAsync(timer, recordPath, seriesPath);
                 };
 
                 await recorder.Record(directStreamProvider, mediaStreamInfo, recordPath, duration, onStarted, activeRecordingInfo.CancellationTokenSource.Token).ConfigureAwait(false);
@@ -1568,7 +1600,25 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             return item;
         }
 
-        private async void EnforceKeepUpTo(TimerInfo timer, string seriesPath)
+        private async Task CompleteRecordingStartAsync(TimerInfo timer, string recordPath, string seriesPath)
+        {
+            try
+            {
+                await SaveRecordingMetadata(timer, recordPath, seriesPath).ConfigureAwait(false);
+
+                await CreateRecordingFolders().ConfigureAwait(false);
+
+                TriggerRefresh(recordPath);
+
+                _ = EnforceKeepUpToAsync(timer, seriesPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error completing recording start for {0}", ex, recordPath);
+            }
+        }
+
+        private async Task EnforceKeepUpToAsync(TimerInfo timer, string seriesPath)
         {
             if (string.IsNullOrWhiteSpace(timer.SeriesTimerId))
             {

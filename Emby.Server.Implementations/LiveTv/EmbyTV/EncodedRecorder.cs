@@ -39,7 +39,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
         private IProcess _process;
         private readonly IProcessFactory _processFactory;
         private readonly IJsonSerializer _json;
-        private readonly TaskCompletionSource<bool> _taskCompletionSource = new TaskCompletionSource<bool>();
+        private TaskCompletionSource<bool> _taskCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly IServerConfigurationManager _config;
         private readonly IAssemblyInfo _assemblyInfo;
 
@@ -86,8 +86,13 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             return _config.GetConfiguration<EncodingOptions>("encoding");
         }
 
-        private Task RecordFromFile(MediaSourceInfo mediaSource, string inputFile, string targetFile, TimeSpan duration, Action onStarted, CancellationToken cancellationToken)
+        private async Task RecordFromFile(MediaSourceInfo mediaSource, string inputFile, string targetFile, TimeSpan duration, Action onStarted, CancellationToken cancellationToken)
         {
+            // 每个实例只服务一次录制；在本次调用内重建完成信号，
+            // 既避免复用陈旧状态，也让「等待的 Task 在本方法内创建」成立
+            var completionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _taskCompletionSource = completionSource;
+
             _targetPath = targetFile;
             _fileSystem.CreateDirectory(_fileSystem.GetDirectoryName(targetFile));
 
@@ -121,7 +126,7 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             _logFileStream = _fileSystem.GetFileStream(logFilePath, FileOpenMode.Create, FileAccessMode.Write, FileShareMode.Read, true);
 
             var commandLineLogMessageBytes = Encoding.UTF8.GetBytes(_json.SerializeToString(mediaSource) + Environment.NewLine + Environment.NewLine + commandLineLogMessage + Environment.NewLine + Environment.NewLine);
-            _logFileStream.Write(commandLineLogMessageBytes, 0, commandLineLogMessageBytes.Length);
+            await _logFileStream.WriteAsync(commandLineLogMessageBytes, 0, commandLineLogMessageBytes.Length, cancellationToken).ConfigureAwait(false);
 
             process.Exited += (sender, args) => OnFfMpegProcessExited(process, inputFile);
 
@@ -135,11 +140,13 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             onStarted();
 
             // Important - don't await the log task or we won't be able to kill ffmpeg when the user stops playback
-            StartStreamingLog(process.StandardError.BaseStream, _logFileStream);
+            BeginStreamingLog(process.StandardError.BaseStream, _logFileStream);
 
             _logger.Info("ffmpeg recording process started for {0}", _targetPath);
 
-            return _taskCompletionSource.Task;
+            // 等待录制结束信号。等待的是本次调用内创建的 Task，
+            // 完成方是进程退出处理器（同实例字段指向同一对象）。
+            await completionSource.Task.ConfigureAwait(false);
         }
 
         private string GetCommandLineArgs(MediaSourceInfo mediaSource, string inputTempFile, string targetFile, TimeSpan duration)
@@ -367,16 +374,21 @@ namespace Emby.Server.Implementations.LiveTv.EmbyTV
             }
         }
 
-        private async void StartStreamingLog(Stream source, Stream target)
+        private void BeginStreamingLog(Stream source, Stream target)
+        {
+            // 日志跟随进程生命周期，刻意不等待
+            _ = StartStreamingLogAsync(source, target);
+        }
+
+        private async Task StartStreamingLogAsync(Stream source, Stream target)
         {
             try
             {
                 using (var reader = new StreamReader(source))
                 {
-                    while (!reader.EndOfStream)
+                    string line;
+                    while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null)
                     {
-                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
-
                         var bytes = Encoding.UTF8.GetBytes(Environment.NewLine + line);
 
                         await target.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);

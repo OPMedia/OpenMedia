@@ -396,11 +396,11 @@ namespace SharpCifs
                                 }
 
 						    }
-						    catch (Exception ex)
+						    catch (Exception)
 						    {
 						        if (i == _resolveOrder.Length - 1)
 						        {
-						            throw ex;
+						            throw;
 						        }
 						        else
 						        {

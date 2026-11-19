@@ -71,6 +71,12 @@ namespace SharpCifs.Smb
 			return false;
 		}
 
+		public override int GetHashCode()
+		{
+			// 与 Matches 保持一致的大小写不敏感语义
+			return StringComparer.OrdinalIgnoreCase.GetHashCode(Share ?? string.Empty);
+		}
+
 		/// <exception cref="SharpCifs.Smb.SmbException"></exception>
 		internal virtual void Send(ServerMessageBlock request, ServerMessageBlock response
 			)

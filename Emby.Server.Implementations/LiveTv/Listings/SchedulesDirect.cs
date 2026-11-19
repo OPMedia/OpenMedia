@@ -140,7 +140,6 @@ namespace Emby.Server.Implementations.LiveTv.Listings
                 httpOptions.RequestContent = requestBody;
 
                 double wideAspect = 1.77777778;
-                var primaryImageCategory = "Logo";
 
                 using (var innerResponse = await Post(httpOptions, true, info).ConfigureAwait(false))
                 {

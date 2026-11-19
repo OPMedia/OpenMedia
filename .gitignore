@@ -238,3 +238,4 @@ MediaBrowser.WebDashboard/dashboard-ui/.idea/
 # LiveTv 测试 fixture 生成物（setup-livetv.ps1 每次按当前时间重写节目窗，入库必脏树）
 tests/livetv/guide.xml
 tests/livetv/channels.m3u
+.alma-snapshots
