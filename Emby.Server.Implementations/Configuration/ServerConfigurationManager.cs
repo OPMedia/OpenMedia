@@ -235,18 +235,8 @@ namespace Emby.Server.Implementations.Configuration
                 changed = true;
             }
 
-            if (!config.CameraUploadUpgraded)
-            {
-                config.CameraUploadUpgraded = true;
-                changed = true;
-            }
-
-            if (!config.CollectionsUpgraded)
-            {
-                config.CollectionsUpgraded = true;
-                changed = true;
-            }
-
+            // CameraUploadUpgraded / CollectionsUpgraded are owned by the entry points that
+            // perform the one-time library migrations; setting them here would skip those checks.
             return changed;
         }
     }

@@ -185,12 +185,7 @@ namespace Emby.Server.Implementations.Networking
 
         #region constructor
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
-
             IPNetwork(BigInteger ipaddress, AddressFamily family, byte cidr)
         {
 
@@ -670,11 +665,7 @@ namespace Emby.Server.Implementations.Networking
             return parsed;
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static void InternalToBigInteger(bool tryParse, IPAddress ipaddress, out BigInteger? uintIpAddress)
         {
 
@@ -741,11 +732,7 @@ namespace Emby.Server.Implementations.Networking
         /// </summary>
         /// <param name="cidr"></param>
         /// <returns></returns>
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static void InternalToBigInteger(bool tryParse, byte cidr, AddressFamily family, out BigInteger? uintNetmask)
         {
 
@@ -943,11 +930,7 @@ namespace Emby.Server.Implementations.Networking
         }
 
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static void InternalToNetmask(bool tryParse, byte cidr, AddressFamily family, out IPAddress netmask)
         {
 
@@ -1051,11 +1034,7 @@ namespace Emby.Server.Implementations.Networking
             return valid;
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static bool InternalValidNetmask(BigInteger netmask, AddressFamily family)
         {
 
@@ -1105,11 +1084,7 @@ namespace Emby.Server.Implementations.Networking
             return ip;
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static byte[] Resize(byte[] bytes, AddressFamily family)
         {
 
@@ -1414,11 +1389,7 @@ namespace Emby.Server.Implementations.Networking
             return network.TrySubnet(cidr, out ipnetworkCollection);
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static void InternalSubnet(bool trySubnet, IPNetwork network, byte cidr, out IPNetworkCollection ipnetworkCollection)
         {
 
@@ -1512,11 +1483,7 @@ namespace Emby.Server.Implementations.Networking
             return network.TrySupernet(network2, out supernet);
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
             static void InternalSupernet(bool trySupernet, IPNetwork network1, IPNetwork network2, out IPNetwork supernet)
         {
 
@@ -1647,11 +1614,7 @@ namespace Emby.Server.Implementations.Networking
 
         }
 
-#if TRAVISCI
-        public
-#else
         internal
-#endif
         static bool InternalSupernet(bool trySupernet, IPNetwork[] ipnetworks, out IPNetwork[] supernet)
         {
 

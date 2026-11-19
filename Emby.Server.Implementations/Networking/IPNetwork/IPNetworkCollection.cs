@@ -30,11 +30,7 @@ namespace Emby.Server.Implementations.Networking
         {
             get { return IPNetwork.ToBigInteger(this._ipnetwork.Network); }
         }
-#if TRAVISCI
-        public
-#else
         internal
-#endif
         IPNetworkCollection(IPNetwork ipnetwork, byte cidrSubnet)
         {
 
