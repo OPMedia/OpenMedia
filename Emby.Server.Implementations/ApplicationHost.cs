@@ -108,7 +108,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
@@ -2345,43 +2344,16 @@ namespace Emby.Server.Implementations
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <param name="progress">The progress.</param>
         /// <returns>Task{CheckForUpdateResult}.</returns>
-        public async Task<CheckForUpdateResult> CheckForApplicationUpdate(CancellationToken cancellationToken, IProgress<double> progress)
+        public Task<CheckForUpdateResult> CheckForApplicationUpdate(CancellationToken cancellationToken, IProgress<double> progress)
         {
-            var updateLevel = SystemUpdateLevel;
-            var cacheLength = updateLevel == PackageVersionClass.Release ?
-                TimeSpan.FromHours(12) :
-                TimeSpan.FromMinutes(5);
+            // OpenMedia 不提供自更新（CanSelfUpdate 恒为 false），不再向 Emby Releases 发起请求。
+            // 保留此契约供 /Packages/Updates 与计划任务使用，返回诚实的“无更新”结果。
+            HasUpdateAvailable = false;
 
-            try
+            return Task.FromResult(new CheckForUpdateResult
             {
-                var result = await new GithubUpdater(HttpClient, JsonSerializer).CheckForUpdateResult("MediaBrowser",
-                    "Emby.Releases",
-                    ApplicationVersion,
-                    updateLevel,
-                    ReleaseAssetFilename,
-                    "MBServer",
-                    UpdateTargetFileName,
-                    cacheLength,
-                    cancellationToken).ConfigureAwait(false);
-
-                HasUpdateAvailable = result.IsUpdateAvailable;
-
-                return result;
-            }
-            catch (HttpException ex)
-            {
-                // users are overreacting to this occasionally failing
-                if (ex.StatusCode.HasValue && ex.StatusCode.Value == HttpStatusCode.Forbidden)
-                {
-                    HasUpdateAvailable = false;
-                    return new CheckForUpdateResult
-                    {
-                        IsUpdateAvailable = false
-                    };
-                }
-
-                throw;
-            }
+                IsUpdateAvailable = false
+            });
         }
 
         protected virtual string UpdateTargetFileName
