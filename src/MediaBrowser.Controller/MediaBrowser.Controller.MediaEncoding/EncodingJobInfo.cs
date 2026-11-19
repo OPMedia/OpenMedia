@@ -799,7 +799,13 @@ public class EncodingJobInfo : IDisposable
 		}
 	}
 
-	private async void DisposeLiveStream()
+	private void DisposeLiveStream()
+	{
+		// Dispose 签名为 void；关闭流在助手中执行并显式丢弃 Task，异常由助手记录。
+		_ = DisposeLiveStreamAsync();
+	}
+
+	private async Task DisposeLiveStreamAsync()
 	{
 		if (MediaSource.RequiresClosing && string.IsNullOrWhiteSpace(BaseRequest.LiveStreamId) && !string.IsNullOrWhiteSpace(MediaSource.LiveStreamId))
 		{
