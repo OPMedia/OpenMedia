@@ -394,3 +394,67 @@ presentation_unique_key 反规范化进 user_datas。**未动**，因为会改 A
 | 剧集 p95 | 350 | **26.9 ms** |
 | 继续观看 p95 | 1015 | **94.8 ms** |
 | 搜索 p95（6 万命中，病态） | 536 | 259 ms |
+
+---
+
+## 十二、换库：SharpCifs(SMB1) → SMBLibrary(SMB2/3)
+
+### 为什么必须换
+
+`SharpCifs` 协商的方言是 `NT LM 0.12`，也就是 **SMB1**：
+
+```csharp
+private const string Dialects = "\u0002NT LM 0.12\u0000";
+```
+
+Windows Server 2019+ 与主流 NAS 新固件默认禁用 SMB1。也就是说这条"支持 SMB"的路径，
+对现代设备在握手阶段就被拒绝。用户明确要 SMB 支持，那就不能只支持一个被关掉的协议版本。
+
+### 换成了什么
+
+| | 前 | 后 |
+|---|---|---|
+| 客户端 | SharpCifs（vendored，2017，SMB1） | `SMBLibrary 1.5.8.1`（MIT，SMB2/2.1/3/3.0.2/3.1.1） |
+| 代码 | 38,022 行 + 621 行适配 | **1,101 行**一个文件 |
+| 引用点 | 2 处（`ManagedFileSystem`） | 同样 2 处，已改名 `SmbFileSystem` |
+| 方言 | `NT LM 0.12` | **实测协商 SMB2.0.2 以上** |
+
+净删约 **37,500 行**。
+
+### 怎么验的（没有 NAS 也能验）
+
+SMBLibrary 自带服务端。测试里在 `127.0.0.1:4455` 起一个真实的 SMB2/3 服务端，
+共享目录指向临时目录，然后让 `SmbFileSystem` **真连、真读写**：
+
+- 列举目录（文件 + 子目录）
+- 读文件字节与元数据（大小、修改时间）
+- 写新文件再读回
+- 删除文件
+- 建目录 + 移动文件
+- `IsEnabledForPath` 对 `smb://` / UNC / POSIX 路径的判定
+
+**关键断言：`NegotiatedDialect >= SMB2Dialect.SMB202`** —— 这才是换库的意义。
+
+### 行为差异（都记在案）
+
+- `FileExists` 更准确了：旧的把目录也算 true，新的要求 `Exists && !IsDirectory`
+- `CreateDirectory` 旧实现是**空方法**（从来没真建过目录），新的真的建
+- `MoveFile` 同 share 内改为原子 rename（旧的是复制+删除）；跨 share 仍回退复制+删除
+- `GetFiles` 的 `enableCaseSensitiveExtensions` 参数现在真的生效（旧实现忽略它）
+- 输出路径与旧 `GetCanonicalPath` 一致：`smb://authority/path`，**不含凭据**
+- 未复现：NetBIOS/LMHOSTS 名称解析、DCE/RPC share 枚举（仓库内无调用者）
+
+### 已知的两处妥协
+
+SMBLibrary 1.5.8.1 的公开 API 缺两样，只能用反射，都有测试兜底：
+
+1. **非默认端口**：`SMB2Client.Connect` 的公开重载硬编码 445，用私有重载
+2. **协商方言**：`_dialect` 是私有字段，读它才能断言方言
+
+环回测试走 4455 非默认端口（验 1）+ 断言方言（验 2）。升级包版本时若这两处变化，
+测试会直接红，不会静默降级。
+
+### 测试
+
+101 → **112**（新增 11 个 SMB 用例）。Debug/Release 构建均 0 警告 0 错误。
+`git grep SharpCifs -- '*.cs' '*.csproj'` 零命中。
