@@ -13,6 +13,11 @@ public class UserNotification
 
 	public string Url { get; set; }
 
+	/// <summary>
+	/// Gets or sets the originating NotificationType, when the request supplied one.
+	/// </summary>
+	public string NotificationType { get; set; }
+
 	public NotificationLevel Level
 	{
 		[CompilerGenerated]

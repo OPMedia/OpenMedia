@@ -37,6 +37,7 @@
     <ProjectReference Include="..\src\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
     <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />
     <ProjectReference Include="..\Emby.Server.Implementations\Emby.Server.Implementations.csproj" />
+    <ProjectReference Include="..\Emby.Notifications\Emby.Notifications.csproj" />
     <ProjectReference Include="..\MediaBrowser.Providers\MediaBrowser.Providers.csproj" />
     <ProjectReference Include="..\MediaBrowser.XbmcMetadata\MediaBrowser.XbmcMetadata.csproj" />
   </ItemGroup>
