@@ -1,4 +1,4 @@
-namespace MediaBrowser.Model.System;
+﻿namespace MediaBrowser.Model.System;
 
 public class PublicSystemInfo
 {
@@ -13,4 +13,8 @@ public class PublicSystemInfo
 	public string OperatingSystem { get; set; }
 
 	public string Id { get; set; }
+
+	public string ProductName { get; set; }
+
+	public bool StartupWizardCompleted { get; set; }
 }

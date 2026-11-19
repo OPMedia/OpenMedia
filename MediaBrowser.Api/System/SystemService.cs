@@ -1,8 +1,9 @@
-using MediaBrowser.Common.Configuration;
+﻿using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Security;
 using MediaBrowser.Controller;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.System;
 using System;
@@ -103,6 +104,7 @@ namespace MediaBrowser.Api.System
         private readonly INetworkManager _network;
 
         private readonly ISecurityManager _security;
+        private readonly IServerConfigurationManager _config;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SystemService" /> class.
@@ -111,13 +113,14 @@ namespace MediaBrowser.Api.System
         /// <param name="appPaths">The application paths.</param>
         /// <param name="fileSystem">The file system.</param>
         /// <exception cref="ArgumentNullException">jsonSerializer</exception>
-        public SystemService(IServerApplicationHost appHost, IApplicationPaths appPaths, IFileSystem fileSystem, INetworkManager network, ISecurityManager security)
+        public SystemService(IServerApplicationHost appHost, IApplicationPaths appPaths, IFileSystem fileSystem, INetworkManager network, ISecurityManager security, IServerConfigurationManager config)
         {
             _appHost = appHost;
             _appPaths = appPaths;
             _fileSystem = fileSystem;
             _network = network;
             _security = security;
+            _config = config;
         }
 
         public object Post(PingSystem request)
@@ -199,6 +202,12 @@ namespace MediaBrowser.Api.System
         public async Task<object> Get(GetPublicSystemInfo request)
         {
             var result = await _appHost.GetPublicSystemInfo(CancellationToken.None).ConfigureAwait(false);
+
+            // Jellyfin 客户端用 ProductName 判断服务器类型，并要求至少一个已完成的向导标记。
+            result.ProductName = "OpenMedia";
+            // 我们**没有启动向导**（Jellyfin 有，客户端据此决定是否弹设置流程）。
+            // 直接报 true：否则 JF 客户端会把用户推进一个我们并不存在的向导。
+            result.StartupWizardCompleted = true;
 
             return ToOptimizedResult(result);
         }

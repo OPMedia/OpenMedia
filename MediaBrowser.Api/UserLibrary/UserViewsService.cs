@@ -17,6 +17,7 @@ using MediaBrowser.Model.Extensions;
 namespace MediaBrowser.Api.UserLibrary
 {
     [Route("/Users/{UserId}/Views", "GET")]
+    [Route("/UserViews", "GET", Summary = "Gets the current user's views")]
     public class GetUserViews : IReturn<QueryResult<BaseItemDto>>
     {
         /// <summary>
@@ -34,6 +35,7 @@ namespace MediaBrowser.Api.UserLibrary
     }
 
     [Route("/Users/{UserId}/GroupingOptions", "GET")]
+    [Route("/UserViews/GroupingOptions", "GET", Summary = "Gets grouping options for the current user")]
     public class GetGroupingOptions : IReturn<SpecialViewOption[]>
     {
         /// <summary>
@@ -63,6 +65,12 @@ namespace MediaBrowser.Api.UserLibrary
 
         public object Get(GetUserViews request)
         {
+            // /UserViews 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var query = new UserViewQuery
             {
                 UserId = request.UserId
@@ -111,6 +119,12 @@ namespace MediaBrowser.Api.UserLibrary
 
         public object Get(GetGroupingOptions request)
         {
+            // /UserViews/GroupingOptions 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var user = _userManager.GetUserById(request.UserId);
 
             var list = _libraryManager.GetUserRootFolder()

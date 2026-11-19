@@ -1,4 +1,4 @@
-{
+﻿{
   "openapi": "3.0.1",
   "info": {
     "title": "Emby Server API",
@@ -12427,6 +12427,35 @@
           }
         ],
         "x-RequiredAuthentication": "Requires authentication as user"
+      },
+      "post": {
+        "tags": [
+          "UserService"
+        ],
+        "summary": "Creates a user",
+        "description": "Requires authentication as user",
+        "operationId": "postUsers",
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
       }
     },
     "/VideoCodecs": {
@@ -19686,6 +19715,47 @@
           },
           "5XX": {
             "$ref": "#/components/responses/5XX"
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      },
+      "get": {
+        "tags": [
+          "UserLibraryService"
+        ],
+        "summary": "Gets an item from the current user's library",
+        "description": "Requires authentication as user",
+        "operationId": "getItemsById",
+        "parameters": [
+          {
+            "name": "Id",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -60222,6 +60292,401 @@
           }
         },
         "x-RequiredAuthentication": "No authentication required"
+      }
+    },
+    "/UserViews": {
+      "summary": "Gets the current user's views",
+      "get": {
+        "tags": [
+          "UserViewsService"
+        ],
+        "summary": "Gets the current user's views",
+        "description": "Requires authentication as user",
+        "operationId": "getUserViews",
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/UserViews/GroupingOptions": {
+      "summary": "Gets grouping options for the current user",
+      "get": {
+        "tags": [
+          "UserViewsService"
+        ],
+        "summary": "Gets grouping options for the current user",
+        "description": "Requires authentication as user",
+        "operationId": "getUserViewsGroupingOptions",
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/UserItems/Resume": {
+      "summary": "Gets resumable items for the current user",
+      "get": {
+        "tags": [
+          "ItemsService"
+        ],
+        "summary": "Gets resumable items for the current user",
+        "description": "Requires authentication as user",
+        "operationId": "getUserItemsResume",
+        "parameters": [
+          {
+            "name": "Limit",
+            "in": "query",
+            "description": "The maximum number of records to return.",
+            "required": true,
+            "style": "form",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/UserItems/{ItemId}/UserData": {
+      "summary": "Gets or updates user data for an item",
+      "get": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Gets user data for an item",
+        "description": "Requires authentication as user",
+        "operationId": "getUserItemsByItemIdUserData",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      },
+      "post": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Updates user data for an item",
+        "description": "Requires authentication as user",
+        "operationId": "postUserItemsByItemIdUserData",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/UserPlayedItems/{ItemId}": {
+      "summary": "Marks an item as played or unplayed for the current user",
+      "post": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Marks an item as played",
+        "description": "Requires authentication as user",
+        "operationId": "postUserPlayedItemsByItemId",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      },
+      "delete": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Marks an item as unplayed",
+        "description": "Requires authentication as user",
+        "operationId": "deleteUserPlayedItemsByItemId",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/UserFavoriteItems/{ItemId}": {
+      "summary": "Marks an item as a favorite for the current user",
+      "post": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Marks an item as a favorite",
+        "description": "Requires authentication as user",
+        "operationId": "postUserFavoriteItemsByItemId",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      },
+      "delete": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Unmarks an item as a favorite",
+        "description": "Requires authentication as user",
+        "operationId": "deleteUserFavoriteItemsByItemId",
+        "parameters": [
+          {
+            "name": "ItemId",
+            "in": "path",
+            "description": "Item Id",
+            "required": true,
+            "style": "simple",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
+      }
+    },
+    "/Users/Me": {
+      "summary": "Gets the currently authenticated user",
+      "get": {
+        "tags": [
+          "JellyfinCompatibilityService"
+        ],
+        "summary": "Gets the currently authenticated user",
+        "description": "Requires authentication as user",
+        "operationId": "getUsersMe",
+        "responses": {
+          "200": {
+            "description": "Operation successful.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apikeyauth": [ ]
+          },
+          {
+            "embyauth": [ ]
+          }
+        ],
+        "x-RequiredAuthentication": "Requires authentication as user"
       }
     }
   },

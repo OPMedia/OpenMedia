@@ -22,6 +22,7 @@ namespace MediaBrowser.Api.UserLibrary
     /// Class GetItem
     /// </summary>
     [Route("/Users/{UserId}/Items/{Id}", "GET", Summary = "Gets an item from a user's library")]
+    [Route("/Items/{Id}", "GET", Summary = "Gets an item from the current user's library")]
     public class GetItem : IReturn<BaseItemDto>
     {
         /// <summary>
@@ -78,6 +79,7 @@ namespace MediaBrowser.Api.UserLibrary
     /// Class MarkFavoriteItem
     /// </summary>
     [Route("/Users/{UserId}/FavoriteItems/{Id}", "POST", Summary = "Marks an item as a favorite")]
+    [Route("/UserFavoriteItems/{Id}", "POST", Summary = "Marks an item as a favorite for the current user")]
     public class MarkFavoriteItem : IReturn<UserItemDataDto>
     {
         /// <summary>
@@ -99,6 +101,7 @@ namespace MediaBrowser.Api.UserLibrary
     /// Class UnmarkFavoriteItem
     /// </summary>
     [Route("/Users/{UserId}/FavoriteItems/{Id}", "DELETE", Summary = "Unmarks an item as a favorite")]
+    [Route("/UserFavoriteItems/{Id}", "DELETE", Summary = "Unmarks an item as a favorite for the current user")]
     public class UnmarkFavoriteItem : IReturn<UserItemDataDto>
     {
         /// <summary>
@@ -392,6 +395,12 @@ namespace MediaBrowser.Api.UserLibrary
         /// <returns>System.Object.</returns>
         public async Task<object> Get(GetItem request)
         {
+            // /Items/{Id} 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var user = _userManager.GetUserById(request.UserId);
 
             var item = string.IsNullOrEmpty(request.Id) ? _libraryManager.GetUserRootFolder() : _libraryManager.GetItemById(request.Id);
@@ -486,6 +495,12 @@ namespace MediaBrowser.Api.UserLibrary
         /// <param name="request">The request.</param>
         public object Post(MarkFavoriteItem request)
         {
+            // /UserFavoriteItems/{Id} 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var dto = MarkFavorite(request.UserId, request.Id, true);
 
             return ToOptimizedResult(dto);
@@ -497,6 +512,12 @@ namespace MediaBrowser.Api.UserLibrary
         /// <param name="request">The request.</param>
         public object Delete(UnmarkFavoriteItem request)
         {
+            // /UserFavoriteItems/{Id} 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var dto = MarkFavorite(request.UserId, request.Id, false);
 
             return ToOptimizedResult(dto);

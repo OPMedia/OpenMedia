@@ -27,6 +27,7 @@ namespace MediaBrowser.Api.UserLibrary
     }
 
     [Route("/Users/{UserId}/Items/Resume", "GET", Summary = "Gets items based on a query.")]
+    [Route("/UserItems/Resume", "GET", Summary = "Gets resumable items for the current user")]
     public class GetResumeItems : BaseItemsRequest, IReturn<QueryResult<BaseItemDto>>
     {
     }
@@ -86,6 +87,12 @@ namespace MediaBrowser.Api.UserLibrary
 
         public object Get(GetResumeItems request)
         {
+            // /UserItems/Resume 别名没有路径用户 id，沿用已登录用户的身份。
+            if (request.UserId.Equals(Guid.Empty))
+            {
+                request.UserId = _authContext.GetAuthorizationInfo(Request).UserId;
+            }
+
             var user = _userManager.GetUserById(request.UserId);
 
             var parentIdGuid = string.IsNullOrWhiteSpace(request.ParentId) ? Guid.Empty : new Guid(request.ParentId);

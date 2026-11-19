@@ -19,6 +19,8 @@
     <ProjectReference Include="..\src\MediaBrowser.Model\MediaBrowser.Model.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Common\MediaBrowser.Common.csproj" />
     <ProjectReference Include="..\src\MediaBrowser.Controller\MediaBrowser.Controller.csproj" />
+    <!-- Jellyfin 兼容垫片需要复用 PlaystateService 的已播放/未播放实现。 -->
+    <ProjectReference Include="..\src\Emby.Server.MediaEncoding\Emby.Server.MediaEncoding.csproj" />
   </ItemGroup>
 
 </Project>
