@@ -1,7 +1,6 @@
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
-using MediaBrowser.Common.Security;
 using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Net;
@@ -89,56 +88,6 @@ namespace MediaBrowser.Api
     }
 
     /// <summary>
-    /// Class GetPluginSecurityInfo
-    /// </summary>
-    [Route("/Plugins/SecurityInfo", "GET", Summary = "Gets plugin registration information", IsHidden = true)]
-    [Authenticated]
-    public class GetPluginSecurityInfo : IReturn<PluginSecurityInfo>
-    {
-    }
-
-    /// <summary>
-    /// Class UpdatePluginSecurityInfo
-    /// </summary>
-    [Route("/Plugins/SecurityInfo", "POST", Summary = "Updates plugin registration information", IsHidden = true)]
-    [Authenticated(Roles = "Admin")]
-    public class UpdatePluginSecurityInfo : PluginSecurityInfo, IReturnVoid
-    {
-    }
-
-    [Route("/Plugins/RegistrationRecords/{Name}", "GET", Summary = "Gets registration status for a feature", IsHidden = true)]
-    [Authenticated]
-    public class GetRegistrationStatus
-    {
-        [ApiMember(Name = "Name", Description = "Feature Name", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
-        public string Name { get; set; }
-    }
-
-    [Route("/Registrations/{Name}", "GET", Summary = "Gets registration status for a feature", IsHidden = true)]
-    [Authenticated]
-    public class GetRegistration : IReturn<RegistrationInfo>
-    {
-        [ApiMember(Name = "Name", Description = "Feature Name", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
-        public string Name { get; set; }
-    }
-
-    public class RegistrationInfo
-    {
-        public string Name { get; set; }
-        public DateTime ExpirationDate { get; set; }
-        public bool IsTrial { get; set; }
-        public bool IsRegistered { get; set; }
-    }
-
-    [Route("/Appstore/Register", "POST", Summary = "Registers an appstore sale", IsHidden = true)]
-    [Authenticated]
-    public class RegisterAppstoreSale
-    {
-        [ApiMember(Name = "Parameters", Description = "Java representation of parameters to pass through to admin server", IsRequired = true, DataType = "string", ParameterType = "query", Verb = "POST")]
-        public string Parameters { get; set; }
-    }
-
-    /// <summary>
     /// Class PluginsService
     /// </summary>
     public class PluginService : BaseApiService
@@ -153,13 +102,11 @@ namespace MediaBrowser.Api
         /// </summary>
         private readonly IApplicationHost _appHost;
 
-        private readonly ISecurityManager _securityManager;
-
         private readonly IInstallationManager _installationManager;
         private readonly INetworkManager _network;
         private readonly IDeviceManager _deviceManager;
 
-        public PluginService(IJsonSerializer jsonSerializer, IApplicationHost appHost, ISecurityManager securityManager, IInstallationManager installationManager, INetworkManager network, IDeviceManager deviceManager)
+        public PluginService(IJsonSerializer jsonSerializer, IApplicationHost appHost, IInstallationManager installationManager, INetworkManager network, IDeviceManager deviceManager)
             : base()
         {
             if (jsonSerializer == null)
@@ -168,38 +115,10 @@ namespace MediaBrowser.Api
             }
 
             _appHost = appHost;
-            _securityManager = securityManager;
             _installationManager = installationManager;
             _network = network;
             _deviceManager = deviceManager;
             _jsonSerializer = jsonSerializer;
-        }
-
-        /// <summary>
-        /// Gets the specified request.
-        /// </summary>
-        /// <param name="request">The request.</param>
-        /// <returns>System.Object.</returns>
-        public async Task<object> Get(GetRegistrationStatus request)
-        {
-            var result = await _securityManager.GetRegistrationStatus(request.Name).ConfigureAwait(false);
-
-            return ToOptimizedResult(result);
-        }
-
-        public async Task<object> Get(GetRegistration request)
-        {
-            var result = await _securityManager.GetRegistrationStatus(request.Name).ConfigureAwait(false);
-
-            var info = new RegistrationInfo
-            {
-                ExpirationDate = result.ExpirationDate,
-                IsRegistered = result.IsRegistered,
-                IsTrial = result.TrialVersion,
-                Name = request.Name
-            };
-
-            return ToOptimizedResult(info);
         }
 
         /// <summary>
@@ -304,40 +223,6 @@ namespace MediaBrowser.Api
             return ResultFactory.GetResult(Request, assembly.GetManifestResourceStream(thumbName), contentType);
         }
 
-        /// <summary>
-        /// Gets the specified request.
-        /// </summary>
-        /// <param name="request">The request.</param>
-        /// <returns>System.Object.</returns>
-        public async Task<object> Get(GetPluginSecurityInfo request)
-        {
-            var result = new PluginSecurityInfo
-            {
-                IsMBSupporter = await _securityManager.IsSupporter().ConfigureAwait(false),
-                SupporterKey = _securityManager.SupporterKey
-            };
-
-            return ToOptimizedResult(result);
-        }
-
-        /// <summary>
-        /// Post app store sale
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
-        public Task Post(RegisterAppstoreSale request)
-        {
-            return _securityManager.RegisterAppStoreSale(request.Parameters);
-        }
-
-        /// <summary>
-        /// Posts the specified request.
-        /// </summary>
-        /// <param name="request">The request.</param>
-        public Task Post(UpdatePluginSecurityInfo request)
-        {
-            return _securityManager.UpdateSupporterKey(request.SupporterKey);
-        }
 
         /// <summary>
         /// Posts the specified request.

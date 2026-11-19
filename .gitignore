@@ -1,4 +1,4 @@
-!*
+﻿!*
 
 #################
 ## Eclipse
@@ -177,7 +177,9 @@ Generated_Code/
 # Backup & report files from converting an old project file to a newer
 # Visual Studio version. Backup files are not needed, because we have git ;-)
 _UpgradeReport_Files/
-Backup*/
+# 注意：这里原本还有一条 `Backup*/`（VS 模板继承来的），它会把任何以 Backup 开头的
+# 源码目录整个吞掉 —— 我们的 Emby.Server.Implementations/Backup/ 就这样一直没进仓库。
+# 已删除该规则；VS 转换项目的备份目录我们本来也不产生。
 UpgradeLog*.XML
 UpgradeLog*.htm
 

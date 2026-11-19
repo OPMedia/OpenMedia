@@ -28,7 +28,6 @@ using Emby.Notifications;
 using Emby.Server.Implementations.Playlists;
 using Emby.Server.Implementations.Reflection;
 using Emby.Server.Implementations.ScheduledTasks;
-using Emby.Server.Implementations.Security;
 using Emby.Server.Implementations.Serialization;
 using Emby.Server.Implementations.Session;
 using Emby.Server.Implementations.Threading;
@@ -44,7 +43,6 @@ using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Extensions;
-using MediaBrowser.Common.Security;
 using MediaBrowser.Common.Updates;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Channels;
@@ -372,12 +370,6 @@ namespace Emby.Server.Implementations
         /// </summary>
         /// <value>The installation manager.</value>
         protected IInstallationManager InstallationManager { get; private set; }
-        /// <summary>
-        /// Gets the security manager.
-        /// </summary>
-        /// <value>The security manager.</value>
-        protected ISecurityManager SecurityManager { get; private set; }
-
         /// <summary>
         /// Gets or sets the zip client.
         /// </summary>
@@ -915,9 +907,6 @@ namespace Emby.Server.Implementations
 
             RegisterSingleInstance(PowerManagement);
 
-            SecurityManager = new PluginSecurityManager(this, ApplicationPaths, LogManager, FileSystemManager, CryptographyProvider);
-            RegisterSingleInstance(SecurityManager);
-
             InstallationManager = new InstallationManager(LogManager.GetLogger("InstallationManager"), this, ApplicationPaths, HttpClient, JsonSerializer, ServerConfigurationManager, FileSystemManager, CryptographyProvider, PackageRuntime);
             RegisterSingleInstance(InstallationManager);
 
@@ -1042,7 +1031,7 @@ namespace Emby.Server.Implementations
             PlaylistManager = new PlaylistManager(LibraryManager, FileSystemManager, LibraryMonitor, LogManager.GetLogger("PlaylistManager"), UserManager, ProviderManager);
             RegisterSingleInstance<IPlaylistManager>(PlaylistManager);
 
-            LiveTvManager = new LiveTvManager(this, HttpClient, ServerConfigurationManager, Logger, ItemRepository, ImageProcessor, UserDataManager, DtoService, UserManager, LibraryManager, TaskManager, LocalizationManager, JsonSerializer, ProviderManager, FileSystemManager, SecurityManager, () => ChannelManager);
+            LiveTvManager = new LiveTvManager(this, HttpClient, ServerConfigurationManager, Logger, ItemRepository, ImageProcessor, UserDataManager, DtoService, UserManager, LibraryManager, TaskManager, LocalizationManager, JsonSerializer, ProviderManager, FileSystemManager, () => ChannelManager);
             RegisterSingleInstance(LiveTvManager);
 
             UserViewManager = new UserViewManager(LibraryManager, LocalizationManager, UserManager, ChannelManager, LiveTvManager, ServerConfigurationManager);

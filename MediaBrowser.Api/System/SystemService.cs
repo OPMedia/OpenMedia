@@ -1,7 +1,6 @@
 ﻿using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.Net;
-using MediaBrowser.Common.Security;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Net;
@@ -103,7 +102,6 @@ namespace MediaBrowser.Api.System
 
         private readonly INetworkManager _network;
 
-        private readonly ISecurityManager _security;
         private readonly IServerConfigurationManager _config;
 
         /// <summary>
@@ -113,13 +111,12 @@ namespace MediaBrowser.Api.System
         /// <param name="appPaths">The application paths.</param>
         /// <param name="fileSystem">The file system.</param>
         /// <exception cref="ArgumentNullException">jsonSerializer</exception>
-        public SystemService(IServerApplicationHost appHost, IApplicationPaths appPaths, IFileSystem fileSystem, INetworkManager network, ISecurityManager security, IServerConfigurationManager config)
+        public SystemService(IServerApplicationHost appHost, IApplicationPaths appPaths, IFileSystem fileSystem, INetworkManager network, IServerConfigurationManager config)
         {
             _appHost = appHost;
             _appPaths = appPaths;
             _fileSystem = fileSystem;
             _network = network;
-            _security = security;
             _config = config;
         }
 
