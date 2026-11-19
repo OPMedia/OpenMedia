@@ -89,8 +89,11 @@ namespace MediaBrowser.Tests.Backup
                 Environment.SetEnvironmentVariable("PATH", string.Empty);
                 Environment.SetEnvironmentVariable(PostgresToolLocator.BinDirectoryEnvironmentVariable, null);
 
+                // 关掉系统目录探测：否则「找不到」这条分支的结果取决于运行机器上
+                // 有没有装 postgresql-client —— CI 上 /usr/lib/postgresql 存在，
+                // 于是这里根本不会抛，测试反而红了。
                 var exception = Assert.ThrowsException<BackupValidationException>(
-                    () => PostgresToolLocator.Locate("pg_dump", Path.Combine(_root, "missing")));
+                    () => PostgresToolLocator.Locate("pg_dump", Path.Combine(_root, "missing"), includeSystemFallbacks: false));
 
                 StringAssert.Contains(exception.Message, "找不到 pg_dump");
                 StringAssert.Contains(exception.Message, "OPENMEDIA_PG_BIN");

@@ -13,7 +13,18 @@ namespace Emby.Server.Implementations.Backup
     {
         public const string BinDirectoryEnvironmentVariable = "OPENMEDIA_PG_BIN";
 
-        public static string Locate(string toolName, string configuredDirectory)
+        /// <summary>
+        /// 定位 pg_dump / pg_restore。
+        /// </summary>
+        /// <param name="toolName">工具名（不含扩展名）。</param>
+        /// <param name="configuredDirectory">配置里指定的 bin 目录。</param>
+        /// <param name="includeSystemFallbacks">
+        /// 是否继续探测环境变量、PATH 与已知安装目录。
+        /// 关掉它可以构造「一个都找不到」的确定性场景 —— 否则这个分支的测试结果会随
+        /// 运行机器上有没有装 postgresql-client 而变（CI 上就因为 /usr/lib/postgresql
+        /// 存在而永远找不到失败路径，测试反而红了）。
+        /// </param>
+        public static string Locate(string toolName, string configuredDirectory, bool includeSystemFallbacks = true)
         {
             if (string.IsNullOrWhiteSpace(toolName))
             {
@@ -35,6 +46,11 @@ namespace Emby.Server.Implementations.Backup
                 return found;
             }
 
+            if (!includeSystemFallbacks)
+            {
+                throw BuildNotFound(toolName, fileName, searched);
+            }
+
             var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
             foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
             {
@@ -54,7 +70,12 @@ namespace Emby.Server.Implementations.Backup
                 }
             }
 
-            throw new BackupValidationException(
+            throw BuildNotFound(toolName, fileName, searched);
+        }
+
+        private static BackupValidationException BuildNotFound(string toolName, string fileName, List<string> searched)
+        {
+            return new BackupValidationException(
                 "找不到 " + fileName + "。已探测：" + string.Join(", ", searched)
                 + "。请安装与服务器同主版本的 postgresql-client，或设置 Backup.PostgresBinDirectory / 环境变量 "
                 + BinDirectoryEnvironmentVariable + " 指向其 bin 目录。");
