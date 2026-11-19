@@ -41,6 +41,7 @@
     <PackageReference Include="SharpCompress" Version="0.50.10" />
     <PackageReference Include="SimpleInjector" Version="5.6.0" />
     <PackageReference Include="PlaylistsNET" Version="1.0.2" />
+    <PackageReference Include="SMBLibrary" Version="1.5.8.1" />
   </ItemGroup>
 
   <!-- 嵌入资源：本地化 + 语言检测 profile + values -->

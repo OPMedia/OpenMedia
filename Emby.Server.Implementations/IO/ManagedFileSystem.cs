@@ -24,7 +24,7 @@ namespace Emby.Server.Implementations.IO
 
         private string _tempPath;
 
-        private SharpCifsFileSystem _sharpCifsFileSystem;
+        private SmbFileSystem _smbFileSystem;
         private IEnvironmentInfo _environmentInfo;
         private bool _isEnvironmentCaseInsensitive;
 
@@ -44,7 +44,7 @@ namespace Emby.Server.Implementations.IO
 
             SetInvalidFileNameChars(environmentInfo.OperatingSystem == MediaBrowser.Model.System.OperatingSystem.Windows);
 
-            _sharpCifsFileSystem = new SharpCifsFileSystem(environmentInfo.OperatingSystem);
+            _smbFileSystem = new SmbFileSystem(environmentInfo.OperatingSystem);
 
             _isEnvironmentCaseInsensitive = environmentInfo.OperatingSystem == MediaBrowser.Model.System.OperatingSystem.Windows;
         }
@@ -234,9 +234,9 @@ namespace Emby.Server.Implementations.IO
         /// <see cref="FileSystemMetadata.IsDirectory"/> property will be set to true and all other properties will reflect the properties of the directory.</remarks>
         public FileSystemMetadata GetFileSystemInfo(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileSystemInfo(path);
+                return _smbFileSystem.GetFileSystemInfo(path);
             }
 
             // Take a guess to try and avoid two file system hits, but we'll double-check by calling Exists
@@ -274,9 +274,9 @@ namespace Emby.Server.Implementations.IO
         /// <para>For automatic handling of files <b>and</b> directories, use <see cref="GetFileSystemInfo"/>.</para></remarks>
         public FileSystemMetadata GetFileInfo(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileInfo(path);
+                return _smbFileSystem.GetFileInfo(path);
             }
 
             var fileInfo = new FileInfo(path);
@@ -294,9 +294,9 @@ namespace Emby.Server.Implementations.IO
         /// <para>For automatic handling of files <b>and</b> directories, use <see cref="GetFileSystemInfo"/>.</para></remarks>
         public FileSystemMetadata GetDirectoryInfo(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetDirectoryInfo(path);
+                return _smbFileSystem.GetDirectoryInfo(path);
             }
 
             var fileInfo = new DirectoryInfo(path);
@@ -461,9 +461,9 @@ namespace Emby.Server.Implementations.IO
         /// <returns>FileStream.</returns>
         public Stream GetFileStream(string path, FileOpenMode mode, FileAccessMode access, FileShareMode share, bool isAsync = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileStream(path, mode, access, share);
+                return _smbFileSystem.GetFileStream(path, mode, access, share);
             }
 
             if (_supportsAsyncFileStreams && isAsync)
@@ -476,9 +476,9 @@ namespace Emby.Server.Implementations.IO
 
         public Stream GetFileStream(string path, FileOpenMode mode, FileAccessMode access, FileShareMode share, FileOpenOptions fileOpenOptions)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileStream(path, mode, access, share);
+                return _smbFileSystem.GetFileStream(path, mode, access, share);
             }
 
             var defaultBufferSize = 4096;
@@ -553,9 +553,9 @@ namespace Emby.Server.Implementations.IO
                 return;
             }
 
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.SetHidden(path, isHidden);
+                _smbFileSystem.SetHidden(path, isHidden);
                 return;
             }
 
@@ -583,9 +583,9 @@ namespace Emby.Server.Implementations.IO
                 return;
             }
 
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.SetReadOnly(path, isReadOnly);
+                _smbFileSystem.SetReadOnly(path, isReadOnly);
                 return;
             }
 
@@ -613,9 +613,9 @@ namespace Emby.Server.Implementations.IO
                 return;
             }
 
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.SetAttributes(path, isHidden, isReadOnly);
+                _smbFileSystem.SetAttributes(path, isHidden, isReadOnly);
                 return;
             }
 
@@ -691,9 +691,9 @@ namespace Emby.Server.Implementations.IO
 
         private char GetDirectorySeparatorChar(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetDirectorySeparatorChar(path);
+                return _smbFileSystem.GetDirectorySeparatorChar(path);
             }
 
             return Path.DirectorySeparatorChar;
@@ -735,9 +735,9 @@ namespace Emby.Server.Implementations.IO
 
         public string GetDirectoryName(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetDirectoryName(path);
+                return _smbFileSystem.GetDirectoryName(path);
             }
 
             return Path.GetDirectoryName(path);
@@ -750,9 +750,9 @@ namespace Emby.Server.Implementations.IO
                 throw new ArgumentNullException("path");
             }
 
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.NormalizePath(path);
+                return _smbFileSystem.NormalizePath(path);
             }
 
             if (path.EndsWith(":\\", StringComparison.OrdinalIgnoreCase))
@@ -797,7 +797,7 @@ namespace Emby.Server.Implementations.IO
         {
             // Cannot use Path.IsPathRooted because it returns false under mono when using windows-based paths, e.g. C:\\
 
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
                 return true;
             }
@@ -815,9 +815,9 @@ namespace Emby.Server.Implementations.IO
 
         public void DeleteFile(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.DeleteFile(path);
+                _smbFileSystem.DeleteFile(path);
                 return;
             }
 
@@ -827,9 +827,9 @@ namespace Emby.Server.Implementations.IO
 
         public void DeleteDirectory(string path, bool recursive)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.DeleteDirectory(path, recursive);
+                _smbFileSystem.DeleteDirectory(path, recursive);
                 return;
             }
 
@@ -838,9 +838,9 @@ namespace Emby.Server.Implementations.IO
 
         public void CreateDirectory(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.CreateDirectory(path);
+                _smbFileSystem.CreateDirectory(path);
                 return;
             }
 
@@ -866,9 +866,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<FileSystemMetadata> GetDirectories(string path, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetDirectories(path, recursive);
+                return _smbFileSystem.GetDirectories(path, recursive);
             }
 
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -883,9 +883,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<FileSystemMetadata> GetFiles(string path, string[] extensions, bool enableCaseSensitiveExtensions, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFiles(path, extensions, enableCaseSensitiveExtensions, recursive);
+                return _smbFileSystem.GetFiles(path, extensions, enableCaseSensitiveExtensions, recursive);
             }
 
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -917,9 +917,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<FileSystemMetadata> GetFileSystemEntries(string path, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileSystemEntries(path, recursive);
+                return _smbFileSystem.GetFileSystemEntries(path, recursive);
             }
 
             var directoryInfo = new DirectoryInfo(path);
@@ -941,18 +941,18 @@ namespace Emby.Server.Implementations.IO
 
         public string[] ReadAllLines(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.ReadAllLines(path);
+                return _smbFileSystem.ReadAllLines(path);
             }
             return File.ReadAllLines(path);
         }
 
         public void WriteAllLines(string path, IEnumerable<string> lines)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.WriteAllLines(path, lines);
+                _smbFileSystem.WriteAllLines(path, lines);
                 return;
             }
             File.WriteAllLines(path, lines);
@@ -960,9 +960,9 @@ namespace Emby.Server.Implementations.IO
 
         public Stream OpenRead(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.OpenRead(path);
+                return _smbFileSystem.OpenRead(path);
             }
             return File.OpenRead(path);
         }
@@ -980,17 +980,17 @@ namespace Emby.Server.Implementations.IO
 
         public void CopyFile(string source, string target, bool overwrite)
         {
-            var enableSharpCifsForSource = _sharpCifsFileSystem.IsEnabledForPath(source);
+            var enableSmbForSource = _smbFileSystem.IsEnabledForPath(source);
 
-            if (enableSharpCifsForSource != _sharpCifsFileSystem.IsEnabledForPath(target))
+            if (enableSmbForSource != _smbFileSystem.IsEnabledForPath(target))
             {
                 CopyFileUsingStreams(source, target, overwrite);
                 return;
             }
 
-            if (enableSharpCifsForSource)
+            if (enableSmbForSource)
             {
-                _sharpCifsFileSystem.CopyFile(source, target, overwrite);
+                _smbFileSystem.CopyFile(source, target, overwrite);
                 return;
             }
             File.Copy(source, target, overwrite);
@@ -998,9 +998,9 @@ namespace Emby.Server.Implementations.IO
 
         public void MoveFile(string source, string target)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(source))
+            if (_smbFileSystem.IsEnabledForPath(source))
             {
-                _sharpCifsFileSystem.MoveFile(source, target);
+                _smbFileSystem.MoveFile(source, target);
                 return;
             }
             File.Move(source, target);
@@ -1008,9 +1008,9 @@ namespace Emby.Server.Implementations.IO
 
         public void MoveDirectory(string source, string target)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(source))
+            if (_smbFileSystem.IsEnabledForPath(source))
             {
-                _sharpCifsFileSystem.MoveDirectory(source, target);
+                _smbFileSystem.MoveDirectory(source, target);
                 return;
             }
             Directory.Move(source, target);
@@ -1018,45 +1018,45 @@ namespace Emby.Server.Implementations.IO
 
         public bool DirectoryExists(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.DirectoryExists(path);
+                return _smbFileSystem.DirectoryExists(path);
             }
             return Directory.Exists(path);
         }
 
         public bool FileExists(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.FileExists(path);
+                return _smbFileSystem.FileExists(path);
             }
             return File.Exists(path);
         }
 
         public string ReadAllText(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.ReadAllText(path);
+                return _smbFileSystem.ReadAllText(path);
             }
             return File.ReadAllText(path);
         }
 
         public byte[] ReadAllBytes(string path)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.ReadAllBytes(path);
+                return _smbFileSystem.ReadAllBytes(path);
             }
             return File.ReadAllBytes(path);
         }
 
         public void WriteAllText(string path, string text, Encoding encoding)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.WriteAllText(path, text, encoding);
+                _smbFileSystem.WriteAllText(path, text, encoding);
                 return;
             }
 
@@ -1065,9 +1065,9 @@ namespace Emby.Server.Implementations.IO
 
         public void WriteAllText(string path, string text)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.WriteAllText(path, text);
+                _smbFileSystem.WriteAllText(path, text);
                 return;
             }
 
@@ -1076,9 +1076,9 @@ namespace Emby.Server.Implementations.IO
 
         public void WriteAllBytes(string path, byte[] bytes)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                _sharpCifsFileSystem.WriteAllBytes(path, bytes);
+                _smbFileSystem.WriteAllBytes(path, bytes);
                 return;
             }
 
@@ -1087,9 +1087,9 @@ namespace Emby.Server.Implementations.IO
 
         public string ReadAllText(string path, Encoding encoding)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.ReadAllText(path, encoding);
+                return _smbFileSystem.ReadAllText(path, encoding);
             }
 
             return File.ReadAllText(path, encoding);
@@ -1097,9 +1097,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<string> GetDirectoryPaths(string path, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetDirectoryPaths(path, recursive);
+                return _smbFileSystem.GetDirectoryPaths(path, recursive);
             }
 
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -1113,9 +1113,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<string> GetFilePaths(string path, string[] extensions, bool enableCaseSensitiveExtensions, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFilePaths(path, extensions, enableCaseSensitiveExtensions, recursive);
+                return _smbFileSystem.GetFilePaths(path, extensions, enableCaseSensitiveExtensions, recursive);
             }
 
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -1147,9 +1147,9 @@ namespace Emby.Server.Implementations.IO
 
         public IEnumerable<string> GetFileSystemEntryPaths(string path, bool recursive = false)
         {
-            if (_sharpCifsFileSystem.IsEnabledForPath(path))
+            if (_smbFileSystem.IsEnabledForPath(path))
             {
-                return _sharpCifsFileSystem.GetFileSystemEntryPaths(path, recursive);
+                return _smbFileSystem.GetFileSystemEntryPaths(path, recursive);
             }
 
             var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
