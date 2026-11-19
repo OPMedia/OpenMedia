@@ -9,7 +9,7 @@
 #   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag release
 # ============================================================
 param(
-    [ValidateSet('debug','release')][string]$Tag,
+    [ValidateSet('debug','release','ci-smoke')][string]$Tag,
     [string]$Db = 'openmedia_compare',
     [int]$PgPort = 5432,
     [string]$PgUser = 'postgres',
@@ -20,7 +20,10 @@ param(
     [switch]$StopOnly
 )
 $ErrorActionPreference = 'Stop'
-$cfg = if($Tag -eq 'release'){ 'Release' } else { 'Debug' }
+# Tag 在这里兼两个角色：选择构建配置 + 给结果文件打标签。
+# ci-smoke 是 CI 冒烟档位 —— 它走 Release（CI 只构建 Release），
+# 但结果文件名要留 ci-smoke，artifact 上传步骤按 ab-ci-smoke-*.json 匹配。
+$cfg = if($Tag -in @('release','ci-smoke')){ 'Release' } else { 'Debug' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $work = Join-Path $repoRoot "MediaBrowser.Server\bin\$cfg\net10.0"
 $work = (Resolve-Path $work).Path
