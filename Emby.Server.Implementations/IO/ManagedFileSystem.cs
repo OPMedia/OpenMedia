@@ -38,7 +38,8 @@ namespace Emby.Server.Implementations.IO
             _environmentInfo = environmentInfo;
             _defaultDirectory = defaultDirectory;
 
-            // On Linux with mono, this needs to be true or symbolic links are ignored
+            // Selects separate directory/file enumeration passes in GetFileSystemEntries
+            // instead of a single EnumerateFileSystemInfos pass. The only caller passes true.
             EnableSeparateFileAndDirectoryQueries = enableSeparateFileAndDirectoryQueries;
 
             SetInvalidFileNameChars(environmentInfo.OperatingSystem == MediaBrowser.Model.System.OperatingSystem.Windows);
