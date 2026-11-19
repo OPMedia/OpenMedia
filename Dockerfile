@@ -98,8 +98,17 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # 运行期依赖：jellyfin-ffmpeg 便携包只链接 glibc 基础库；curl 供下方 HEALTHCHECK 使用。
 # curl/xz-utils/构建工具只存在于 fetch 阶段，不进入最终镜像。
+# 运行期依赖清单（每一项都有对应理由，见 scripts/docker-deps.md）：
+#   ca-certificates  TLS 校验
+#   curl             HEALTHCHECK 用
+#   tzdata           时区（EPG/日期显示）
+#   fontconfig       字体解析 —— libass 烧录 ASS/SSA 字幕时靠它按名字找字体
+#   fonts-dejavu-core 兜底字体 —— 镜像里没有字体时，字幕会渲染成方块
+#   libgdiplus       目前**没有任何代码用 System.Drawing**（全仓 0 处 using），
+#                    留着是为了兼容某些间接依赖；确认无影响后可移除（省 ~40MB）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl libgdiplus tzdata \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates curl tzdata fontconfig fonts-dejavu-core libgdiplus \
     && rm -rf /var/lib/apt/lists/*
 
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later (bundled jellyfin-ffmpeg binary)" \
