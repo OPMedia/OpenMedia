@@ -24,25 +24,22 @@ namespace MediaBrowser.Server.Startup.Common
             IEnvironmentInfo environment,
             ILocalizationManager localizationManager)
         {
-            if (!startupOptions.ContainsOption("-enablegdi"))
+            try
             {
-                try
-                {
-                    return new SkiaEncoder(logManager.GetLogger("Skia"), appPaths, httpClient, fileSystem, localizationManager);
-                }
-                catch (Exception ex)
-                {
-                    logger.Info("Skia not available. Will try next image processor. {0}", ex.Message);
-                }
+                return new SkiaEncoder(logManager.GetLogger("Skia"), appPaths, httpClient, fileSystem, localizationManager);
+            }
+            catch (Exception ex)
+            {
+                logger.Info("Skia not available. Will try next image processor. {0}", ex.Message);
+            }
 
-                try
-                {
-                    return new ImageMagickEncoder(logManager.GetLogger("ImageMagick"), appPaths, httpClient, fileSystem, environment);
-                }
-                catch
-                {
-                    logger.Info("ImageMagick not available. Will try next image processor.");
-                }
+            try
+            {
+                return new ImageMagickEncoder(logManager.GetLogger("ImageMagick"), appPaths, httpClient, fileSystem, environment);
+            }
+            catch
+            {
+                logger.Info("ImageMagick not available. Will try next image processor.");
             }
 
             return new NullImageEncoder();
