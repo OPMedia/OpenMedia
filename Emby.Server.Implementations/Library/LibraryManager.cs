@@ -182,7 +182,7 @@ namespace Emby.Server.Implementations.Library
             _providerManagerFactory = providerManagerFactory;
             _userviewManager = userviewManager;
             _appHost = appHost;
-            _libraryItemsCache = new ItemLruCache(_logger);
+            _libraryItemsCache = new ItemLruCache();
 
             ConfigurationManager.ConfigurationUpdated += ConfigurationUpdated;
 
@@ -1284,12 +1284,6 @@ namespace Emby.Server.Implementations.Library
             }
 
             await ItemRepository.UpdateInheritedValuesAsync(cancellationToken).ConfigureAwait(false);
-
-            // S2 验收：条目缓存命中率报告（每轮扫描时点；容量/TTL 可用
-            // OPENMEDIA_ITEM_CACHE_SIZE / OPENMEDIA_ITEM_CACHE_TTL_SECONDS 调）
-            var cacheStats = _libraryItemsCache.GetStats();
-            _logger.Info("Item cache stats: {0} entries, hit rate {1}% ({2} hits / {3} misses, {4} capacity evictions, {5} TTL expiries)",
-                new object[] { cacheStats.Count, Math.Round(cacheStats.HitRatePercent, 1), cacheStats.Hits, cacheStats.Misses, cacheStats.CapacityEvictions, cacheStats.TtlExpiries });
 
             progress.Report(100);
         }
