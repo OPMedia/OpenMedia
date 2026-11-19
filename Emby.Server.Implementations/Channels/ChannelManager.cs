@@ -32,11 +32,15 @@ using MediaBrowser.Controller.IO;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Tasks;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Channels
 {
     public class ChannelManager : IChannelManager
     {
+        // IChannelManager members are synchronous; JTF keeps these boundaries deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         internal IChannel[] Channels { get; private set; }
 
         private readonly IUserManager _userManager;
@@ -245,8 +249,7 @@ namespace Emby.Server.Implementations.Channels
             {
                 foreach (var item in returnItems)
                 {
-                    var task = RefreshLatestChannelItems(GetChannelProvider(item), CancellationToken.None);
-                    Task.WaitAll(task);
+                    _joinableTaskFactory.Run(() => RefreshLatestChannelItems(GetChannelProvider(item), CancellationToken.None));
                 }
             }
 
@@ -319,7 +322,7 @@ namespace Emby.Server.Implementations.Channels
 
             if (item == null)
             {
-                item = GetChannel(channel, CancellationToken.None).Result;
+                item = _joinableTaskFactory.Run(() => GetChannel(channel, CancellationToken.None));
             }
 
             return item;
