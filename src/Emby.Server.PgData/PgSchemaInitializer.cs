@@ -203,10 +203,6 @@ namespace Emby.Server.PgData
 
             // ========== item_extradata 查询索引（对照旧 idx_ItemValues6/7/8） ==========
 
-            // clean_value 是查询引擎的过滤/分组列（Genres/Tags/Studios 的 EXISTS 与 GROUP BY），
-            // 但 dump DDL 里没有它 —— 原来这里直接建索引，全新库会报
-            // "column clean_value does not exist" 整个初始化失败。必须先补列。
-            Execute(connection, "ALTER TABLE item_extradata ADD COLUMN IF NOT EXISTS clean_value TEXT");
             Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_type_clean_value ON item_extradata (extradata_type_id, clean_value)");
             Execute(connection, "CREATE INDEX IF NOT EXISTS idx_item_extradata_item_type ON item_extradata (item_id, extradata_type_id)");
 
