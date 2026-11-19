@@ -19,11 +19,15 @@ using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Globalization;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Collections
 {
     public class CollectionManager : ICollectionManager
     {
+        // ICollectionManager members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly ILibraryManager _libraryManager;
         private readonly IFileSystem _fileSystem;
         private readonly ILibraryMonitor _iLibraryMonitor;
@@ -117,7 +121,7 @@ namespace Emby.Server.Implementations.Collections
             // This could cause it to get re-resolved as a plain folder
             var folderName = _fileSystem.GetValidFilename(name) + " [boxset]";
 
-            var parentFolder = GetCollectionsFolder(true).Result;
+            var parentFolder = _joinableTaskFactory.Run(() => GetCollectionsFolder(true));
 
             if (parentFolder == null)
             {
