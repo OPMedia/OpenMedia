@@ -193,3 +193,72 @@
 - **性能**：195k 库的 old/new A/B 始终没做（本机没有 fixture），Stage 2 的单阶段写只有正确性验证。
 - **运行时验证**：DLNA/NAT/LiveTv/Provider/转码这些路径全部只有编译期验证，没有真实设备或真实 API。
 - **Surgery #1 后半**：schema 收敛（单表 + 恢复外键）、`GetWhereClauses` 拆分、跨聚合事务。
+
+---
+
+## 七、性能轮（2026-11-19）
+
+### 怎么做的
+
+1. 用仓库自带的 `tests/perf/fixture-tree-100k.sql` 造了 **195,251 条**的树形库
+   （60k 电影 / 3k 系列 / 12k 季 / 120k 集），外加 5.4M user_datas、510k extradata、
+   630k ancestor_ids、100 用户。本机无 psql，写了 60 行的 psql 兼容执行器复用原脚本。
+2. 跑 `tests/perf/explain-matrix.sql` 的 50 个查询分支，取真实耗时。
+3. 按"先测量、再改、再测"的顺序动刀。
+
+### 修掉的真问题
+
+**A. 非相关子查询被逐行重算（最贵的一处）**
+
+`A.id IN (SELECT ...)` 里的子查询不引用外层列，但规划器把 IN 展平成 Semi Join 并**逐行执行**：
+person 过滤实测 `loops=20280`、每次扫 8 个分区、447k 缓冲区、**410ms**。
+加 `OFFSET 0` 作为物化屏障（无 ORDER BY 时结果集完全相同）后 **33ms**。
+同款修了 7 处：PersonIds / PersonName / ArtistIds / AlbumArtistIds / GenreIds / StudioIds / AncestorId。
+
+**B. Genres / Tags 的相关子查询**
+
+`'x' IN (SELECT clean_value ... WHERE item_id = A.id)` → `EXISTS (... AND clean_value = 'x')`，
+走 `(item_id, extradata_type_id)` 主键前缀。**141ms → 0.2ms**。NOT IN 版本同步改 NOT EXISTS。
+
+**C. 缺索引**（195k 实测）
+
+| 索引 | 分支 | 前 → 后 |
+|---|---|---|
+| `is_locked` 部分索引 | BR-11 | 127ms → 0.1ms |
+| 列表三元布尔部分索引 | BR-10 | 149ms → 0.4ms |
+| `date_last_saved` 部分索引 | BR-18 | 172ms → 10ms |
+| `item_extradata(type,value,item_id)` | BR-25 | 131ms → 0.2ms |
+| `item_people(person_id,item_id)` | BR-30 | 410ms → 33ms |
+
+全部写进 `emby_pgsql_dump_schema_optimized.sql`（依赖后补列的那几条放
+`PgSchemaInitializer.HotPathIndexDdl`），新装库自检 9/9 建成。
+
+### 一个必须记下来的教训：基线会漂
+
+`explain-matrix.sql` 里有 **4 条分支测的是代码已经不发的 SQL**：
+
+- BR-34 用相关标量子查询，代码早已改 NOT EXISTS
+- BR-36/37 用 `data::text LIKE`，代码早已改 `data->>'x'`
+- BR-40 用逐行相关 `count(*)`，代码早已改 LEFT JOIN 聚合
+
+也就是说那 517ms / 282ms / 200ms / 139ms 从来不是真实成本。矩阵漂移比代码漂移更危险，
+因为它会让人去优化一个不存在的问题。已全部对齐真实 SQL。
+
+### 结果
+
+| 指标 | 值 |
+|---|---|
+| 50 个查询分支总计 | **788 ms**（对齐后口径） |
+| 最慢分支 | **93 ms**（BR-26 Tags） |
+| >100ms 的分支 | **0** |
+| >50ms 的分支 | 6 |
+
+达标口径（P95 < 100ms @ 195k）在**查询层**已满足。注意这是 SQL 层，不含 HTTP/DTO 水合开销。
+
+### 仍然欠着的
+
+- **端到端延迟未测**：服务端 API 的 p95 没跑（本机 auth 流程把时间吃光了，只能测 SQL 层）。
+  `tests/perf/load-ab.py` 是现成的，接上真实 token 就能跑。
+- **BR-26 Tags 93ms** 贴着线，是下一个该看的。
+- **fixture 与矩阵都在本轮被动过**：两者原先都有 bug（fixture 少一个值、库没挂 root；
+  矩阵测死 SQL）。这类"测试资产本身失真"的问题值得单独做一次体检。

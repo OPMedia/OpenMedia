@@ -118,7 +118,7 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE (A.guid = '00000
 
 -- ---------- 媒体流族 ----------
 \echo === BRANCH-34: HasNoAudioTrackWithLanguage（相关标量子查询）
-EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND ((SELECT language FROM media_streams WHERE item_id = A.id AND stream_type = 1 AND language = 'eng' LIMIT 1) IS NULL) ORDER BY A.sort_name LIMIT 100;
+EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND NOT EXISTS (SELECT 1 FROM media_streams s WHERE s.item_id = A.id AND s.stream_type = 1 AND s.language = 'eng') ORDER BY A.sort_name LIMIT 100;
 
 \echo === BRANCH-35: HasSubtitles（media_streams stream_type=2 EXISTS 形态）
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND EXISTS (SELECT 1 FROM media_streams WHERE item_id = A.id AND stream_type = 2) ORDER BY A.sort_name LIMIT 100;
@@ -137,13 +137,18 @@ EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND A.images::text LIKE '%Primary%' ORDER BY A.sort_name LIMIT 100;
 
 -- ---------- 评分/相似度族 ----------
-\echo === BRANCH-40: similarity_score 表达式（Similar 端点 ORDER BY）
+\echo === BRANCH-40: similarity_score 表达式（相似度评分，LEFT JOIN 聚合形态）
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id, A.name,
   (CASE WHEN A.official_rating IS NULL THEN 10 ELSE 0 END)
   + (CASE WHEN ABS(COALESCE(A.production_year, 0) - 2000) < 10 THEN 10 ELSE 0 END)
   + (CASE WHEN ABS(COALESCE(A.production_year, 0) - 2000) < 5 THEN 5 ELSE 0 END)
-  + ((SELECT count(*) FROM item_extradata WHERE item_id = A.id AND clean_value IN (SELECT clean_value FROM item_extradata WHERE item_id = (SELECT id FROM media_items WHERE name = 'Movie-01234' LIMIT 1))) * 10) AS similarity_score
-FROM media_items A WHERE A.type = 2 ORDER BY similarity_score DESC, A.sort_name LIMIT 20;
+  + (COALESCE(sim.match_count, 0) * 10) AS similarity_score
+FROM media_items A
+LEFT JOIN (SELECT e.item_id, count(*) AS match_count FROM item_extradata e
+           WHERE e.clean_value IN (SELECT s.clean_value FROM item_extradata s
+                                   WHERE s.item_id = (SELECT id FROM media_items WHERE name = 'Movie-01234' LIMIT 1))
+           GROUP BY e.item_id) sim ON sim.item_id = A.id
+WHERE A.type = 2 ORDER BY similarity_score DESC, A.sort_name LIMIT 20;
 
 \echo === BRANCH-41: search_score 布尔过滤（SearchTerm）
 EXPLAIN (ANALYZE, BUFFERS) SELECT A.id FROM media_items A WHERE A.type = 2 AND ((CASE WHEN (A.clean_name LIKE 'movie-12%' OR (A.original_title IS NOT NULL AND A.original_title LIKE 'movie-12%')) THEN 10 ELSE 0 END) + (CASE WHEN (A.clean_name LIKE '%movie-12%' OR (A.original_title IS NOT NULL AND A.original_title LIKE '%movie-12%')) THEN 10 ELSE 0 END)) > 0 ORDER BY A.sort_name LIMIT 100;
