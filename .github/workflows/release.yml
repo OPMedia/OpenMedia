@@ -148,6 +148,21 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # 冒烟步骤要真把镜像跑起来，应用没有数据库起不来，所以这里起一个。
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: "123456"
+          POSTGRES_DB: openmedia
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openmedia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -184,6 +199,59 @@ jobs:
             TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
             TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
             FANART_API_KEY=${{ secrets.FANART_API_KEY }}
+
+      # ----------------------------------------------------------
+      # 冒烟：单架构 load 进本地 docker，真跑一次
+      #   多架构那次只 export 到 registry，本地跑不了；
+      #   这一步是为了证明「镜像能起来、能连库、能出页面」，
+      #   而不是只有 build 成功。
+      # ----------------------------------------------------------
+      - name: 冒烟（构建 amd64 并真跑）
+        run: |
+          set -eux
+          docker buildx build --platform linux/amd64 --load \
+            --build-arg TVDB_API_KEY="$TVDB_API_KEY" \
+            --build-arg TMDB_API_KEY="$TMDB_API_KEY" \
+            --build-arg FANART_API_KEY="$FANART_API_KEY" \
+            -t openmedia:smoke .
+        env:
+          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FANART_API_KEY: ${{ secrets.FANART_API_KEY }}
+
+      - name: 冒烟（等它真的服务起来）
+        run: |
+          set -eux
+          docker run -d --name om-smoke -p 18096:8096 \
+            --add-host=host.docker.internal:host-gateway \
+            -e OPENMEDIA_PGCONN="Host=host.docker.internal;Port=5432;Database=openmedia;Username=postgres;Password=123456" \
+            openmedia:smoke
+
+          ok=0
+          for i in $(seq 1 90); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:18096/health/ready || true)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 2
+          done
+
+          if [ "$ok" != "1" ]; then
+            echo "::error::镜像 90 次轮询内没有 ready"
+            docker logs om-smoke | tail -80
+            exit 1
+          fi
+
+          for path in /health/live /health/ready /app/ /emby/System/Info/Public; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://localhost:18096${path}")
+            echo "  ${path} -> ${code}"
+            [ "$code" = "200" ] || { docker logs om-smoke | tail -40; exit 1; }
+          done
+
+      - name: 冒烟（清理）
+        if: always()
+        run: |
+          docker logs om-smoke > /tmp/om-smoke.log 2>&1 || true
+          tail -40 /tmp/om-smoke.log || true
+          docker rm -f om-smoke || true
 
   # ------------------------------------------------------------
   # 汇总成 GitHub Release（仅 tag 触发）
