@@ -12,4 +12,6 @@ public interface ICryptoProvider
 	byte[] ComputeMD5(byte[] bytes);
 
 	byte[] ComputeSHA1(byte[] bytes);
+
+	byte[] CreatePasswordHash(string password, byte[] salt, int iterations);
 }

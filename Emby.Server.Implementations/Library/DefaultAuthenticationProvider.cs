@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Entities;
@@ -32,9 +30,7 @@ namespace Emby.Server.Implementations.Library
                 throw new Exception("Invalid username or password");
             }
 
-            var success = string.Equals(GetPasswordHash(resolvedUser), GetHashedString(resolvedUser, password), StringComparison.OrdinalIgnoreCase);
-
-            if (!success)
+            if (!VerifyPassword(resolvedUser, password))
             {
                 throw new Exception("Invalid username or password");
             }
@@ -53,7 +49,7 @@ namespace Emby.Server.Implementations.Library
 
         private bool IsPasswordEmpty(User user, string passwordHash)
         {
-            return string.Equals(passwordHash, GetEmptyHashedString(user), StringComparison.OrdinalIgnoreCase);
+            return IsEmptyPassword(passwordHash);
         }
 
         public Task ChangePassword(User user, string newPassword)
@@ -88,18 +84,50 @@ namespace Emby.Server.Implementations.Library
         }
 
         /// <summary>
-        /// Gets the hashed string.
+        /// Gets a versioned PBKDF2-SHA512 hash of the supplied plaintext.
         /// </summary>
         public string GetHashedString(User user, string str)
         {
-            var salt = user.Salt;
-            if (salt != null)
-            {
-                // return BCrypt.HashPassword(str, salt);
-            }
+            return PasswordHash.Create(_cryptographyProvider, str).ToString();
+        }
 
-            // legacy
-            return BitConverter.ToString(_cryptographyProvider.ComputeSHA1(Encoding.UTF8.GetBytes(str))).Replace("-", string.Empty);
+        /// <summary>
+        /// Verifies a plaintext credential against either a versioned or a legacy stored hash.
+        /// </summary>
+        public bool Verify(string storedHash, string password)
+        {
+            return PasswordHash.TryParse(storedHash, out var parsed) && parsed.Verify(_cryptographyProvider, password);
+        }
+
+        public bool VerifyPassword(User user, string password)
+        {
+            return Verify(GetPasswordHash(user), password);
+        }
+
+        /// <summary>
+        /// Verifies the SHA1 hex string sent by legacy clients that do not send the plaintext.
+        /// </summary>
+        public bool VerifyHashString(string storedHash, string hashString)
+        {
+            return PasswordHash.TryParse(storedHash, out var parsed) && parsed.VerifyHashString(_cryptographyProvider, hashString);
+        }
+
+        public bool IsEmptyPassword(string storedHash)
+        {
+            return PasswordHash.IsEmpty(_cryptographyProvider, storedHash);
+        }
+
+        public bool IsLegacyHash(string storedHash)
+        {
+            return PasswordHash.TryParse(storedHash, out var parsed) && parsed.IsLegacy;
+        }
+
+        /// <summary>
+        /// Re-hashes a verified plaintext credential with PBKDF2 (lazy migration).
+        /// </summary>
+        public void UpgradePassword(User user, string password)
+        {
+            user.Password = GetHashedString(user, password);
         }
     }
 }
