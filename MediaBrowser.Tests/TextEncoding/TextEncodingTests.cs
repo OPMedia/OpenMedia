@@ -131,5 +131,28 @@ namespace MediaBrowser.Tests.TextEncoding
             Assert.IsNotNull(name);
             Assert.AreEqual(Text, Subject.GetEncodingFromCharset(name).GetString(bytes));
         }
+
+        /// <summary>
+        /// 换库后最脆的一环：UTF.Unknown 返回小写编码名（如 gb18030 / shift-jis），
+        /// 检测出的名字必须还能被 GetEncodingFromCharset 解析并用于解码。
+        /// </summary>
+        [TestMethod]
+        public void UtfUnknownDetectedName_Gbk_ResolvesAndRoundTrips()
+        {
+            const string Text = "这是一段中文字幕测试内容，用于验证字符集检测链路能否正确识别 GBK 编码。\r\n"
+                + "第二行同样使用简体中文，包含标点符号、数字 12345 与英文 mixed content。\r\n";
+
+            var bytes = Encoding.GetEncoding("gb18030").GetBytes(Text);
+
+            var detected = UtfUnknown.CharsetDetector.DetectFromBytes(bytes, 0, bytes.Length).Detected;
+
+            Assert.IsNotNull(detected);
+            Assert.IsTrue(string.Equals("gb18030", detected.EncodingName, StringComparison.OrdinalIgnoreCase), $"Unexpected charset: {detected.EncodingName}");
+
+            var encoding = Subject.GetEncodingFromCharset(detected.EncodingName);
+
+            Assert.AreEqual(54936, encoding.CodePage);
+            Assert.AreEqual(Text, encoding.GetString(bytes));
+        }
     }
 }

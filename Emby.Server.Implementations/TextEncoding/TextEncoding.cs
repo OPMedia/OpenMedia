@@ -4,8 +4,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Serialization;
 using MediaBrowser.Model.Text;
-using NLangDetect.Core;
-using UniversalDetector;
+using UtfUnknown;
 
 namespace Emby.Server.Implementations.TextEncoding
 {
@@ -13,13 +12,12 @@ namespace Emby.Server.Implementations.TextEncoding
     {
         private readonly IFileSystem _fileSystem;
         private readonly ILogger _logger;
-        private IJsonSerializer _json;
 
+        // json 参数保留：ApplicationHost 和测试都按这个签名构造实例。
         public TextEncoding(IFileSystem fileSystem, ILogger logger, IJsonSerializer json)
         {
             _fileSystem = fileSystem;
             _logger = logger;
-            _json = json;
         }
 
         public Encoding GetASCIIEncoding()
@@ -83,9 +81,11 @@ namespace Emby.Server.Implementations.TextEncoding
             }
         }
 
-        private bool _langDetectInitialized;
         public string GetDetectedEncodingName(byte[] bytes, int count, string language, bool enableLanguageDetection)
         {
+            // enableLanguageDetection 保留在签名里（ITextEncoding 与 SubtitleEncoder 都还在传），
+            // 但不再做语种检测：跟随 Jellyfin 移除内置语种检测，检测字符集只用字节统计模型。
+            // language 仍然有效：调用方从媒体元数据带来的已知语言会用于 charset 兜底。
             var index = 0;
 
             var encoding = GetInitialEncoding(bytes, count);
@@ -124,22 +124,6 @@ namespace Emby.Server.Implementations.TextEncoding
 #pragma warning restore SYSLIB0001
             }
 
-            if (string.IsNullOrWhiteSpace(language) && enableLanguageDetection)
-            {
-                if (!_langDetectInitialized)
-                {
-                    _langDetectInitialized = true;
-                    LanguageDetector.Initialize(_json);
-                }
-
-                language = DetectLanguage(bytes, index, count);
-
-                if (!string.IsNullOrWhiteSpace(language))
-                {
-                    _logger.Debug("Text language detected as {0}", language);
-                }
-            }
-
             var charset = DetectCharset(bytes, index, count, language);
 
             if (!string.IsNullOrWhiteSpace(charset))
@@ -158,35 +142,6 @@ namespace Emby.Server.Implementations.TextEncoding
             if (!string.IsNullOrWhiteSpace(language))
             {
                 return GetFileCharacterSetFromLanguage(language);
-            }
-
-            return null;
-        }
-
-        private string DetectLanguage(byte[] bytes, int index, int count)
-        {
-            try
-            {
-                return LanguageDetector.DetectLanguage(Encoding.UTF8.GetString(bytes, index, count));
-            }
-            catch (NLangDetectException)
-            {
-            }
-
-            try
-            {
-                return LanguageDetector.DetectLanguage(Encoding.ASCII.GetString(bytes, index, count));
-            }
-            catch (NLangDetectException)
-            {
-            }
-
-            try
-            {
-                return LanguageDetector.DetectLanguage(Encoding.Unicode.GetString(bytes, index, count));
-            }
-            catch (NLangDetectException)
-            {
             }
 
             return null;
@@ -303,11 +258,7 @@ namespace Emby.Server.Implementations.TextEncoding
 
         private string DetectCharset(byte[] bytes, int index, int count, string language)
         {
-            var detector = new CharsetDetector();
-            detector.Feed(bytes, index, count);
-            detector.DataEnd();
-
-            var charset = detector.Charset;
+            var charset = CharsetDetector.DetectFromBytes(bytes, index, count).Detected?.EncodingName;
 
             // This is often incorrectly indetected. If this happens, try to use other techniques instead
             if (string.Equals("x-mac-cyrillic", charset, StringComparison.OrdinalIgnoreCase))

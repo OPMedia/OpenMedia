@@ -42,14 +42,14 @@
     <PackageReference Include="SimpleInjector" Version="5.6.0" />
     <PackageReference Include="PlaylistsNET" Version="1.0.2" />
     <PackageReference Include="SMBLibrary" Version="1.5.8.1" />
+    <!-- MPL-1.1；Jellyfin 已有同库先例（2.7.0），这里用带原生 net10.0 目标的 2.8.0 -->
+    <PackageReference Include="UTF.Unknown" Version="2.8.0" />
   </ItemGroup>
 
-  <!-- 嵌入资源：本地化 + 语言检测 profile + values -->
+  <!-- 嵌入资源：本地化 + values -->
   <ItemGroup>
     <EmbeddedResource Include="Localization\**\*.json" />
     <EmbeddedResource Include="Localization\**\*.txt" />
-    <EmbeddedResource Include="TextEncoding\NLangDetect\Profiles\*" />
-    <EmbeddedResource Include="TextEncoding\NLangDetect\Utils\messages.properties" />
     <EmbeddedResource Include="values.txt" />
   </ItemGroup>
 
