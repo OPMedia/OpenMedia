@@ -24,5 +24,7 @@ public enum TranscodeReason
 	VideoProfileNotSupported,
 	AudioBitDepthNotSupported,
 	SubtitleCodecNotSupported,
-	DirectPlayError
+	DirectPlayError,
+	// 追加在末尾，避免改动既有 reason 的数值（客户端按数值识别）。
+	VideoRangeTypeNotSupported
 }

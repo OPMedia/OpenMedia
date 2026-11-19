@@ -36,6 +36,9 @@ public class MediaStreamInfo
 
 	public string color_primaries { get; set; }
 
+	/// <summary>ffprobe 的 side_data_list；目前只消费 DOVI configuration record。</summary>
+	public List<MediaStreamSideDataInfo> side_data_list { get; set; }
+
 	public int width { get; set; }
 
 	public int refs { get; set; }
