@@ -575,7 +575,7 @@ namespace Emby.Server.Implementations.IO
                 ThrowIfFailed(status, path.CanonicalPath, "login");
             }
 
-            var store = client.TreeConnect(@"\\" + path.Host + @"\" + path.Share, out status);
+            var store = client.TreeConnect(path.Share, out status);
             if (store == null || status != NTStatus.STATUS_SUCCESS)
             {
                 client.Disconnect();
