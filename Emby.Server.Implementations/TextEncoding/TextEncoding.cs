@@ -37,7 +37,12 @@ namespace Emby.Server.Implementations.TextEncoding
 
             if (count >= 2)
             {
+                // FE FF = UTF-16 big-endian BOM, FF FE = little-endian。
+                // 原实现两者都返回 Encoding.Unicode（小端），BE 内容会被逐字节颠倒。
                 if (buffer[0] == 0xfe && buffer[1] == 0xff)
+                    return Encoding.BigEndianUnicode;
+
+                if (buffer[0] == 0xff && buffer[1] == 0xfe)
                     return Encoding.Unicode;
             }
 
@@ -64,13 +69,11 @@ namespace Emby.Server.Implementations.TextEncoding
                 case TextEncodingDetect.CharacterEncoding.Ascii:
                     return Encoding.ASCII;
                 case TextEncodingDetect.CharacterEncoding.Utf16BeBom:
-                    return Encoding.UTF32;
                 case TextEncodingDetect.CharacterEncoding.Utf16BeNoBom:
-                    return Encoding.UTF32;
+                    return Encoding.BigEndianUnicode;
                 case TextEncodingDetect.CharacterEncoding.Utf16LeBom:
-                    return Encoding.UTF32;
                 case TextEncodingDetect.CharacterEncoding.Utf16LeNoBom:
-                    return Encoding.UTF32;
+                    return Encoding.Unicode;
                 case TextEncodingDetect.CharacterEncoding.Utf8Bom:
                     return Encoding.UTF8;
                 case TextEncodingDetect.CharacterEncoding.Utf8Nobom:
@@ -87,9 +90,38 @@ namespace Emby.Server.Implementations.TextEncoding
 
             var encoding = GetInitialEncoding(bytes, count);
 
-            if (encoding != null && encoding.Equals(Encoding.UTF8))
+            // 带 BOM 或结构上可判定的编码必须在这里直接返回。
+            // 原来只有 UTF-8 早返回，UTF-16/UTF-32 会落到下面的字符集检测 ——
+            // 而字符集检测对 UTF-16 只会报 "ascii"，随后被当 ASCII/1252 解码，
+            // 这就是 UTF-16 字幕读出来是乱码 + 满屏 NUL 的根因。
+            if (encoding != null)
             {
-                return "utf-8";
+                if (encoding.Equals(Encoding.UTF8))
+                {
+                    return "utf-8";
+                }
+
+                if (encoding.Equals(Encoding.Unicode))
+                {
+                    return "utf-16";
+                }
+
+                if (encoding.Equals(Encoding.BigEndianUnicode))
+                {
+                    return "utf-16BE";
+                }
+
+                if (encoding.Equals(Encoding.UTF32))
+                {
+                    return "utf-32";
+                }
+
+#pragma warning disable SYSLIB0001 // 旧字幕的既有编码，不是新数据
+                if (encoding.Equals(Encoding.UTF7))
+                {
+                    return "utf-7";
+                }
+#pragma warning restore SYSLIB0001
             }
 
             if (string.IsNullOrWhiteSpace(language) && enableLanguageDetection)
@@ -169,16 +201,36 @@ namespace Emby.Server.Implementations.TextEncoding
 
             _logger.Debug("Getting encoding object for character set: {0}", charset);
 
+            // .NET 5+ 默认禁用了 UTF-7 的名字解析（GetEncoding("utf-7") 抛
+            // NotSupportedException，除非打开 AppContext switch），但 Encoding.UTF7
+            // 属性本身仍可用。旧字幕里确实存在 UTF-7，走属性保住这条路径。
+            if (string.Equals(charset, "utf-7", StringComparison.OrdinalIgnoreCase))
+            {
+#pragma warning disable SYSLIB0001 // 旧字幕的既有编码，不是新数据
+                return Encoding.UTF7;
+#pragma warning restore SYSLIB0001
+            }
+
             try
             {
                 return Encoding.GetEncoding(charset);
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
             {
-                charset = charset.Replace("-", string.Empty);
-                _logger.Debug("Getting encoding object for character set: {0}", charset);
+                // 第二道：去掉连字符再试（"windows-1252" -> "windows1252"）。
+                // 这个 fallback 本身也可能失败，原实现没兜住，异常会一路冒到
+                // SubtitleEncoder，导致一条字幕的字符集猜错就整个转换失败。
+                var stripped = charset.Replace("-", string.Empty);
 
-                return Encoding.GetEncoding(charset);
+                try
+                {
+                    return Encoding.GetEncoding(stripped);
+                }
+                catch (Exception inner) when (inner is ArgumentException or NotSupportedException)
+                {
+                    _logger.Warn("Unknown character set '{0}', falling back to UTF-8", charset);
+                    return Encoding.UTF8;
+                }
             }
         }
 
@@ -241,7 +293,9 @@ namespace Emby.Server.Implementations.TextEncoding
                 case "vie":
                     return "windows-1258";
                 case "kor":
-                    return "cp949";
+                    // "cp949" 不是可解析的编码名，CodePages 里对应的是 ks_c_5601-1987（code page 949）。
+                    // 用 euc-kr 会落到 code page 51949，扩展区韩文会错码。
+                    return "ks_c_5601-1987";
                 default:
                     return "windows-1252";
             }

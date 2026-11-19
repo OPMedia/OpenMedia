@@ -37,6 +37,14 @@ namespace MediaBrowser.Server.Mono
 
         public static async Task Main(string[] args)
         {
+            // .NET Core 起 BCL 只内置 UTF-8 / UTF-16 / UTF-32 / ASCII。
+            // windows-125x、gb18030、shift_jis、euc-kr、tis-620 这些传统代码页
+            // 必须显式注册 provider，否则 Encoding.GetEncoding("gb18030") 直接抛
+            // ArgumentException。字幕字符集检测的产出正是这些名字
+            // （TextEncoding.GetEncodingFromCharset），不注册的话所有非 UTF-8
+            // 字幕（中文 GBK、日文 Shift-JIS、俄文 cp1251）整条链路都会失败。
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             var applicationPath = Assembly.GetEntryAssembly().Location;
 
 
