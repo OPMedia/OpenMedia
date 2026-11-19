@@ -14,11 +14,14 @@ using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Reflection;
+using Microsoft.VisualStudio.Threading;
 
 namespace MediaBrowser.Controller.MediaEncoding;
 
 public class EncodingHelper
 {
+	private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
 	private readonly CultureInfo _usCulture = new CultureInfo("en-US");
 
 	private readonly IMediaEncoder _mediaEncoder;
@@ -437,7 +440,8 @@ public class EncodingHelper
 			string text3 = string.Empty;
 			if (!string.IsNullOrEmpty(state.SubtitleStream.Language))
 			{
-				string result = _subtitleEncoder.GetSubtitleFileCharacterSet(path, state.SubtitleStream.Language, state.MediaSource.Protocol, CancellationToken.None).Result;
+				// GetTextSubtitleParam 由同步调用方使用；JTF.Run 在该边界取得字符集。
+				string result = _joinableTaskFactory.Run(() => _subtitleEncoder.GetSubtitleFileCharacterSet(path, state.SubtitleStream.Language, state.MediaSource.Protocol, CancellationToken.None));
 				if (!string.IsNullOrEmpty(result))
 				{
 					text3 = ":charenc=" + result;
@@ -1934,18 +1938,8 @@ public class EncodingHelper
 		string text = string.Empty;
 		string text2 = string.Empty;
 		string text3 = string.Empty;
-		string text4 = string.Empty;
-		string.IsNullOrEmpty(state.AlbumCoverPath);
-		if (false)
-		{
-			text = " -i \"" + state.AlbumCoverPath + "\"";
-			text2 = " -map 0:a -map 1:v -c:1:v copy";
-			text3 = " -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover(Front)\"";
-		}
-		else
-		{
-			text4 = " -vn";
-		}
+		// 反编译残留的 if (false) 分支不可达；直接保留实际执行的 -vn 行为。
+		string text4 = " -vn";
 		int numberOfThreads = GetNumberOfThreads(state, encodingOptions, null);
 		string inputModifier = GetInputModifier(state, encodingOptions);
 		return string.Format("{0} {1}{7}{8} -threads {2}{3} {4} -id3v2_version 3 -write_id3v1 1{6} -y \"{5}\"", inputModifier, GetInputArgument(state, encodingOptions), numberOfThreads, text4, string.Join(" ", list.ToArray()), outputPath, text3, text, text2).Trim();
