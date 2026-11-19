@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # fixture-ab-compare.ps1 - Debug/Release 同口径 A/B 对比 fixture 生成器
 #
 # 为什么存在（docs/perf-baseline.md 老口径作废问题）：
@@ -52,6 +52,32 @@ L "-- 形态：root(1) -> CollectionFolder($LibCount) -> {Movie|Series->Season->
 L "-- 规模：movie $movie / series $series / season $season / episode $episode / person 30 / total ~$total"
 L "-- 安全红线：严禁在共享库 openmedia 上执行（R2：功能测试断言 TotalRecordCount）"
 L "-- ============================================================"
+L ""
+L "-- 0. schema 前置列（幂等）"
+L "--   这些列由 PgSchemaInitializer 在**服务启动时** ADD COLUMN 补上，dump 里没有。"
+L "--   所以「只灌了 emby_pgsql_dump_schema_optimized.sql 的库」直接跑本 fixture 会报"
+L "--   column `"type_name`" does not exist —— CI 的 perf-smoke 就是这么挂的。"
+L "--   这里把前置条件显式写出来，fixture 自带依赖，不依赖`"源库恰好被服务启动过`"。"
+L "--   定义与 src/Emby.Server.PgData/PgSchemaInitializer.cs 保持一致。"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS data                JSONB;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS type_name           TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS is_folder           BOOLEAN DEFAULT FALSE;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS is_virtual_item     BOOLEAN DEFAULT FALSE;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS media_type          TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS clean_name          TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS top_parent_id       TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS channel_id          TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS album               TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS extra_ids           TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS unrated_type        TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS trailer_types       TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS external_series_id  TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS owner_id            TEXT;"
+L "ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS date_last_media_added TIMESTAMPTZ;"
+L "ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS person_type_name    TEXT;"
+L "ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS sort_order          INTEGER;"
+L "ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS codec_time_base     TEXT;"
+L "ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS is_avc              BOOLEAN;"
 L ""
 L "\timing on"
 L ""

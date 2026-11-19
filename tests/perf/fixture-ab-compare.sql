@@ -1,10 +1,37 @@
-﻿-- ============================================================
+-- ============================================================
 -- Debug/Release 同口径 A/B 对比 fixture：5 库 x (电影 30 + 系列 3 x 3 季 x 5 集)
 -- 生成器：tests\perf\fixture-ab-compare.ps1（勿手改，改生成器参数重跑）
 -- 形态：root(1) -> CollectionFolder(5) -> {Movie|Series->Season->Episode}（树形，祖先分布真实）
 -- 规模：movie 150 / series 15 / season 45 / episode 225 / person 30 / total ~471
 -- 安全红线：严禁在共享库 openmedia 上执行（R2：功能测试断言 TotalRecordCount）
 -- ============================================================
+
+-- 0. schema 前置列（幂等）
+--   这些列由 PgSchemaInitializer 在**服务启动时** ADD COLUMN 补上，dump 里没有。
+--   所以「只灌了 emby_pgsql_dump_schema_optimized.sql 的库」直接跑本 fixture 会报
+--   column "type_name" does not exist —— CI 的 perf-smoke 就是这么挂的。
+--   这里把前置条件显式写出来，fixture 自带依赖，不依赖"源库恰好被服务启动过"。
+--   定义与 src/Emby.Server.PgData/PgSchemaInitializer.cs 保持一致。
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS data                JSONB;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS type_name           TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS is_folder           BOOLEAN DEFAULT FALSE;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS is_virtual_item     BOOLEAN DEFAULT FALSE;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS media_type          TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS clean_name          TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS top_parent_id       TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS channel_id          TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS album               TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS extra_ids           TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS unrated_type        TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS trailer_types       TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS external_series_id  TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS owner_id            TEXT;
+ALTER TABLE media_items    ADD COLUMN IF NOT EXISTS date_last_media_added TIMESTAMPTZ;
+ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS person_type_name    TEXT;
+ALTER TABLE item_people    ADD COLUMN IF NOT EXISTS sort_order          INTEGER;
+ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS codec_time_base     TEXT;
+ALTER TABLE media_streams  ADD COLUMN IF NOT EXISTS is_avc              BOOLEAN;
+ALTER TABLE item_extradata  ADD COLUMN IF NOT EXISTS clean_value         TEXT;
 
 \timing on
 
@@ -62,6 +89,7 @@ SELECT
     (36000000000 + (n % 90) * 60000000000)::bigint,
     now() - ((n % 20000) || ' days')::interval,
     now() - ((n % 3650) || ' days')::interval,
+    now() - ((n % 365) || ' days')::interval,
     now() - ((n % 365) || ' days')::interval,
     now() - ((n % 365) || ' days')::interval,
     'ab-mv-' || lpad(n::text, 6, '0'),

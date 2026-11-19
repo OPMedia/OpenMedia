@@ -520,6 +520,8 @@ CREATE TABLE IF NOT EXISTS item_extradata (
 ) WITH (fillfactor = 90);
 
 CREATE INDEX idx_item_extradata_type_id ON item_extradata (extradata_type_id);
+-- clean_value 由查询引擎使用（EXISTS 过滤与 GROUP BY），必须显式建列。
+ALTER TABLE item_extradata ADD COLUMN IF NOT EXISTS clean_value TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_extradata_type_clean_value ON item_extradata (extradata_type_id, clean_value);
 CREATE INDEX IF NOT EXISTS idx_item_extradata_item_type ON item_extradata (item_id, extradata_type_id);
 
