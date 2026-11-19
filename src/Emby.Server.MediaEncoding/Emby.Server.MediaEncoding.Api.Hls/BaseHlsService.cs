@@ -145,10 +145,10 @@ public abstract class BaseHlsService : BaseStreamingService
 				using (Stream fileStream = GetPlaylistFileStream(playlist))
 				using (StreamReader reader = new StreamReader(fileStream))
 				{
-					while (!reader.EndOfStream)
+					string line;
+					while ((line = await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false)) != null)
 					{
-						string line = await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false);
-						if (line != null && line.IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
+						if (line.IndexOf("#EXTINF:", StringComparison.OrdinalIgnoreCase) != -1)
 						{
 							num++;
 						}
@@ -181,8 +181,6 @@ public abstract class BaseHlsService : BaseStreamingService
 
 	protected override string GetCommandLineArguments(string outputPath, EncodingOptions encodingOptions, StreamState state, bool isEncoding)
 	{
-		int num = 0;
-		string text = ((num == 0) ? string.Empty : $"-itsoffset {TimeSpan.FromMilliseconds(num).TotalSeconds.ToString(UsCulture)} ");
 		int numberOfThreads = EncodingHelper.GetNumberOfThreads((EncodingJobInfo)(object)state, encodingOptions, ((EncodingJobInfo)state).OutputVideoCodec);
 		string inputModifier = EncodingHelper.GetInputModifier((EncodingJobInfo)(object)state, encodingOptions);
 		string text2 = (isEncoding ? GetStartNumber(state).ToString(UsCulture) : "0");
@@ -191,25 +189,22 @@ public abstract class BaseHlsService : BaseStreamingService
 		{
 			text3 = string.Format(" -hls_base_url \"{0}/\"", "hls/" + Path.GetFileNameWithoutExtension(outputPath));
 		}
-		if (true)
+		// 反编译残留的 if (true) 分支与不可达返回值已移除，以下为实际执行的命令行格式。
+		string text4 = Path.Combine(FileSystem.GetDirectoryName(outputPath), Path.GetFileNameWithoutExtension(outputPath)) + "%d" + GetSegmentFileExtension(state.Request);
+		string empty = string.Empty;
+		string text5 = state.Request.SegmentContainer;
+		if (string.IsNullOrWhiteSpace(text5))
 		{
-			string text4 = Path.Combine(FileSystem.GetDirectoryName(outputPath), Path.GetFileNameWithoutExtension(outputPath)) + "%d" + GetSegmentFileExtension(state.Request);
-			string empty = string.Empty;
-			string text5 = state.Request.SegmentContainer;
-			if (string.IsNullOrWhiteSpace(text5))
-			{
-				// BUG-21：无 SegmentContainer 时按分片扩展名推导封装格式（默认 .ts→mpegts），
-				// 避免 -segment_format 空值造成 ffmpeg 参数移位（-segment_list_entry_prefix 被吞）
-				text5 = GetSegmentFileExtension(state.Request).TrimStart('.');
-			}
-			if (string.Equals(text5, "ts", StringComparison.OrdinalIgnoreCase))
-			{
-				text5 = "mpegts";
-			}
-			text3 = string.Format("\"{0}/\"", "hls/" + Path.GetFileNameWithoutExtension(outputPath));
-			return string.Format("{0} {1} -map_metadata -1 -map_chapters -1 -threads {2} {3} {4} {5} -f segment -max_delay 5000000 -avoid_negative_ts disabled -start_at_zero -segment_time {6} {10} -individual_header_trailer 0 -segment_format {11} -segment_list_entry_prefix {12} -segment_list_type m3u8 -segment_start_number {7} -segment_list \"{8}\" -y \"{9}\"", inputModifier, EncodingHelper.GetInputArgument((EncodingJobInfo)(object)state, encodingOptions), numberOfThreads, EncodingHelper.GetMapArgs((EncodingJobInfo)(object)state), GetVideoArguments(state, encodingOptions), GetAudioArguments(state, encodingOptions), state.SegmentLength.ToString(UsCulture), text2, outputPath, text4, empty, text5, text3).Trim();
+			// BUG-21：无 SegmentContainer 时按分片扩展名推导封装格式（默认 .ts→mpegts），
+			// 避免 -segment_format 空值造成 ffmpeg 参数移位（-segment_list_entry_prefix 被吞）
+			text5 = GetSegmentFileExtension(state.Request).TrimStart('.');
 		}
-		return $"{text} {inputModifier} {EncodingHelper.GetInputArgument((EncodingJobInfo)(object)state, encodingOptions)} -map_metadata -1 -map_chapters -1 -threads {numberOfThreads} {EncodingHelper.GetMapArgs((EncodingJobInfo)(object)state)} {GetVideoArguments(state, encodingOptions)} -max_delay 5000000 -avoid_negative_ts disabled -start_at_zero {GetAudioArguments(state, encodingOptions)} -hls_time {state.SegmentLength.ToString(UsCulture)} -individual_header_trailer 0 -start_number {text2} -hls_list_size {((EncodingJobInfo)state).HlsListSize.ToString(UsCulture)}{text3} -y \"{outputPath}\"".Trim();
+		if (string.Equals(text5, "ts", StringComparison.OrdinalIgnoreCase))
+		{
+			text5 = "mpegts";
+		}
+		text3 = string.Format("\"{0}/\"", "hls/" + Path.GetFileNameWithoutExtension(outputPath));
+		return string.Format("{0} {1} -map_metadata -1 -map_chapters -1 -threads {2} {3} {4} {5} -f segment -max_delay 5000000 -avoid_negative_ts disabled -start_at_zero -segment_time {6} {10} -individual_header_trailer 0 -segment_format {11} -segment_list_entry_prefix {12} -segment_list_type m3u8 -segment_start_number {7} -segment_list \"{8}\" -y \"{9}\"", inputModifier, EncodingHelper.GetInputArgument((EncodingJobInfo)(object)state, encodingOptions), numberOfThreads, EncodingHelper.GetMapArgs((EncodingJobInfo)(object)state), GetVideoArguments(state, encodingOptions), GetAudioArguments(state, encodingOptions), state.SegmentLength.ToString(UsCulture), text2, outputPath, text4, empty, text5, text3).Trim();
 	}
 
 	protected override string GetDefaultH264Preset()

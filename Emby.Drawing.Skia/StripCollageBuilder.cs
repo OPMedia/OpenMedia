@@ -204,7 +204,6 @@ namespace Emby.Drawing.Skia
                 {
                     for (var y = 0; y < 2; y++)
                     {
-                        SKEncodedOrigin origin;
                         int newIndex;
 
                         using (var currentBitmap = GetNextValidImage(paths, imageIndex, out newIndex))

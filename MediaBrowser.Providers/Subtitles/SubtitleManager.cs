@@ -33,7 +33,15 @@ namespace MediaBrowser.Providers.Subtitles
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly IServerConfigurationManager _config;
 
-        public event EventHandler<SubtitleDownloadEventArgs> SubtitlesDownloaded;
+        private EventHandler<SubtitleDownloadEventArgs> _subtitlesDownloaded;
+
+        // 接口契约要求保留该事件；当前下载路径尚未触发它，显式访问器保持订阅语义不变。
+        public event EventHandler<SubtitleDownloadEventArgs> SubtitlesDownloaded
+        {
+            add { _subtitlesDownloaded += value; }
+            remove { _subtitlesDownloaded -= value; }
+        }
+
         public event EventHandler<SubtitleDownloadFailureEventArgs> SubtitleDownloadFailure;
 
         private ILocalizationManager _localization;

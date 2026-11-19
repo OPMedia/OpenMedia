@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Logging;
@@ -236,7 +237,13 @@ public class SessionInfo : IDisposable
 		}
 	}
 
-	private async void OnProgressTimerCallback(object state)
+	private void OnProgressTimerCallback(object state)
+	{
+		// ITimer 回调签名为 void；上报在助手中执行并显式丢弃 Task，异常由助手记录。
+		_ = OnProgressTimerCallbackAsync(state);
+	}
+
+	private async Task OnProgressTimerCallbackAsync(object state)
 	{
 		if (_disposed)
 		{

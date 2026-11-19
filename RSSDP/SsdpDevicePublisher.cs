@@ -361,9 +361,9 @@ namespace Rssdp.Infrastructure
             {
                 await _CommsServer.SendMessage(System.Text.Encoding.UTF8.GetBytes(message), endPoint, receivedOnlocalIpAddress, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                
+                // 搜索响应发送失败不影响发现流程，沿用原有的忽略语义。
             }
 
             //WriteTrace(String.Format("Sent search response to " + endPoint.ToString()), device);

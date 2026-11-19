@@ -21,11 +21,14 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.MediaInfo;
 using MediaBrowser.Model.Querying;
 using MediaBrowser.Model.Serialization;
+using Microsoft.VisualStudio.Threading;
 
 namespace MediaBrowser.Controller.Entities;
 
 public class Folder : BaseItem
 {
+	private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
 	public static IUserViewManager UserViewManager { get; set; }
 
 	public bool IsRoot { get; set; }
@@ -812,7 +815,8 @@ public class Folder : BaseItem
 			{
 				query.Parent = this;
 				query.ChannelIds = new Guid[1] { ChannelId };
-				return BaseItem.ChannelManager.GetChannelItemsInternal(query, (IProgress<double>)new SimpleProgress<double>(), CancellationToken.None).Result;
+				// GetItemsInternal 是同步重写；JTF.Run 在该边界驱动异步查询并保持同步契约。
+				return _joinableTaskFactory.Run(() => BaseItem.ChannelManager.GetChannelItemsInternal(query, (IProgress<double>)new SimpleProgress<double>(), CancellationToken.None));
 			}
 			catch
 			{

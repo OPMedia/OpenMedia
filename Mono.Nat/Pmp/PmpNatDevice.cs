@@ -135,7 +135,7 @@ namespace Mono.Nat.Pmp
                                                mapping.PrivatePort,
                                                e.Message);
                 _logger.Debug(message);
-                throw e;
+                throw;
             }
 
             return mapping;

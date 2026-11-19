@@ -86,7 +86,8 @@ namespace MediaBrowser.Api
         /// <returns>System.Object.</returns>
         public object Get(GetGameSystemSummaries request)
         {
-            var user = request.UserId == null ? null : _userManager.GetUserById(request.UserId);
+            // UserId 是不可空 Guid；未传时为 Guid.Empty，此时按可选筛选条件处理。
+            var user = request.UserId == Guid.Empty ? null : _userManager.GetUserById(request.UserId);
             var query = new InternalItemsQuery(user)
             {
                 IncludeItemTypes = new[] { typeof(GameSystem).Name },
