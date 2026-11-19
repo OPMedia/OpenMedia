@@ -145,3 +145,51 @@
 `Emby.Server.Implementations` 184 处，必须拆子批而不是一把梭。建议按目录拆：
 `IO/LibraryMonitor` → `Session` → `Library`（`LibraryManager` 3446 行）→ `LiveTv` → 其余。
 每子批独立提交、独立回归；同一目录内出现死锁或时序失败立即回滚该子批。
+
+### 第三轮（2026-11-19，T3f–T3j，五个并行 worktree，收敛到零）
+
+| 层 | 内容 | 结果 |
+|---|---|---|
+| T3f | `IO/`（StreamHelper、LibraryMonitor、ThrottledStream、SharpCifs 26 处未用异常变量） | 144 → 111 |
+| T3g | `LiveTv/` 前半（LiveTvDtoService、SchedulesDirect、HdHomerun*、LiveStream、SharedHttpStream） | 144 → 125 |
+| T3h | `ApplicationHost`、`EntryPoints/*`、`HttpServer`、`MediaEncoding`、`Controller` | 44 → 16（局部口径） |
+| T3i | `Implementations` 主体（ChannelManager、CollectionManager、DtoService、Library*、LiveTvManager、ImageMagick） | 64 → 48 |
+| T3j | `src/MediaBrowser.Controller` 全部 + BDInfo/Mono.Nat/RSSDP/Skia/Api/Providers 的历史告警 | 64 → 45 |
+| 收尾（我手动） | EmbyTV / EncodedRecorder / SystemEvents / TextEncoding / ApplicationHost / SharpCifs 剩余项 | 33 → **0** |
+
+### 终局指标
+
+| 指标 | 起点 | 现在 |
+|---|---|---|
+| **代码告警** | **1147** | **0** |
+| 构建错误 | 0 | 0 |
+| 测试 | 35 | **101/101** |
+| 已知漏洞包 | 2 | 0 |
+| CS0436（BCL 撞名） | 434 | 0 |
+| 死项目 | 1（764 行） | 0 |
+| 契约改动 | — | 0 |
+| 运行时冒烟 | — | `/app/`、`/app/login`、`/emby/System/Info/Public` 全 200 |
+
+剩余 3 条 `NU1900` 不是代码告警，是本机 nuget.org 不可达导致漏洞库拉取失败；
+换到能连外网的构建机即消失。
+
+### 门禁
+
+`VSTHRD002/003/100/103/110` + `CS4014` 已提升为 **error**，覆盖全部 21 个工程。
+以后任何人引入 `.Result` / `async void` / 未观察的 awaitable，构建直接失败。
+
+### 明确的"不做"
+
+- 没有为清零而引入 `Thread.Sleep`、`WaitOne`、把 async 改回 sync，或用 `Task.Run` 掩盖阻塞。
+- 没有用 `#pragma` / `SuppressMessage` / `NoWarn` 批量压制。仅两处局部抑制且都带理由：
+  `Encoding.UTF7`（旧字幕格式兼容）与 `EmbyTV.DataSourceChanged` 之外的零处。
+  事实上最终连 CS0067 都改用显式 add/remove 访问器解决，未使用任何抑制。
+- 没有改任何公开接口签名；`IDisposable.Dispose()`、`IServerEntryPoint.Run()`、
+  `IApplicationHost.Init()` 等同步契约一律用 `JoinableTaskFactory.Run` 在原边界上处理。
+
+### 仍然欠着的（与告警无关）
+
+- **T2b**：`IPNetwork` 仍是 2169 行自研实现，只是搬了命名空间；未换成 BCL 类型。有 66 个固化测试做基线。
+- **性能**：195k 库的 old/new A/B 始终没做（本机没有 fixture），Stage 2 的单阶段写只有正确性验证。
+- **运行时验证**：DLNA/NAT/LiveTv/Provider/转码这些路径全部只有编译期验证，没有真实设备或真实 API。
+- **Surgery #1 后半**：schema 收敛（单表 + 恢复外键）、`GetWhereClauses` 拆分、跨聚合事务。
