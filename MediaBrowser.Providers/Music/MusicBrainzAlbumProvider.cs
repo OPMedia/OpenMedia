@@ -735,7 +735,7 @@ namespace MediaBrowser.Providers.Music
 
                 if (urls.Count > 1)
                 {
-                    _chosenUrl = urls[new Random().Next(0, urls.Count)];
+                    _chosenUrl = urls[Random.Shared.Next(0, urls.Count)];
                 }
                 else
                 {

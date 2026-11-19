@@ -23,6 +23,7 @@ using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.Extensions;
 using System.Net.Http;
 using MediaBrowser.Model.Services;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Emby.Dlna.PlayTo
 {
@@ -906,7 +907,7 @@ namespace Emby.Dlna.PlayTo
                 if (index == -1) return request;
 
                 var query = url.Substring(index + 1);
-                QueryParamCollection values = MyHttpUtility.ParseQueryString(query);
+                QueryParamCollection values = QueryHelpers.ParseQuery(query).ToQueryParamCollection();
 
                 request.DeviceProfileId = values.Get("DeviceProfileId");
                 request.DeviceId = values.Get("DeviceId");

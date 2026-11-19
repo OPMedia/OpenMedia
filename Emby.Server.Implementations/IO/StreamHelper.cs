@@ -87,29 +87,6 @@ namespace Emby.Server.Implementations.IO
             return totalBytesRead;
         }
 
-        public async Task CopyToAsync(Stream source, Stream destination, long copyLength, CancellationToken cancellationToken)
-        {
-            var array = new byte[StreamCopyToBufferSize];
-            int bytesRead;
-
-            while ((bytesRead = await source.ReadAsync(array, 0, array.Length, cancellationToken).ConfigureAwait(false)) != 0)
-            {
-                var bytesToWrite = Math.Min(bytesRead, copyLength);
-
-                if (bytesToWrite > 0)
-                {
-                    await destination.WriteAsync(array, 0, Convert.ToInt32(bytesToWrite), cancellationToken).ConfigureAwait(false);
-                }
-
-                copyLength -= bytesToWrite;
-
-                if (copyLength <= 0)
-                {
-                    break;
-                }
-            }
-        }
-
         public async Task CopyUntilCancelled(Stream source, Stream target, int bufferSize, CancellationToken cancellationToken)
         {
             byte[] buffer = new byte[bufferSize];

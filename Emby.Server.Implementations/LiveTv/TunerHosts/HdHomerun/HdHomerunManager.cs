@@ -153,8 +153,7 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 
             if (!_lockkey.HasValue)
             {
-                var rand = new Random();
-                _lockkey = (uint)rand.Next();
+                _lockkey = (uint)Random.Shared.Next();
             }
 
             var lockKeyValue = _lockkey.Value;

@@ -11,6 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Images\**\*.jpg" />
     <EmbeddedResource Include="Images\**\*.png" />
     <EmbeddedResource Include="Profiles\Xml\**\*.xml" />
