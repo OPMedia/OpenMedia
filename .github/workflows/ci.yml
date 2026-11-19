@@ -150,9 +150,21 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: 统一 PostgreSQL 客户端版本
+        # runner 自带的 pg_dump 是 17，而 service 是 16。pg_dump 17 会把
+        # `SET transaction_timeout`（PG17 才有的参数）写进 dump，pg_restore 到 16 直接报
+        # "unrecognized configuration parameter" —— 备份测试就是这么红的。
+        # 装一个与 service 同主版本的客户端，并用 OPENMEDIA_PG_BIN 显式指过去。
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          /usr/lib/postgresql/16/bin/pg_dump --version
+
       - name: Test
         # 不能加 --no-build：build job 跑在 windows runner，产物不会流转到这台 ubuntu。
         run: dotnet test MediaBrowser.Tests -c Release --nologo
+        env:
+          OPENMEDIA_PG_BIN: /usr/lib/postgresql/16/bin
         env:
           OPENMEDIA_TEST_PGCONN: >-
             Host=localhost;Port=5432;Database=${{ env.PG_DB }};Username=${{ env.PG_USER }};Password=${{ env.PG_PASSWORD }}
