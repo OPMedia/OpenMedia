@@ -13,7 +13,6 @@ using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Net;
 using MediaBrowser.Model.System;
 using Microsoft.VisualStudio.Threading;
-using System.Numerics;
 
 namespace Emby.Server.Implementations.Networking
 {
@@ -165,6 +164,18 @@ namespace Emby.Server.Implementations.Networking
             return true;
         }
 
+        // RFC 1918 / RFC 4193 / RFC 5735 私有地址段，以及 IPv6 唯一本地地址和环回地址。
+        private static readonly global::System.Net.IPNetwork[] _privateNetworks =
+        {
+            global::System.Net.IPNetwork.Parse("10.0.0.0/8"),
+            global::System.Net.IPNetwork.Parse("172.16.0.0/12"),
+            global::System.Net.IPNetwork.Parse("192.168.0.0/16"),
+            global::System.Net.IPNetwork.Parse("127.0.0.0/8"),
+            global::System.Net.IPNetwork.Parse("169.254.0.0/16"),
+            global::System.Net.IPNetwork.Parse("::1/128"),
+            global::System.Net.IPNetwork.Parse("fc00::/7")
+        };
+
         public bool IsInPrivateAddressSpace(string endpoint)
         {
             return IsInPrivateAddressSpace(endpoint, true);
@@ -172,108 +183,78 @@ namespace Emby.Server.Implementations.Networking
 
         private bool IsInPrivateAddressSpace(string endpoint, bool checkSubnets)
         {
-            if (string.Equals(endpoint, "::1", StringComparison.OrdinalIgnoreCase))
+            if (endpoint == null)
+            {
+                return false;
+            }
+
+            if (string.Equals(endpoint, "localhost", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            // ipv6
-            if (endpoint.Split('.').Length > 4)
+            if (!IPAddress.TryParse(endpoint, out var address))
             {
-                // Handle ipv4 mapped to ipv6
-                var originalEndpoint = endpoint;
-                endpoint = endpoint.Replace("::ffff:", string.Empty);
+                return false;
+            }
 
-                if (string.Equals(endpoint, originalEndpoint, StringComparison.OrdinalIgnoreCase))
+            foreach (var network in _privateNetworks)
+            {
+                if (network.Contains(address))
                 {
-                    return false;
+                    return true;
                 }
             }
 
-            // Private address space:
-            // http://en.wikipedia.org/wiki/Private_network
-
-            if (endpoint.StartsWith("172.", StringComparison.OrdinalIgnoreCase))
-            {
-                return Is172AddressPrivate(endpoint);
-            }
-
-            if (endpoint.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) ||
-                endpoint.StartsWith("127.", StringComparison.OrdinalIgnoreCase) ||
-                endpoint.StartsWith("169.", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (checkSubnets && endpoint.StartsWith("192.168", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (checkSubnets && IsInPrivateAddressSpaceAndLocalSubnet(endpoint))
-            {
-                return true;
-            }
-
-            return false;
+            return checkSubnets && IsInPrivateAddressSpaceAndLocalSubnet(endpoint);
         }
 
         public bool IsInPrivateAddressSpaceAndLocalSubnet(string endpoint)
         {
-            if (endpoint.StartsWith("10.", StringComparison.OrdinalIgnoreCase))
+            if (!IPAddress.TryParse(endpoint, out var address)
+                || address.AddressFamily != AddressFamily.InterNetwork
+                || address.GetAddressBytes()[0] != 10)
             {
-                var endpointFirstPart = endpoint.Split('.')[0];
+                return false;
+            }
 
-                var subnets = GetSubnets(endpointFirstPart);
+            var endpointFirstPart = address.ToString().Split('.')[0];
 
-                foreach (var subnet_Match in subnets)
+            foreach (var subnet in GetSubnets(endpointFirstPart))
+            {
+                if (subnet.Contains(address))
                 {
-                    //Logger.Debug("subnet_Match:" + subnet_Match);
-
-                    if (endpoint.StartsWith(subnet_Match + ".", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
+                    return true;
                 }
             }
 
             return false;
         }
 
-        private Dictionary<string, List<string>> _subnetLookup = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        private List<string> GetSubnets(string endpointFirstPart)
-        {
-            List<string> subnets;
+        private readonly Dictionary<string, List<global::System.Net.IPNetwork>> _subnetLookup = new Dictionary<string, List<global::System.Net.IPNetwork>>(StringComparer.Ordinal);
 
+        private List<global::System.Net.IPNetwork> GetSubnets(string endpointFirstPart)
+        {
             lock (_subnetLookup)
             {
-                if (_subnetLookup.TryGetValue(endpointFirstPart, out subnets))
+                if (_subnetLookup.TryGetValue(endpointFirstPart, out var subnets))
                 {
                     return subnets;
                 }
 
-                subnets = new List<string>();
+                subnets = new List<global::System.Net.IPNetwork>();
 
                 foreach (NetworkInterface adapter in NetworkInterface.GetAllNetworkInterfaces())
                 {
                     foreach (UnicastIPAddressInformation unicastIPAddressInformation in adapter.GetIPProperties().UnicastAddresses)
                     {
-                        if (unicastIPAddressInformation.Address.AddressFamily == AddressFamily.InterNetwork && endpointFirstPart == unicastIPAddressInformation.Address.ToString().Split('.')[0])
+                        var address = unicastIPAddressInformation.Address;
+                        if (address.AddressFamily == AddressFamily.InterNetwork
+                            && endpointFirstPart == address.ToString().Split('.')[0]
+                            && adapter.OperationalStatus == OperationalStatus.Up)
                         {
-                            int subnet_Test = 0;
-                            foreach (string part in unicastIPAddressInformation.IPv4Mask.ToString().Split('.'))
-                            {
-                                if (part.Equals("0")) break;
-                                subnet_Test++;
-                            }
-
-                            var subnet_Match = String.Join(".", unicastIPAddressInformation.Address.ToString().Split('.').Take(subnet_Test).ToArray());
-
-                            // TODO: Is this check necessary?
-                            if (adapter.OperationalStatus == OperationalStatus.Up)
-                            {
-                                subnets.Add(subnet_Match);
-                            }
+                            var prefixLength = GetPrefixLength(unicastIPAddressInformation.IPv4Mask);
+                            subnets.Add(new global::System.Net.IPNetwork(address, prefixLength));
                         }
                     }
                 }
@@ -284,17 +265,24 @@ namespace Emby.Server.Implementations.Networking
             }
         }
 
-        private bool Is172AddressPrivate(string endpoint)
+        private static int GetPrefixLength(IPAddress netmask)
         {
-            for (var i = 16; i <= 31; i++)
+            var prefixLength = 0;
+
+            foreach (var octet in netmask.GetAddressBytes())
             {
-                if (endpoint.StartsWith("172." + i.ToString(CultureInfo.InvariantCulture) + ".", StringComparison.OrdinalIgnoreCase))
+                for (var bit = 7; bit >= 0; bit--)
                 {
-                    return true;
+                    if ((octet & (1 << bit)) == 0)
+                    {
+                        return prefixLength;
+                    }
+
+                    prefixLength++;
                 }
             }
 
-            return false;
+            return prefixLength;
         }
 
         public bool IsInLocalNetwork(string endpoint)
@@ -321,7 +309,12 @@ namespace Emby.Server.Implementations.Networking
 
                 if (normalizedSubnet.IndexOf('/') != -1)
                 {
-                    var ipnetwork = IPNetwork.Parse(normalizedSubnet);
+                    if (!global::System.Net.IPNetwork.TryParse(normalizedSubnet, out var ipnetwork))
+                    {
+                        Logger.Warn("Ignoring invalid subnet '{0}' in local subnet configuration.", normalizedSubnet);
+                        continue;
+                    }
+
                     if (ipnetwork.Contains(address))
                     {
                         return true;
