@@ -414,21 +414,36 @@ namespace MediaBrowser.Providers.Movies
         // The limit is 40 requests per 10 seconds
         private static int requestIntervalMs = 300;
 
+        // 以 CAS 预留下一次请求的起始时刻：并发调用不能同时读到同一个 _lastRequestTicks，
+        // 否则它们会各自算出 0ms 延迟并一起发出请求。
+        private static long ReserveThrottleDelayTicks(long nowTicks)
+        {
+            var intervalTicks = requestIntervalMs * TimeSpan.TicksPerMillisecond;
+            long previous;
+            long next;
+            do
+            {
+                previous = Volatile.Read(ref _lastRequestTicks);
+                next = Math.Max(nowTicks, previous + intervalTicks);
+            }
+            while (Interlocked.CompareExchange(ref _lastRequestTicks, next, previous) != previous);
+
+            // 不截断到 interval：并发排队时后面的调用必须等到自己的槽位，否则会一起发出。
+            return next - nowTicks;
+        }
+
         /// <summary>
         /// Gets the movie db response.
         /// </summary>
         internal async Task<HttpResponseInfo> GetMovieDbResponse(HttpRequestOptions options)
         {
-            var delayTicks = (requestIntervalMs * 10000) - (DateTime.UtcNow.Ticks - _lastRequestTicks);
-            var delayMs = Math.Min(delayTicks / 10000, requestIntervalMs);
+            var delayMs = ReserveThrottleDelayTicks(DateTime.UtcNow.Ticks) / TimeSpan.TicksPerMillisecond;
 
             if (delayMs > 0)
             {
                 _logger.Debug("Throttling Tmdb by {0} ms", delayMs);
                 await Task.Delay(Convert.ToInt32(delayMs)).ConfigureAwait(false);
             }
-
-            _lastRequestTicks = DateTime.UtcNow.Ticks;
 
             options.BufferContent = true;
             options.UserAgent = "Emby/" + _appHost.ApplicationVersion;

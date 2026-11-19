@@ -235,19 +235,7 @@ namespace Emby.Dlna.Api
 
         private List<string> Parse(string pathUri)
         {
-            var actionParts = pathUri.Split(new[] { "://" }, StringSplitOptions.None);
-
-            var pathInfo = actionParts[actionParts.Length - 1];
-
-            var optionsPos = pathInfo.LastIndexOf('?');
-            if (optionsPos != -1)
-            {
-                pathInfo = pathInfo.Substring(0, optionsPos);
-            }
-
-            var args = pathInfo.Split('/');
-
-            return args.Skip(1).ToList();
+            return UrlPathParser.ParsePathInfo(pathUri);
         }
 
         public object Get(GetIcon request)
