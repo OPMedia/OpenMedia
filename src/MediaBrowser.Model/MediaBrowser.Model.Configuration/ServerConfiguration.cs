@@ -11,6 +11,17 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public bool EnableUPnP { get; set; }
 
+	/// <summary>
+	/// 是否暴露 /metrics 并采集 HTTP/转码指标。默认关闭：指标端点不带认证，
+	/// 开启前必须由运维确认只监听内网或已挂认证代理。
+	/// </summary>
+	public bool EnableMetrics { get; set; }
+
+	/// <summary>
+	/// 优雅停机的总预算（秒）：停止接单并等待在途请求、停止转码、释放连接池。
+	/// </summary>
+	public int ShutdownTimeoutSeconds { get; set; }
+
 	public int PublicPort { get; set; }
 
 	public int PublicHttpsPort { get; set; }
@@ -166,6 +177,8 @@ public class ServerConfiguration : BaseApplicationConfiguration
 		HttpServerPortNumber = 8096;
 		HttpsPortNumber = 8920;
 		EnableHttps = false;
+		EnableMetrics = false;
+		ShutdownTimeoutSeconds = 10;
 		EnableDashboardResponseCaching = true;
 		EnableAnonymousUsageReporting = true;
 		EnableCaseSensitiveItemIds = true;

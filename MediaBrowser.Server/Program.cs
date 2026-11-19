@@ -2,6 +2,7 @@ using MediaBrowser.Model.Logging;
 using MediaBrowser.Server.Mono.Native;
 using MediaBrowser.Server.Startup.Common;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -12,6 +13,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Emby.Drawing;
+using Emby.Server.HttpServer;
 using Emby.Server.Implementations;
 using Emby.Server.Implementations.EnvironmentInfo;
 using Emby.Server.Implementations.IO;
@@ -20,6 +22,7 @@ using Emby.Server.Implementations.Networking;
 using MediaBrowser.Controller;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.System;
+using Npgsql;
 using ILogger = MediaBrowser.Model.Logging.ILogger;
 using X509Certificate = System.Security.Cryptography.X509Certificates.X509Certificate;
 
@@ -33,6 +36,9 @@ namespace MediaBrowser.Server.Mono
         private static ILogManager _logManager;
 
         private static readonly TaskCompletionSource<bool> ApplicationTaskCompletionSource = new TaskCompletionSource<bool>();
+        private static readonly List<System.Runtime.InteropServices.PosixSignalRegistration> _signalRegistrations = new List<System.Runtime.InteropServices.PosixSignalRegistration>();
+        private static int _signalHandled;
+        private static volatile string _shutdownReason = "application request";
         private static bool _restartOnShutdown;
 
         public static async Task Main(string[] args)
@@ -69,6 +75,8 @@ namespace MediaBrowser.Server.Mono
 
                 AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 
+                RegisterShutdownSignals(logger);
+
                 await RunApplication(appPaths, logManager, options).ConfigureAwait(false);
 
                 _logger.Info("Disposing app host");
@@ -101,7 +109,7 @@ namespace MediaBrowser.Server.Mono
 
             FileSystem = fileSystem;
 
-            using (var appHost = new MonoAppHost(appPaths,
+            var appHost = new MonoAppHost(appPaths,
                 logManager,
                 options,
                 fileSystem,
@@ -110,7 +118,9 @@ namespace MediaBrowser.Server.Mono
                 environmentInfo,
                 new NullImageEncoder(),
                 new SystemEvents(logManager.GetLogger("SystemEvents")),
-                new NetworkManager(logManager.GetLogger("NetworkManager"), environmentInfo)))
+                new NetworkManager(logManager.GetLogger("NetworkManager"), environmentInfo));
+
+            try
             {
                 if (options.ContainsOption("-v"))
                 {
@@ -128,8 +138,111 @@ namespace MediaBrowser.Server.Mono
 
                 await appHost.RunStartupTasks().ConfigureAwait(false);
 
+                KestrelHost.Instance?.SetApplicationReady(true);
+                _logger.Info("Startup complete; readiness probes can pass");
+
                 await ApplicationTaskCompletionSource.Task.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+
+                await ShutdownGracefully(appHost).ConfigureAwait(false);
             }
+            finally
+            {
+                // 正常停机路径已在 ShutdownGracefully 内释放；这里兜住启动/运行异常路径。
+                _logger.Info("Disposing app host");
+                appHost.Dispose();
+
+                foreach (var registration in _signalRegistrations)
+                {
+                    registration.Dispose();
+                }
+            }
+        }
+
+        /// <summary>
+        /// SIGTERM/SIGINT 只负责置位；真正的停机步骤在 Main 的异步流程中按序执行，
+        /// 避免信号回调里跑异步代码或被 .NET 运行时默认行为直接终止进程。
+        /// </summary>
+        private static void OnShutdownSignal(System.Runtime.InteropServices.PosixSignalContext context, string signal)
+        {
+            context.Cancel = true;
+
+            if (Interlocked.CompareExchange(ref _signalHandled, 1, 0) == 0)
+            {
+                _shutdownReason = signal;
+                _logger?.Info("Received {0}; requesting graceful shutdown", signal);
+                ApplicationTaskCompletionSource.TrySetResult(true);
+            }
+        }
+
+        private static void RegisterShutdownSignals(ILogger logger)
+        {
+            RegisterSignal(System.Runtime.InteropServices.PosixSignal.SIGTERM, "SIGTERM", logger);
+            RegisterSignal(System.Runtime.InteropServices.PosixSignal.SIGINT, "SIGINT", logger);
+        }
+
+        private static void RegisterSignal(System.Runtime.InteropServices.PosixSignal signal, string name, ILogger logger)
+        {
+            try
+            {
+                _signalRegistrations.Add(System.Runtime.InteropServices.PosixSignalRegistration.Create(signal, context => OnShutdownSignal(context, name)));
+                logger.Info("Registered {0} handler for graceful shutdown", name);
+            }
+            catch (Exception ex)
+            {
+                // Windows 等平台可能不支持某个 POSIX 信号，不能因此阻止启动。
+                logger.Warn("Cannot register {0} handler: {1}", name, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 停机顺序：置停机标记（新请求 503）→ Kestrel 排空在途请求 →
+        /// 释放服务（其中 ApiEntryPoint.Dispose 停止 ffmpeg）→ 清空 PG 连接池。
+        /// </summary>
+        private static async Task ShutdownGracefully(MonoAppHost appHost)
+        {
+            var budgetSeconds = appHost.ServerConfigurationManager.Configuration.ShutdownTimeoutSeconds;
+            if (budgetSeconds < 1 || budgetSeconds > 300)
+            {
+                budgetSeconds = 10;
+            }
+
+            _logger.Info("Graceful shutdown started ({0}); budget {1}s", _shutdownReason, budgetSeconds);
+
+            try
+            {
+                await appHost.Shutdown().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error sending shutdown notification", ex);
+            }
+
+            KestrelHost.Instance?.SetApplicationReady(false);
+
+            _logger.Info("Shutdown 1/4: stop accepting requests, drain in-flight HTTP (limit {0}s)", budgetSeconds);
+            try
+            {
+                KestrelHost.Instance?.Stop();
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error stopping HTTP server", ex);
+            }
+
+            _logger.Info("Shutdown 2/4: stop transcoding processes and dispose registered services");
+            appHost.Dispose();
+
+            _logger.Info("Shutdown 3/4: clear PostgreSQL connection pools");
+            try
+            {
+                NpgsqlConnection.ClearAllPools();
+            }
+            catch (Exception ex)
+            {
+                _logger.ErrorException("Error clearing PostgreSQL connection pools", ex);
+            }
+
+            _logger.Info("Shutdown 4/4: exit");
         }
 
         private static EnvironmentInfo GetEnvironmentInfo(StartupOptions options)
@@ -181,7 +294,8 @@ namespace MediaBrowser.Server.Mono
 
         public static void Shutdown()
         {
-            ApplicationTaskCompletionSource.SetResult(true);
+            // API 触发的停机和 SIGTERM 可能同时到达；TrySetResult 保证幂等。
+            ApplicationTaskCompletionSource.TrySetResult(true);
         }
 
         public static void Restart()
