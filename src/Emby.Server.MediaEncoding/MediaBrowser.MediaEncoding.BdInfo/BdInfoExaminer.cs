@@ -14,12 +14,11 @@ public class BdInfoExaminer : IBlurayExaminer
 {
 	private readonly IFileSystem _fileSystem;
 
-	private readonly ITextEncoding _textEncoding;
-
+	// ITextEncoding 保留在构造签名中只是为了兼容 ApplicationHost 的显式构造；
+	// BDInfo 0.8.0 不再接受编码注入，内部按 BD 规范处理文本字段。
 	public BdInfoExaminer(IFileSystem fileSystem, ITextEncoding textEncoding)
 	{
 		_fileSystem = fileSystem;
-		_textEncoding = textEncoding;
 	}
 
 	public BlurayDiscInfo GetDiscInfo(string path)
@@ -32,7 +31,7 @@ public class BdInfoExaminer : IBlurayExaminer
 		{
 			throw new ArgumentNullException("path");
 		}
-		BDROM val = new BDROM(path, _fileSystem, _textEncoding);
+		BDROM val = new BDROM(new BdInfoDirectoryInfo(_fileSystem, path));
 		val.Scan();
 		TSPlaylistFile val2 = val.PlaylistFiles.Values.OrderByDescending((TSPlaylistFile p) => p.TotalLength).FirstOrDefault((TSPlaylistFile p) => p.IsValid);
 		BlurayDiscInfo val3 = new BlurayDiscInfo();
