@@ -28,7 +28,8 @@ namespace Emby.Server.Implementations.EntryPoints
 
         private void _systemEvents_SystemShutdown(object sender, EventArgs e)
         {
-            _appHost.Shutdown();
+            // 系统关机事件处理器为 void；关机的 Task 不阻塞事件源，显式丢弃。
+            _ = _appHost.Shutdown();
         }
 
         public void Dispose()
