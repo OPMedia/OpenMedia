@@ -42,7 +42,13 @@ namespace Emby.Server.HttpServer.Middleware
             var pathSegments = context.Request.Path.Value?.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
             var operationName = pathSegments.Length > 0 ? pathSegments[pathSegments.Length - 1] : string.Empty;
 
-            var httpReq = new KestrelRequest(context, operationName);
+            var configuration = _host.ConfigurationManager.Configuration;
+            var httpReq = new KestrelRequest(
+                context,
+                operationName,
+                configuration.KnownProxies,
+                _host.NetworkManager,
+                configuration.BaseUrl);
 
             var uri = httpReq.GetUri();
             var urlString = uri.OriginalString;
@@ -60,6 +66,9 @@ namespace Emby.Server.HttpServer.Middleware
             bool logHeaders = false;
             string urlToLog = null;
             string remoteIp = httpReq.RemoteIp;
+            var baseUrl = BaseUrlHelper.Normalize(_host.ConfigurationManager.Configuration.BaseUrl);
+            // 重定向/兼容性跳转按去掉部署前缀后的路径判断；BaseUrl 为空时完全等同 localPath。
+            var redirectPath = BaseUrlHelper.Strip(localPath, baseUrl);
 
             try
             {
@@ -117,22 +126,22 @@ namespace Emby.Server.HttpServer.Middleware
                     LoggerUtils.LogRequest(_host.Logger, urlToLog, httpReq.HttpMethod, httpReq.UserAgent, logHeaders ? httpReq.Headers : null);
                 }
 
-                if (string.Equals(localPath, "/emby/", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(localPath, "/mediabrowser/", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(redirectPath, "/emby/", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(redirectPath, "/mediabrowser/", StringComparison.OrdinalIgnoreCase))
                 {
                     RedirectToUrl(httpRes, _host.DefaultRedirectPath);
                     return;
                 }
-                if (string.Equals(localPath, "/emby", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(localPath, "/mediabrowser", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(redirectPath, "/emby", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(redirectPath, "/mediabrowser", StringComparison.OrdinalIgnoreCase))
                 {
                     RedirectToUrl(httpRes, "emby/" + _host.DefaultRedirectPath);
                     return;
                 }
 
-                if (string.Equals(localPath, "/mediabrowser/", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(localPath, "/mediabrowser", StringComparison.OrdinalIgnoreCase) ||
-                    localPath.IndexOf("mediabrowser/web", StringComparison.OrdinalIgnoreCase) != -1)
+                if (string.Equals(redirectPath, "/mediabrowser/", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(redirectPath, "/mediabrowser", StringComparison.OrdinalIgnoreCase) ||
+                    redirectPath.IndexOf("mediabrowser/web", StringComparison.OrdinalIgnoreCase) != -1)
                 {
                     httpRes.StatusCode = 200;
                     httpRes.ContentType = "text/html";
@@ -148,8 +157,8 @@ namespace Emby.Server.HttpServer.Middleware
                     }
                 }
 
-                if (localPath.IndexOf("dashboard/", StringComparison.OrdinalIgnoreCase) != -1 &&
-                    localPath.IndexOf("web/dashboard", StringComparison.OrdinalIgnoreCase) == -1)
+                if (redirectPath.IndexOf("dashboard/", StringComparison.OrdinalIgnoreCase) != -1 &&
+                    redirectPath.IndexOf("web/dashboard", StringComparison.OrdinalIgnoreCase) == -1)
                 {
                     httpRes.StatusCode = 200;
                     httpRes.ContentType = "text/html";
@@ -165,35 +174,35 @@ namespace Emby.Server.HttpServer.Middleware
                     }
                 }
 
-                if (string.Equals(localPath, "/web", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(redirectPath, "/web", StringComparison.OrdinalIgnoreCase))
                 {
                     RedirectToUrl(httpRes, _host.DefaultRedirectPath);
                     return;
                 }
-                if (string.Equals(localPath, "/web/", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(redirectPath, "/web/", StringComparison.OrdinalIgnoreCase))
                 {
                     RedirectToUrl(httpRes, "../" + _host.DefaultRedirectPath);
                     return;
                 }
-                if (string.Equals(localPath, "/", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(redirectPath, "/", StringComparison.OrdinalIgnoreCase))
                 {
                     RedirectToUrl(httpRes, _host.DefaultRedirectPath);
                     return;
                 }
-                if (string.IsNullOrEmpty(localPath))
+                if (string.IsNullOrEmpty(redirectPath))
                 {
-                    RedirectToUrl(httpRes, "/" + _host.DefaultRedirectPath);
+                    RedirectToUrl(httpRes, baseUrl + "/" + _host.DefaultRedirectPath);
                     return;
                 }
 
                 if (!string.Equals(httpReq.QueryString["r"], "0", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (localPath.EndsWith("web/dashboard.html", StringComparison.OrdinalIgnoreCase))
+                    if (redirectPath.EndsWith("web/dashboard.html", StringComparison.OrdinalIgnoreCase))
                     {
                         RedirectToUrl(httpRes, "index.html#!/dashboard.html");
                     }
 
-                    if (localPath.EndsWith("web/home.html", StringComparison.OrdinalIgnoreCase))
+                    if (redirectPath.EndsWith("web/home.html", StringComparison.OrdinalIgnoreCase))
                     {
                         RedirectToUrl(httpRes, "index.html");
                     }

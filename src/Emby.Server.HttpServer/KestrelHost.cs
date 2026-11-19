@@ -106,7 +106,10 @@ namespace Emby.Server.HttpServer
         {
             _webSocketListeners = listeners.ToArray();
 
-            _routeTable = new RouteTable(_appHost.CreateInstance, _funcParseFn ?? TypeParser.GetParseFn);
+            _routeTable = new RouteTable(
+                _appHost.CreateInstance,
+                _funcParseFn ?? TypeParser.GetParseFn,
+                _config.Configuration.BaseUrl);
 
             var types = services.Select(r => r.GetType()).ToArray();
 

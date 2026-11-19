@@ -1,9 +1,10 @@
 /** 路由(SPEC/web §3 页面清单 v1);守卫:未登录跳登录页。 */
 import { createRouter, createWebHistory } from 'vue-router'
+import { resolveWebBasePath } from '@/config/basePath'
 import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.VITE_BASE_PATH ?? '/'),
+  history: createWebHistory(resolveWebBasePath(import.meta.env.VITE_BASE_PATH, import.meta.env.VITE_API_PREFIX)),
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
     { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },

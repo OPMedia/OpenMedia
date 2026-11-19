@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using Emby.Server.HttpServer.Routing;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Model.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -28,6 +30,9 @@ namespace Emby.Server.HttpServer.RequestResponse
 
         private readonly HttpContext _context;
         private readonly IHttpResponse _response;
+        private readonly IReadOnlyList<IPNetwork> _knownProxies;
+        private readonly INetworkManager _networkManager;
+        private bool? _isTrustedProxy;
 
         private QueryParamCollection _headers;
         private QueryParamCollection _queryString;
@@ -42,13 +47,64 @@ namespace Emby.Server.HttpServer.RequestResponse
         private Uri _absoluteUri;
 
         public KestrelRequest(HttpContext context, string operationName)
+            : this(context, operationName, null, null, null)
+        {
+        }
+
+        /// <summary>
+        /// 带部署配置的构造函数。knownProxies 为空表示忽略所有 X-Forwarded-*；
+        /// baseUrl 用于代理剥掉路径前缀时仍生成带前缀的绝对 URL。
+        /// </summary>
+        public KestrelRequest(
+            HttpContext context,
+            string operationName,
+            IEnumerable<string> knownProxies,
+            INetworkManager networkManager = null,
+            string baseUrl = null)
         {
             _context = context;
             OperationName = operationName;
             _response = new KestrelResponse(context.Response, this);
+            _knownProxies = ForwardedHeadersPolicy.ParseKnownProxies(knownProxies);
+            _networkManager = networkManager;
+
+            var normalizedBaseUrl = BaseUrlHelper.Normalize(baseUrl);
+            if (normalizedBaseUrl.Length > 0 && !HasBaseUrlPrefix(context.Request.Path.Value, normalizedBaseUrl))
+            {
+                // 反向代理常见写法：location /media/ { proxy_pass http://backend/; }
+                // 此时 Kestrel 收到的 Path 不含 /media，用 PathBase 补回，
+                // 使 GetUri()/AbsoluteUri 生成的绝对 URL 与公网路径一致。
+                context.Request.PathBase = new PathString(normalizedBaseUrl);
+            }
 
             // 允许 body 重复读取（form 解析 + JSON 反序列化 + IRequiresRequestStream）
             context.Request.EnableBuffering();
+        }
+
+        private static bool HasBaseUrlPrefix(string path, string baseUrl)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+
+            return string.Equals(path, baseUrl, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith(baseUrl + "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsTrustedProxy
+        {
+            get
+            {
+                if (_isTrustedProxy == null)
+                {
+                    _isTrustedProxy = ForwardedHeadersPolicy.IsTrustedPeer(
+                        _context.Connection.RemoteIpAddress,
+                        _knownProxies);
+                }
+
+                return _isTrustedProxy.Value;
+            }
         }
 
         public HttpContext HttpContext => _context;
@@ -115,11 +171,12 @@ namespace Emby.Server.HttpServer.RequestResponse
             }
         }
 
+        // 这四个属性是转发头的「可信视图」：直连对端不在 KnownProxies 里时返回 null。
         public string XForwardedFor
         {
             get
             {
-                return _context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+                return IsTrustedProxy ? _context.Request.Headers["X-Forwarded-For"].FirstOrDefault() : null;
             }
         }
 
@@ -127,8 +184,13 @@ namespace Emby.Server.HttpServer.RequestResponse
         {
             get
             {
+                if (!IsTrustedProxy)
+                {
+                    return null;
+                }
+
                 var value = _context.Request.Headers["X-Forwarded-Port"].FirstOrDefault();
-                return string.IsNullOrEmpty(value) ? (int?)null : int.Parse(value);
+                return int.TryParse(value, out var port) ? (int?)port : null;
             }
         }
 
@@ -136,7 +198,7 @@ namespace Emby.Server.HttpServer.RequestResponse
         {
             get
             {
-                return _context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
+                return IsTrustedProxy ? _context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() : null;
             }
         }
 
@@ -144,7 +206,7 @@ namespace Emby.Server.HttpServer.RequestResponse
         {
             get
             {
-                return _context.Request.Headers["X-Real-IP"].FirstOrDefault();
+                return IsTrustedProxy ? _context.Request.Headers["X-Real-IP"].FirstOrDefault() : null;
             }
         }
 
@@ -154,8 +216,11 @@ namespace Emby.Server.HttpServer.RequestResponse
             {
                 if (_remoteIp == null)
                 {
-                    _remoteIp = (NormalizeIp(XForwardedFor))
-                                ?? (NormalizeIp(XRealIp))
+                    _remoteIp = ForwardedHeadersPolicy.GetClientAddress(
+                                    _context.Request.Headers["X-Forwarded-For"].FirstOrDefault(),
+                                    _context.Request.Headers["X-Real-IP"].FirstOrDefault(),
+                                    _context.Connection.RemoteIpAddress,
+                                    _knownProxies)
                                 ?? (_context.Connection.RemoteIpAddress != null ? NormalizeIp(_context.Connection.RemoteIpAddress.ToString()) : null)
                                 ?? string.Empty;
                 }
@@ -181,7 +246,11 @@ namespace Emby.Server.HttpServer.RequestResponse
 
         public bool IsSecureConnection
         {
-            get { return _context.Request.IsHttps || XForwardedProtocol == "https"; }
+            get
+            {
+                return _context.Request.IsHttps
+                    || string.Equals(XForwardedProtocol, "https", StringComparison.OrdinalIgnoreCase);
+            }
         }
 
         public string[] AcceptTypes
@@ -367,7 +436,35 @@ namespace Emby.Server.HttpServer.RequestResponse
                     return true;
                 }
 
-                return IPAddress.IsLoopback(remote);
+                if (IPAddress.IsLoopback(remote))
+                {
+                    return true;
+                }
+
+                // 未配置可信代理时保持原有语义（仅直连 loopback 算本地）。
+                // 只有可信代理提供的地址才参与局域网判定。
+                if (!IsTrustedProxy)
+                {
+                    return false;
+                }
+
+                var forwardedAddress = ForwardedHeadersPolicy.GetClientAddress(
+                    _context.Request.Headers["X-Forwarded-For"].FirstOrDefault(),
+                    _context.Request.Headers["X-Real-IP"].FirstOrDefault(),
+                    remote,
+                    _knownProxies);
+
+                if (string.IsNullOrEmpty(forwardedAddress))
+                {
+                    return false;
+                }
+
+                if (IPAddress.TryParse(forwardedAddress, out var address) && IPAddress.IsLoopback(address))
+                {
+                    return true;
+                }
+
+                return _networkManager != null && _networkManager.IsInLocalNetwork(forwardedAddress);
             }
         }
 
