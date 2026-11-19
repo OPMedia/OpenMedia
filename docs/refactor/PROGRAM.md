@@ -262,3 +262,80 @@ person 过滤实测 `loops=20280`、每次扫 8 个分区、447k 缓冲区、**4
 - **BR-26 Tags 93ms** 贴着线，是下一个该看的。
 - **fixture 与矩阵都在本轮被动过**：两者原先都有 bug（fixture 少一个值、库没挂 root；
   矩阵测死 SQL）。这类"测试资产本身失真"的问题值得单独做一次体检。
+
+---
+
+## 八、端到端压测（2026-11-19）
+
+SQL 层之外的真实 HTTP 延迟。6 并发、25 秒、5 种请求混合（列表 55% / 带字段 15% /
+搜索 15% / 剧集 10% / 继续观看 5%），195k 库。
+
+| 指标 | 修前 | 修后 |
+|---|---|---|
+| 吞吐 | 21.4 rps | **79.7 rps**（3.7×） |
+| ALL p95 | 1213 ms | **300 ms** |
+| 列表（SortBy=SortName, 100 条）p95 | 21.1 ms | **23.9 ms** |
+| 列表 + Fields=Overview,Genres,People p95 | 1523 ms | **112.7 ms**（13.5×） |
+| 剧集（SortBy=DateCreated）p95 | 350 ms | **32.6 ms**（10.7×） |
+| 搜索（6 万命中，病态）p95 | 536 ms | **265.8 ms** |
+| 继续观看 p95 | 1015 ms | **408.6 ms** |
+
+### 端到端才暴露的两个问题
+
+**① 列表页 N+1（最大头）**
+
+一次 100 条、带 `Fields=People,Genres` 的列表请求，实测发出 **100 条 item_people
+查询 + 101 条 item_extradata 查询** —— 每个条目各查一次，1192ms。
+改成整页两次批量查询（`= ANY(@ids)`）后 **3 条语句、97ms**，响应 JSON 的 sha256 逐字相同。
+
+**② 排序按日期只有 BRIN**
+
+`SortBy=DateCreated` 走 `ORDER BY date_created DESC LIMIT 50`，而 schema 只建了 BRIN
+（为范围扫描设计，函数上服务不了排序），只能整分区排序。补 btree 后 60ms → 0.19ms。
+
+### 仍然慢的：继续观看 408ms
+
+`SELECT count(DISTINCT presentation_unique_key) ... LEFT JOIN user_datas ...` 会扫全库再
+哈希连接。实测：原样 317ms、改成从小表起 279ms、物化 CTE 289ms、强制索引路径 375ms
+—— 现有计划已是该数据形态下的最优。这不是索引问题，是设计问题：为了一页 20 条的结果
+去算全库的 TotalRecordCount。可选方向：按用户缓存 resume 计数、或把
+presentation_unique_key 反规范化进 user_datas。**未动**，因为会改 API 语义。
+
+注意：fixture 让 30% 的条目处于"看过/在播"，单个用户有 17,400 条 resume —— 真实用户通常
+只有几十条，这条在真实数据下不会是热点。
+
+---
+
+## 九、NU1900 的处理
+
+`NU1900` = 「漏洞审计连不上 api.nuget.org 的 service index」，不是「包有漏洞」。
+离线构建时每个项目刷一条，会把真正的告警淹掉。
+
+处理：`Directory.Build.props` 只压 NU1900，**NU1901/1902/1903 保持生效**；
+同时给 CI 加了 `Vulnerability audit` 步骤（`dotnet list package --vulnerable` 有输出即 fail）。
+结果：本地全量重建 **0 警告 0 错误**，而漏洞门禁没有丢。
+
+---
+
+## 十、Git 考古结论（`docs/review/2026-11-19-git-archaeology.md`）
+
+最重要的一条：**ADR-0001「Go 全新重写，不 fork C#」从未执行过**。
+它进入 git 的时间是 2026-10-19，而 C# 现代化在 **2026-10-13** 就已经开工并「决策确认」；
+全部历史里没有任何 `.go` 文件。同一批被删的 SPEC 还把 LiveTV/DVR、DLNA、音乐、照片
+列为「明确不做」—— 而它们在今天的 C# 代码里全都注册着、有 API、有测试。
+结论：那套 ADR 是一份**从未落地的平行设计稿**，`AGENTS.md` 才是真实契约。
+
+可安全移除的历史包袱（按行数）：
+
+| 子系统 | 行数 | 说明 |
+|---|---|---|
+| `IO/SharpCifs` | 38,022 | SMB1 专用（`NT LM 0.12`），2017 年 vendored |
+| `BDInfo` + `DvdLib` | 7,487 | 只服务光盘 ISO/VOB 探测 |
+| `dashboard-ui` | 12.9 MB / 641 文件 | 现在仍是根重定向目标；`/app` 成为默认后才可删 |
+| `TV/TheTVDB` | 4,008 | `api.thetvdb.com` 已死，默认关闭 |
+| `Mono.Nat` + `Updates/GithubUpdater` | 1,594 | 路由器端口映射默认开；Docker/反代部署假设已不成立 |
+
+另外找到一批「证明自己过时」的代码：`#if TRAVISCI` 10 处、`#if SILVERLIGHT`、`#if BETA`、
+`#if NETSTANDARD2_0`；`-enablegdi` 开关在 `Emby.Drawing.Net` 删除后只会选中 `NullImageEncoder`
+（等于关掉所有图片）；8 个只写不读的配置项；以及 `SetOptimalValues()` 里为「相机上传」这种
+早已删除的功能做的迁移标记。
