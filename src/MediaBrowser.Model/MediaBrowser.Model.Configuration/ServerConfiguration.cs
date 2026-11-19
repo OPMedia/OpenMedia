@@ -113,8 +113,6 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public string[] LocalNetworkAddresses { get; set; }
 
-	public string[] CodecsUsed { get; set; }
-
 	public bool EnableExternalContentInSuggestions { get; set; }
 
 	public bool RequireHttps { get; set; }
@@ -141,7 +139,6 @@ public class ServerConfiguration : BaseApplicationConfiguration
 		RemoteIPFilter = Array.Empty<string>();
 		LocalNetworkSubnets = Array.Empty<string>();
 		LocalNetworkAddresses = Array.Empty<string>();
-		CodecsUsed = Array.Empty<string>();
 		ImageExtractionTimeoutMs = 0;
 		PathSubstitutions = new PathSubstitution[0];
 		EnableSimpleArtistDetection = true;
