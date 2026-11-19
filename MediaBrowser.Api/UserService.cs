@@ -210,6 +210,7 @@ namespace MediaBrowser.Api
     /// Class CreateUser
     /// </summary>
     [Route("/Users/New", "POST", Summary = "Creates a user")]
+    [Route("/Users", "POST", Summary = "Creates a user")]
     [Authenticated(Roles = "Admin")]
     public class CreateUserByName : IReturn<UserDto>
     {
