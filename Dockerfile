@@ -135,9 +135,11 @@ RUN chmod +x /opt/openmedia/server/ffmpeg /opt/openmedia/server/ffprobe \
     && /opt/openmedia/server/ffmpeg -version | head -1 \
     && /opt/openmedia/server/ffmpeg -filters | grep -q tonemapx
 
-# 3c. web 静态产物 —— **备用路径，后端尚未接线，见文件头缺口说明**
-#     接线前这个目录只是躺着，根路径 / 仍是旧 dashboard-ui。
-#     接线后（后端加静态文件托管）应改为 COPY 到 server/wwwroot 之类。
+# 3c. web 静态产物
+#     WebAppService 默认从 {ProgramSystemPath}/webapp 托管 SPA（路由前缀 /app），
+#     而这里是 /opt/openmedia/web —— 两者不一致，所以必须用 OPENMEDIA_WEBAPP_PATH 指过去。
+#     之前这块注释写着「后端尚未接线」，是 /app 托管做之前的说法；
+#     冒烟测试实测 /app/ 返回 404，就是这里没接上。
 COPY --from=web-build /src/web/dist/ /opt/openmedia/web/
 
 # 数据目录（PG 连接串走 OPENMEDIA_PGCONN 环境变量，见下方 ENV）
@@ -147,7 +149,8 @@ VOLUME ["/opt/openmedia/data"]
 # 默认指向容器编排里的 postgres 服务名；本机 docker compose 里是 postgres
 ENV OPENMEDIA_PGCONN="Host=postgres;Port=5432;Database=openmedia;Username=postgres;Password=123456" \
     DOTNET_RUNNING_IN_CONTAINER=true \
-    ASPNETCORE_URLS=http://+:8096
+    ASPNETCORE_URLS=http://+:8096 \
+    OPENMEDIA_WEBAPP_PATH=/opt/openmedia/web
 
 EXPOSE 8096
 

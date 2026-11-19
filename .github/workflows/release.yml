@@ -187,19 +187,6 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
             type=raw,value=dev,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Build & Push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/') }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
-            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
-            FANART_API_KEY=${{ secrets.FANART_API_KEY }}
-
       # ----------------------------------------------------------
       # 冒烟：单架构 load 进本地 docker，真跑一次
       #   多架构那次只 export 到 registry，本地跑不了；
@@ -252,6 +239,19 @@ jobs:
           docker logs om-smoke > /tmp/om-smoke.log 2>&1 || true
           tail -40 /tmp/om-smoke.log || true
           docker rm -f om-smoke || true
+
+      - name: Build & Push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+            FANART_API_KEY=${{ secrets.FANART_API_KEY }}
 
   # ------------------------------------------------------------
   # 汇总成 GitHub Release（仅 tag 触发）
