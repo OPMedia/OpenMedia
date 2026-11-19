@@ -31,9 +31,9 @@ public class JobLogger
 		try
 		{
 			using StreamReader reader = new StreamReader(source);
-			while (!reader.EndOfStream)
+			string text;
+			while ((text = await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false)) != null)
 			{
-				string text = await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false);
 				ParseLogLine(text, state);
 				byte[] bytes = Encoding.UTF8.GetBytes(Environment.NewLine + text);
 				await target.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(continueOnCapturedContext: false);
