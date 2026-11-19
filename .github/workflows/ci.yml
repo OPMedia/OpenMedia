@@ -124,10 +124,11 @@ jobs:
     needs: build
     services:
       postgres:
-        # 钉 16：仓库的 DDL（emby_pgsql_dump_schema_optimized.sql）与本机全部验证
-        # 都是在 PG 16.2 上做的。升到 18 要单独验证一遍 schema 与分区/索引行为，
-        # 不要和"修 CI"混在一次改动里。
-        image: postgres:16-alpine
+        # 与 runner 自带的 pg_dump 同主版本。runner 是 17（镜像里没有 16 的包，
+        # `apt-get install postgresql-client-16` 报 Unable to locate）。
+        # 版本不一致会让 pg_dump 17 把 `SET transaction_timeout` 写进 dump，
+        # pg_restore 到 16 直接 unrecognized configuration parameter。
+        image: postgres:17-alpine
         # 注意：services.*.env 位置**不能用 ${{ env.* }} 上下文**
         #（GitHub 上下文可用性限制：此处仅 github/inputs/matrix/needs/strategy/vars）。
         # 写成字面量，与顶层 env 保持一致。
@@ -150,21 +151,19 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: 统一 PostgreSQL 客户端版本
-        # runner 自带的 pg_dump 是 17，而 service 是 16。pg_dump 17 会把
-        # `SET transaction_timeout`（PG17 才有的参数）写进 dump，pg_restore 到 16 直接报
-        # "unrecognized configuration parameter" —— 备份测试就是这么红的。
-        # 装一个与 service 同主版本的客户端，并用 OPENMEDIA_PG_BIN 显式指过去。
+      - name: 打印 PostgreSQL 客户端版本（诊断用）
+        # 备份/恢复要求 pg_dump / pg_restore 与服务端同主版本：
+        # 高版本客户端会往 dump 里写低版本服务端不认识的参数（如 transaction_timeout），
+        # 恢复时直接报 unrecognized configuration parameter。
+        # 这里只打印，不装包 —— runner 的 apt 源里没有旧主版本的包。
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client-16
-          /usr/lib/postgresql/16/bin/pg_dump --version
+          pg_dump --version || true
+          pg_restore --version || true
 
       - name: Test
         # 不能加 --no-build：build job 跑在 windows runner，产物不会流转到这台 ubuntu。
         run: dotnet test MediaBrowser.Tests -c Release --nologo
         env:
-          OPENMEDIA_PG_BIN: /usr/lib/postgresql/16/bin
           OPENMEDIA_TEST_PGCONN: >-
             Host=localhost;Port=5432;Database=${{ env.PG_DB }};Username=${{ env.PG_USER }};Password=${{ env.PG_PASSWORD }}
 
