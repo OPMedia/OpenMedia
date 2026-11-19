@@ -17,12 +17,16 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.Session;
 using MediaBrowser.Model.Threading;
+using Microsoft.VisualStudio.Threading;
 using ITimer = MediaBrowser.Model.Threading.ITimer;
 
 namespace Emby.Server.MediaEncoding.Api;
 
 public class ApiEntryPoint : IServerEntryPoint, IDisposable
 {
+	// IDisposable.Dispose 是同步契约；清理转码任务必须等待完成。
+	private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
 	public static ApiEntryPoint Instance;
 
 	private readonly IServerConfigurationManager _config;
@@ -149,13 +153,13 @@ public class ApiEntryPoint : IServerEntryPoint, IDisposable
 		int count = list.Count;
 		foreach (TranscodingJob item in list)
 		{
-			Task task = KillTranscodingJob(item, closeLiveStream: false, delete: true);
-			Task.WaitAll(task);
+			// Dispose 为同步边界；JTF.Run 等待清理完成并允许延续回到原上下文。
+			_joinableTaskFactory.Run(() => KillTranscodingJob(item, closeLiveStream: false, delete: true));
 		}
 		if (count > 0)
 		{
-			Task task2 = Task.Delay(1000);
-			Task.WaitAll(task2);
+			// 保留原有的 1 秒等待，仅在同步边界用 JTF.Run 观察该 Task。
+			_joinableTaskFactory.Run(() => Task.Delay(1000));
 		}
 	}
 
