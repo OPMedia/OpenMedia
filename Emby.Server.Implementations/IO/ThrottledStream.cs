@@ -2,6 +2,7 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.IO
 {
@@ -10,6 +11,8 @@ namespace Emby.Server.Implementations.IO
     /// </summary>
     public class ThrottledStream : Stream
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         /// <summary>
         /// A constant used to specify an infinite number of bytes that can be transferred per second.
         /// </summary>
@@ -325,9 +328,10 @@ namespace Emby.Server.Implementations.IO
                     {
                         try
                         {
+                            // Throttle is called from the synchronous Stream.Write path; JTF.Run lets the
+                            // delay's continuation re-enter the caller's context instead of deadlocking.
                             // The time to sleep is more then a millisecond, so sleep.
-                            var task = Task.Delay(toSleep);
-                            Task.WaitAll(task);
+                            _joinableTaskFactory.Run(() => Task.Delay(toSleep));
                         }
                         catch
                         {
