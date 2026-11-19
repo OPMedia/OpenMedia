@@ -31,6 +31,7 @@ using MediaBrowser.Controller.Security;
 using MediaBrowser.Controller.Devices;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Library
 {
@@ -39,6 +40,9 @@ namespace Emby.Server.Implementations.Library
     /// </summary>
     public class UserManager : IUserManager
     {
+        // IUserManager members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         /// <summary>
         /// Gets the users.
         /// </summary>
@@ -524,7 +528,7 @@ namespace Emby.Server.Implementations.Library
                 throw new ArgumentNullException("user");
             }
 
-            var hasConfiguredPassword = GetAuthenticationProvider(user).HasPassword(user).Result;
+            var hasConfiguredPassword = _joinableTaskFactory.Run(() => GetAuthenticationProvider(user).HasPassword(user));
             var hasConfiguredEasyPassword = !IsPasswordEmpty(user, GetLocalPasswordHash(user));
 
             var hasPassword = user.Configuration.EnableLocalPassword && !string.IsNullOrEmpty(remoteEndPoint) && _networkManager.IsInLocalNetwork(remoteEndPoint) ?
