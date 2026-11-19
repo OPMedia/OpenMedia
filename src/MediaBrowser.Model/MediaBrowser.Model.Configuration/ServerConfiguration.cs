@@ -146,9 +146,15 @@ public class ServerConfiguration : BaseApplicationConfiguration
 
 	public BackupOptions Backup { get; set; }
 
+	/// <summary>
+	/// User supplied TheTVDB v4 credentials. Empty ApiKey disables the provider.
+	/// </summary>
+	public TheTvdbConfiguration TheTvdb { get; set; }
+
 	public ServerConfiguration()
 	{
 		Backup = new BackupOptions();
+		TheTvdb = new TheTvdbConfiguration();
 		UninstalledPlugins = Array.Empty<string>();
 		RemoteIPFilter = Array.Empty<string>();
 		LocalNetworkSubnets = Array.Empty<string>();
@@ -202,10 +208,9 @@ public class ServerConfiguration : BaseApplicationConfiguration
 			},
 			new MetadataOptions
 			{
-				ItemType = "Series",
-				// TVDB v3 外部停服（api.thetvdb.com 不可达），死源默认禁用，TMDb 顶上（phase3-design §2.4）
-				DisabledMetadataFetchers = new string[1] { "TheTVDB" },
-				DisabledImageFetchers = new string[1] { "TheTVDB" }
+				// TVDB 已迁到 v4；未配 TheTvdb.ApiKey 时 provider 自行禁用，
+				// 配好 key 后不需要用户再去改这里才能按名字搜索剧集。
+				ItemType = "Series"
 			},
 			new MetadataOptions
 			{

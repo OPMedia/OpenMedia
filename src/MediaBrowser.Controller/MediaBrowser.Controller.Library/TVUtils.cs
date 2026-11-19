@@ -4,7 +4,7 @@ namespace MediaBrowser.Controller.Library;
 
 public static class TVUtils
 {
-	public static readonly string TvdbApiKey = "B89CE93890E9419B";
+	// TheTVDB v4 credentials live in ServerConfiguration.TheTvdb; no key is shipped in source.
 
 	public static readonly string TvdbBaseUrl = "https://www.thetvdb.com/";
 

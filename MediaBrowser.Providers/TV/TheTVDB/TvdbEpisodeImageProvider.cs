@@ -1,180 +1,67 @@
-﻿using MediaBrowser.Common.Net;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Providers;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Xml;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Providers;
+using MediaBrowser.Model.Globalization;
 
 namespace MediaBrowser.Providers.TV
 {
+    /// <summary>Episode stills from the v4 episode list's "image" field.</summary>
     public class TvdbEpisodeImageProvider : IRemoteImageProvider
     {
-        private readonly IServerConfigurationManager _config;
-        private readonly CultureInfo _usCulture = new CultureInfo("en-US");
-        private readonly IHttpClient _httpClient;
-        private readonly IFileSystem _fileSystem;
+        private readonly TvdbSeriesProvider _seriesProvider;
 
-        public TvdbEpisodeImageProvider(IServerConfigurationManager config, IHttpClient httpClient, IFileSystem fileSystem)
+        public TvdbEpisodeImageProvider(IHttpClient httpClient, IFileSystem fileSystem, IServerConfigurationManager config, ILogger logger, ILibraryManager libraryManager, ILocalizationManager localizationManager)
         {
-            _config = config;
-            _httpClient = httpClient;
-            _fileSystem = fileSystem;
+            _seriesProvider = new TvdbSeriesProvider(httpClient, fileSystem, config, logger, libraryManager, localizationManager);
         }
 
-        public string Name
-        {
-            get { return "TheTVDB"; }
-        }
+        public string Name => TvdbArtworkMapper.ProviderName;
 
-        public bool Supports(BaseItem item)
-        {
-            return item is Episode;
-        }
+        public bool Supports(BaseItem item) => item is Episode;
 
         public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
         {
-            return new List<ImageType>
-            {
-                ImageType.Primary
-            };
+            return new[] { ImageType.Primary };
         }
 
-        public Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
+        public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
         {
-            var episode = (Episode)item;
-            var series = episode.Series;
-
-            if (series != null && TvdbSeriesProvider.IsValidSeries(series.ProviderIds))
+            var episode = item as Episode;
+            var series = episode?.Series;
+            if (series == null || !_seriesProvider.IsConfigured || !TvdbSeriesProvider.IsValidSeries(series.ProviderIds))
             {
-                // Process images
-                var seriesDataPath = TvdbSeriesProvider.GetSeriesDataPath(_config.ApplicationPaths, series.ProviderIds);
-
-				var nodes = TvdbEpisodeProvider.Current.GetEpisodeXmlNodes(seriesDataPath, episode.GetLookupInfo());
-
-                var result = nodes.Select(i => GetImageInfo(i, cancellationToken))
-                    .Where(i => i != null)
-					.ToList();
-
-				return Task.FromResult<IEnumerable<RemoteImageInfo>>(result);
+                return new RemoteImageInfo[] { };
             }
 
-            return Task.FromResult<IEnumerable<RemoteImageInfo>>(new RemoteImageInfo[] { });
-        }
-
-		private RemoteImageInfo GetImageInfo(XmlReader reader, CancellationToken cancellationToken)
-        {
-            var height = 225;
-            var width = 400;
-            var url = string.Empty;
-
-			// Use XmlReader for best performance
-			using (reader)
-			{
-                reader.MoveToContent();
-                reader.Read();
-
-                // Loop through each element
-                while (!reader.EOF && reader.ReadState == ReadState.Interactive)
-                {
-                    if (reader.NodeType == XmlNodeType.Element)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        switch (reader.Name)
-                        {
-                            case "thumb_width":
-                                {
-                                    var val = reader.ReadElementContentAsString();
-
-                                    if (!string.IsNullOrWhiteSpace(val))
-                                    {
-                                        int rval;
-
-                                        // int.TryParse is local aware, so it can be probamatic, force us culture
-                                        if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
-                                        {
-                                            width = rval;
-                                        }
-                                    }
-                                    break;
-                                }
-
-                            case "thumb_height":
-                                {
-                                    var val = reader.ReadElementContentAsString();
-
-                                    if (!string.IsNullOrWhiteSpace(val))
-                                    {
-                                        int rval;
-
-                                        // int.TryParse is local aware, so it can be probamatic, force us culture
-                                        if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
-                                        {
-                                            height = rval;
-                                        }
-                                    }
-                                    break;
-                                }
-
-                            case "filename":
-                                {
-                                    var val = reader.ReadElementContentAsString();
-                                    if (!string.IsNullOrWhiteSpace(val))
-                                    {
-                                        url = TVUtils.BannerUrl + val;
-                                    }
-                                    break;
-                                }
-                            default:
-                                {
-                                    reader.Skip();
-                                    break;
-                                }
-                        }
-                    }
-                    else
-                    {
-                        reader.Read();
-                    }
-                }
-			}
-
-            if (string.IsNullOrEmpty(url))
+            var id = await _seriesProvider.ResolveTvdbId(series.ProviderIds, series.Name, series.ProductionYear, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(id))
             {
-                return null;
+                return new RemoteImageInfo[] { };
             }
 
-            return new RemoteImageInfo
+            var data = await _seriesProvider.EnsureData(id, false, cancellationToken).ConfigureAwait(false);
+            if (data == null)
             {
-                Width = width,
-                Height = height,
-                ProviderName = Name,
-                Url = url,
-                Type = ImageType.Primary
-            };
-        }
+                return new RemoteImageInfo[] { };
+            }
 
-        public int Order
-        {
-            get { return 0; }
+            var matches = TvdbEpisodeProvider.MatchEpisodes(data.Episodes, episode.GetLookupInfo());
+            return new List<RemoteImageInfo>(TvdbArtworkMapper.ForEpisode(matches));
         }
 
         public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
         {
-            return _httpClient.GetResponse(new HttpRequestOptions
-            {
-                CancellationToken = cancellationToken,
-                Url = url
-            });
+            return _seriesProvider.GetImageResponse(url, cancellationToken);
         }
     }
 }

@@ -1,331 +1,161 @@
-﻿using MediaBrowser.Common.Net;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.Entities.TV;
-using MediaBrowser.Controller.Library;
-using MediaBrowser.Model.Entities;
-using MediaBrowser.Model.Logging;
-using MediaBrowser.Model.Net;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
+using MediaBrowser.Common.Net;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
-using MediaBrowser.Model.IO;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.IO;
-using MediaBrowser.Model.Xml;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Globalization;
 
 namespace MediaBrowser.Providers.TV
 {
     /// <summary>
-    /// Class TvdbPrescanTask
+    /// Incrementally refreshes library series using TheTVDB v4 /updates.
+    /// The last successfully processed unix timestamp is kept in cache/tvdb/time.txt.
     /// </summary>
     public class TvdbPrescanTask : ILibraryPostScanTask
     {
+        /// <summary>Human-facing links in TvExternalIds still point at the website.</summary>
         public const string TvdbBaseUrl = "https://thetvdb.com/";
 
-        /// <summary>
-        /// The server time URL
-        /// </summary>
-        private const string ServerTimeUrl = TvdbBaseUrl + "api/Updates.php?type=none";
+        private const int FullRefreshThresholdDays = 90;
+        private const int ClockSkewMarginSeconds = 300;
+        private const int CacheHours = 24;
 
-        /// <summary>
-        /// The updates URL
-        /// </summary>
-        private const string UpdatesUrl = TvdbBaseUrl + "api/Updates.php?type=all&time={0}";
-
-        /// <summary>
-        /// The _HTTP client
-        /// </summary>
-        private readonly IHttpClient _httpClient;
-        /// <summary>
-        /// The _logger
-        /// </summary>
-        private readonly ILogger _logger;
-        /// <summary>
-        /// The _config
-        /// </summary>
-        private readonly IServerConfigurationManager _config;
         private readonly IFileSystem _fileSystem;
         private readonly ILibraryManager _libraryManager;
-        private readonly IXmlReaderSettingsFactory _xmlSettings;
+        private readonly ILogger _logger;
+        private readonly TvdbV4Client _client;
+        private readonly TvdbCache _cache;
+        private readonly TvdbSeriesProvider _seriesProvider;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TvdbPrescanTask"/> class.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        /// <param name="httpClient">The HTTP client.</param>
-        /// <param name="config">The config.</param>
-        public TvdbPrescanTask(ILogger logger, IHttpClient httpClient, IServerConfigurationManager config, IFileSystem fileSystem, ILibraryManager libraryManager, IXmlReaderSettingsFactory xmlSettings)
+        public TvdbPrescanTask(ILogger logger, IHttpClient httpClient, IServerConfigurationManager config, IFileSystem fileSystem, ILibraryManager libraryManager, ILocalizationManager localizationManager)
         {
             _logger = logger;
-            _httpClient = httpClient;
-            _config = config;
             _fileSystem = fileSystem;
             _libraryManager = libraryManager;
-            _xmlSettings = xmlSettings;
+            _client = new TvdbV4Client(httpClient, config, logger);
+            _cache = new TvdbCache(fileSystem, config);
+            _seriesProvider = new TvdbSeriesProvider(httpClient, fileSystem, config, logger, libraryManager, localizationManager);
         }
 
-        protected readonly CultureInfo UsCulture = new CultureInfo("en-US");
-
-        /// <summary>
-        /// Runs the specified progress.
-        /// </summary>
-        /// <param name="progress">The progress.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
         public async Task Run(IProgress<double> progress, CancellationToken cancellationToken)
         {
-            var path = TvdbSeriesProvider.GetSeriesDataPath(_config.CommonApplicationPaths);
-
-            _fileSystem.CreateDirectory(path);
-
-            var timestampFile = Path.Combine(path, "time.txt");
-
-            var timestampFileInfo = _fileSystem.GetFileInfo(timestampFile);
-
-            // Don't check for tvdb updates anymore frequently than 24 hours
-            if (timestampFileInfo.Exists && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(timestampFileInfo)).TotalDays < 1)
+            // A missing key must be a no-op, not a stream of empty /updates calls.
+            if (!_client.IsConfigured)
             {
+                TvdbV4Client.WarnMissingKeyOnce(_logger);
+                progress.Report(100);
                 return;
             }
 
-            // Find out the last time we queried tvdb for updates
-            var lastUpdateTime = timestampFileInfo.Exists ? _fileSystem.ReadAllText(timestampFile, Encoding.UTF8) : string.Empty;
+            var path = _cache.Root;
+            _fileSystem.CreateDirectory(path);
 
-            string newUpdateTime;
-
-            var existingDirectories = _fileSystem.GetDirectoryPaths(path)
-                .Select(Path.GetFileName)
-                .ToList();
-
-            var seriesList = _libraryManager.GetItemList(new InternalItemsQuery()
-            {
-                IncludeItemTypes = new[] { typeof(Series).Name },
-                Recursive = true,
-                GroupByPresentationUniqueKey = false,
-                DtoOptions = new DtoOptions(false)
-                {
-                    EnableImages = false
-                }
-
-            }).Cast<Series>()
-            .ToList();
-
-            var seriesIdsInLibrary = seriesList
-               .Where(i => !string.IsNullOrEmpty(i.GetProviderId(MetadataProviders.Tvdb)))
-               .Select(i => i.GetProviderId(MetadataProviders.Tvdb))
-               .ToList();
-
-            var missingSeries = seriesIdsInLibrary.Except(existingDirectories, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            var enableInternetProviders = seriesList.Count == 0 ? false : seriesList[0].IsMetadataFetcherEnabled(_libraryManager.GetLibraryOptions(seriesList[0]), TvdbSeriesProvider.Current.Name);
-            if (!enableInternetProviders)
+            var timestampFile = _cache.UpdatesPath;
+            var fileInfo = _fileSystem.GetFileInfo(timestampFile);
+            if (fileInfo.Exists && (DateTime.UtcNow - _fileSystem.GetLastWriteTimeUtc(fileInfo)).TotalHours < CacheHours)
             {
                 progress.Report(100);
                 return;
             }
 
-            // If this is our first time, update all series
-            if (string.IsNullOrEmpty(lastUpdateTime))
+            var lastTime = fileInfo.Exists ? ReadTimestamp(timestampFile) : 0;
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var isFullRefresh = lastTime <= 0 ||
+                                lastTime > now + ClockSkewMarginSeconds ||
+                                lastTime < now - TimeSpan.FromDays(FullRefreshThresholdDays).TotalSeconds;
+
+            var idsInLibrary = GetSeriesIdsInLibrary();
+            List<string> idsToRefresh;
+            long newTime;
+
+            if (isFullRefresh)
             {
-                // First get tvdb server time
-                using (var response = await _httpClient.SendAsync(new HttpRequestOptions
-                {
-                    Url = ServerTimeUrl,
-                    CancellationToken = cancellationToken,
-                    EnableHttpCompression = true,
-                    BufferContent = false
-
-                }, "GET").ConfigureAwait(false))
-                {
-                    // First get tvdb server time
-                    using (var stream = response.Content)
-                    {
-                        newUpdateTime = GetUpdateTime(stream);
-                    }
-                }
-
-                existingDirectories.AddRange(missingSeries);
-
-                await UpdateSeries(existingDirectories, path, null, progress, cancellationToken).ConfigureAwait(false);
+                // /updates only covers 90 days; start by populating everything we track.
+                idsToRefresh = idsInLibrary.ToList();
+                newTime = now - ClockSkewMarginSeconds;
             }
             else
             {
-                var seriesToUpdate = await GetSeriesIdsToUpdate(existingDirectories, lastUpdateTime, cancellationToken).ConfigureAwait(false);
+                var result = await _client.GetUpdates(lastTime, cancellationToken).ConfigureAwait(false);
+                var changedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var update in result.Updates)
+                {
+                    if (update.EntityType != null &&
+                        !string.Equals(update.EntityType, "series", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
 
-                newUpdateTime = seriesToUpdate.Item2;
+                    AddIfInLibrary(changedIds, idsInLibrary, update.RecordId);
+                    if (update.MergeToId.HasValue)
+                    {
+                        AddIfInLibrary(changedIds, idsInLibrary, update.MergeToId.Value);
+                    }
+                }
 
-                long lastUpdateValue;
-
-                long.TryParse(lastUpdateTime, NumberStyles.Any, UsCulture, out lastUpdateValue);
-
-                var nullableUpdateValue = lastUpdateValue == 0 ? (long?)null : lastUpdateValue;
-
-                var listToUpdate = seriesToUpdate.Item1.ToList();
-                listToUpdate.AddRange(missingSeries);
-
-                await UpdateSeries(listToUpdate, path, nullableUpdateValue, progress, cancellationToken).ConfigureAwait(false);
+                idsToRefresh = changedIds.ToList();
+                newTime = result.NewTime;
             }
 
-            _fileSystem.WriteAllText(timestampFile, newUpdateTime, Encoding.UTF8);
+            var completed = 0;
+            var failed = false;
+            foreach (var id in idsToRefresh)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var languages = GetLanguagesForSeries(id);
+                foreach (var language in languages)
+                {
+                    _logger.Info("Updating TheTVDB series {0}, language {1}", id, language);
+                    if (!await _seriesProvider.RefreshSeries(id, cancellationToken).ConfigureAwait(false))
+                    {
+                        failed = true;
+                    }
+                }
+
+                completed++;
+                progress.Report(idsToRefresh.Count == 0 ? 100 : 100d * completed / idsToRefresh.Count);
+            }
+
+            // Never persist 0 or an older value: a failed/stale run must not rewind the cursor.
+            if (!failed && newTime > 0)
+            {
+                var safeTime = Math.Min(newTime, now - ClockSkewMarginSeconds);
+                if (safeTime > lastTime)
+                {
+                    _fileSystem.WriteAllText(timestampFile, safeTime.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+
             progress.Report(100);
         }
 
-        /// <summary>
-        /// Gets the update time.
-        /// </summary>
-        /// <param name="response">The response.</param>
-        /// <returns>System.String.</returns>
-        private string GetUpdateTime(Stream response)
+        private static void AddIfInLibrary(HashSet<string> target, HashSet<string> idsInLibrary, long id)
         {
-            var settings = _xmlSettings.Create(false);
-
-            settings.CheckCharacters = false;
-            settings.IgnoreProcessingInstructions = true;
-            settings.IgnoreComments = true;
-
-            using (var streamReader = new StreamReader(response, Encoding.UTF8))
+            if (id > 0)
             {
-                // Use XmlReader for best performance
-                using (var reader = XmlReader.Create(streamReader, settings))
+                var value = id.ToString(CultureInfo.InvariantCulture);
+                if (idsInLibrary.Contains(value))
                 {
-                    reader.MoveToContent();
-                    reader.Read();
-
-                    // Loop through each element
-                    while (!reader.EOF && reader.ReadState == ReadState.Interactive)
-                    {
-                        if (reader.NodeType == XmlNodeType.Element)
-                        {
-                            switch (reader.Name)
-                            {
-                                case "Time":
-                                    {
-                                        return (reader.ReadElementContentAsString() ?? string.Empty).Trim();
-                                    }
-                                default:
-                                    reader.Skip();
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            reader.Read();
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Gets the series ids to update.
-        /// </summary>
-        /// <param name="existingSeriesIds">The existing series ids.</param>
-        /// <param name="lastUpdateTime">The last update time.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task{IEnumerable{System.String}}.</returns>
-        private async Task<Tuple<IEnumerable<string>, string>> GetSeriesIdsToUpdate(IEnumerable<string> existingSeriesIds, string lastUpdateTime, CancellationToken cancellationToken)
-        {
-            // First get last time
-            using (var response = await _httpClient.SendAsync(new HttpRequestOptions
-            {
-                Url = string.Format(UpdatesUrl, lastUpdateTime),
-                CancellationToken = cancellationToken,
-                EnableHttpCompression = true,
-                BufferContent = false
-
-            }, "GET").ConfigureAwait(false))
-            {
-                using (var stream = response.Content)
-                {
-                    var data = GetUpdatedSeriesIdList(stream);
-
-                    var existingDictionary = existingSeriesIds.ToDictionary(i => i, StringComparer.OrdinalIgnoreCase);
-
-                    var seriesList = data.Item1
-                        .Where(i => !string.IsNullOrWhiteSpace(i) && existingDictionary.ContainsKey(i));
-
-                    return new Tuple<IEnumerable<string>, string>(seriesList, data.Item2);
+                    target.Add(value);
                 }
             }
         }
 
-        private Tuple<List<string>, string> GetUpdatedSeriesIdList(Stream stream)
+        private HashSet<string> GetSeriesIdsInLibrary()
         {
-            string updateTime = null;
-            var idList = new List<string>();
-
-            var settings = _xmlSettings.Create(false);
-
-            settings.CheckCharacters = false;
-            settings.IgnoreProcessingInstructions = true;
-            settings.IgnoreComments = true;
-
-            using (var streamReader = new StreamReader(stream, Encoding.UTF8))
-            {
-                // Use XmlReader for best performance
-                using (var reader = XmlReader.Create(streamReader, settings))
-                {
-                    reader.MoveToContent();
-                    reader.Read();
-
-                    // Loop through each element
-                    while (!reader.EOF && reader.ReadState == ReadState.Interactive)
-                    {
-                        if (reader.NodeType == XmlNodeType.Element)
-                        {
-                            switch (reader.Name)
-                            {
-                                case "Time":
-                                    {
-                                        updateTime = (reader.ReadElementContentAsString() ?? string.Empty).Trim();
-                                        break;
-                                    }
-                                case "Series":
-                                    {
-                                        var id = (reader.ReadElementContentAsString() ?? string.Empty).Trim();
-                                        idList.Add(id);
-                                        break;
-                                    }
-                                default:
-                                    reader.Skip();
-                                    break;
-                            }
-                        }
-                        else
-                        {
-                            reader.Read();
-                        }
-                    }
-                }
-            }
-
-            return new Tuple<List<string>, string>(idList, updateTime);
-        }
-
-        /// <summary>
-        /// Updates the series.
-        /// </summary>
-        /// <param name="seriesIds">The series ids.</param>
-        /// <param name="seriesDataPath">The series data path.</param>
-        /// <param name="lastTvDbUpdateTime">The last tv db update time.</param>
-        /// <param name="progress">The progress.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
-        private async Task UpdateSeries(List<string> seriesIds, string seriesDataPath, long? lastTvDbUpdateTime, IProgress<double> progress, CancellationToken cancellationToken)
-        {
-            var numComplete = 0;
-
-            var seriesList = _libraryManager.GetItemList(new InternalItemsQuery()
+            var series = _libraryManager.GetItemList(new InternalItemsQuery
             {
                 IncludeItemTypes = new[] { typeof(Series).Name },
                 Recursive = true,
@@ -334,68 +164,49 @@ namespace MediaBrowser.Providers.TV
                 {
                     EnableImages = false
                 }
+            }).OfType<Series>();
 
-            }).Cast<Series>();
-
-            // Gather all series into a lookup by tvdb id
-            var allSeries = seriesList
-                .Where(i => !string.IsNullOrEmpty(i.GetProviderId(MetadataProviders.Tvdb)))
-                .ToLookup(i => i.GetProviderId(MetadataProviders.Tvdb));
-
-            foreach (var seriesId in seriesIds)
-            {
-                // Find the preferred language(s) for the movie in the library
-                var languages = allSeries[seriesId]
-                    .Select(i => i.GetPreferredMetadataLanguage())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                foreach (var language in languages)
-                {
-                    try
-                    {
-                        await UpdateSeries(seriesId, seriesDataPath, lastTvDbUpdateTime, language, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (HttpException ex)
-                    {
-                        _logger.ErrorException("Error updating tvdb series id {0}, language {1}", ex, seriesId, language);
-
-                        // Already logged at lower levels, but don't fail the whole operation, unless timed out
-                        // We have to fail this to make it run again otherwise new episode data could potentially be missing
-                        if (ex.IsTimedOut)
-                        {
-                            throw;
-                        }
-                    }
-                }
-
-                numComplete++;
-                double percent = numComplete;
-                percent /= seriesIds.Count;
-                percent *= 100;
-
-                progress.Report(percent);
-            }
+            return new HashSet<string>(series
+                .Select(i => i.GetProviderId(MetadataProviders.Tvdb))
+                .Where(i => !string.IsNullOrWhiteSpace(i))
+                .Select(i => i.Trim()), StringComparer.OrdinalIgnoreCase);
         }
 
-        /// <summary>
-        /// Updates the series.
-        /// </summary>
-        /// <param name="id">The id.</param>
-        /// <param name="seriesDataPath">The series data path.</param>
-        /// <param name="lastTvDbUpdateTime">The last tv db update time.</param>
-        /// <param name="preferredMetadataLanguage">The preferred metadata language.</param>
-        /// <param name="cancellationToken">The cancellation token.</param>
-        /// <returns>Task.</returns>
-        private Task UpdateSeries(string id, string seriesDataPath, long? lastTvDbUpdateTime, string preferredMetadataLanguage, CancellationToken cancellationToken)
+        private List<string> GetLanguagesForSeries(string id)
         {
-            _logger.Info("Updating series from tvdb " + id + ", language " + preferredMetadataLanguage);
+            var series = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { typeof(Series).Name },
+                Recursive = true,
+                GroupByPresentationUniqueKey = false,
+                DtoOptions = new DtoOptions(false)
+                {
+                    EnableImages = false
+                }
+            }).OfType<Series>();
 
-            seriesDataPath = Path.Combine(seriesDataPath, id);
+            var languages = series
+                .Where(i => string.Equals(i.GetProviderId(MetadataProviders.Tvdb), id, StringComparison.OrdinalIgnoreCase))
+                .Select(i => i.GetPreferredMetadataLanguage())
+                .Where(i => !string.IsNullOrWhiteSpace(i))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-            _fileSystem.CreateDirectory(seriesDataPath);
+            return languages.Count == 0 ? new List<string> { "en" } : languages;
+        }
 
-            return TvdbSeriesProvider.Current.DownloadSeriesZip(id, MetadataProviders.Tvdb.ToString(), null, null, seriesDataPath, lastTvDbUpdateTime, preferredMetadataLanguage, cancellationToken);
+        private long ReadTimestamp(string path)
+        {
+            try
+            {
+                long value;
+                return long.TryParse(_fileSystem.ReadAllText(path), NumberStyles.Integer, CultureInfo.InvariantCulture, out value) ? value : 0;
+            }
+            catch (Exception ex) when (ex is System.IO.IOException || ex is UnauthorizedAccessException)
+            {
+                _logger.Warn("Unable to read TheTVDB update timestamp: {0}", ex.Message);
+                return 0;
+            }
         }
     }
 }
