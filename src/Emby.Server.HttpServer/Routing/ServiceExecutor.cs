@@ -85,19 +85,14 @@ namespace Emby.Server.HttpServer.Routing
                     foreach (var requestFilter in actionContext.RequestFilters)
                     {
                         requestFilter.RequestFilter(request, request.Response, requestDto);
-                        if (request.Response.IsClosed)
-                        {
-                            Task.FromResult<object>(null);
-                        }
                     }
                 }
 
                 var response = actionContext.ServiceAction(instance, requestDto);
 
-                var taskResponse = response as Task;
-                if (taskResponse != null)
+                if (response is Task)
                 {
-                    return GetTaskResult(taskResponse);
+                    return GetTaskResult(response);
                 }
 
                 return Task.FromResult(response);
@@ -107,10 +102,11 @@ namespace Emby.Server.HttpServer.Routing
             throw new NotImplementedException(string.Format("Could not find method named {1}({0}) or Any({0}) on Service {2}", requestDto.GetType().GetMethodName(), expectedMethodName, serviceType.GetMethodName()));
         }
 
-        private static async Task<object> GetTaskResult(Task task)
+        private static async Task<object> GetTaskResult(object response)
         {
             try
             {
+                var task = (Task)response;
                 var taskObject = task as Task<object>;
                 if (taskObject != null)
                 {
