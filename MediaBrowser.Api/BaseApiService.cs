@@ -4,6 +4,7 @@ using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Session;
+using MediaBrowser.Common.Extensions;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Logging;
 using System;
@@ -352,19 +353,7 @@ namespace MediaBrowser.Api
 
         private List<string> Parse(string pathUri)
         {
-            var actionParts = pathUri.Split(new[] { "://" }, StringSplitOptions.None);
-
-            var pathInfo = actionParts[actionParts.Length - 1];
-
-            var optionsPos = pathInfo.LastIndexOf('?');
-            if (optionsPos != -1)
-            {
-                pathInfo = pathInfo.Substring(0, optionsPos);
-            }
-
-            var args = pathInfo.Split('/');
-
-            return args.Skip(1).ToList();
+            return UrlPathParser.ParsePathInfo(pathUri);
         }
 
         /// <summary>

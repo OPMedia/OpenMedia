@@ -455,30 +455,39 @@ namespace Emby.Server.Implementations.Playlists
             return MakeRelativePath(_fileSystem.GetDirectoryName(playlistPath), itemPath);
         }
 
-        private static String MakeRelativePath(string folderPath, string fileAbsolutePath)
+        private static string MakeRelativePath(string folderPath, string fileAbsolutePath)
         {
-            if (String.IsNullOrEmpty(folderPath)) throw new ArgumentNullException("folderPath");
-            if (String.IsNullOrEmpty(fileAbsolutePath)) throw new ArgumentNullException("filePath");
+            if (string.IsNullOrEmpty(folderPath)) throw new ArgumentNullException(nameof(folderPath));
+            if (string.IsNullOrEmpty(fileAbsolutePath)) throw new ArgumentNullException(nameof(fileAbsolutePath));
 
-            if (!folderPath.EndsWith(Path.DirectorySeparatorChar.ToString()))
+            var folderWithSeparator = folderPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+                ? folderPath
+                : folderPath + Path.DirectorySeparatorChar;
+
+            // Path.GetRelativePath 只处理文件系统路径；URL 和 UNC（带 host 的 file URI）
+            // 仍交给 Uri，否则 "http://host/x" 会被当成当前目录里的文件名，跨 scheme 也无法识别。
+            var hasUriForm = folderPath.StartsWith(Uri.UriSchemeFile + ":", StringComparison.OrdinalIgnoreCase)
+                || fileAbsolutePath.StartsWith(Uri.UriSchemeFile + ":", StringComparison.OrdinalIgnoreCase);
+            if (Uri.TryCreate(folderWithSeparator, UriKind.Absolute, out var folderUri)
+                && Uri.TryCreate(fileAbsolutePath, UriKind.Absolute, out var fileUri)
+                && (hasUriForm
+                    || folderUri.Scheme != Uri.UriSchemeFile
+                    || fileUri.Scheme != Uri.UriSchemeFile
+                    || folderUri.Host.Length > 0
+                    || fileUri.Host.Length > 0))
             {
-                folderPath = folderPath + Path.DirectorySeparatorChar;
+                if (folderUri.Scheme != fileUri.Scheme)
+                {
+                    return fileAbsolutePath; // 跨 scheme 无法相对化，保留绝对地址
+                }
+
+                var relativeUriPath = Uri.UnescapeDataString(folderUri.MakeRelativeUri(fileUri).ToString());
+                return fileUri.Scheme.Equals(Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase)
+                    ? relativeUriPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                    : relativeUriPath;
             }
 
-            Uri folderUri = new Uri(folderPath);
-            Uri fileAbsoluteUri = new Uri(fileAbsolutePath);
-
-            if (folderUri.Scheme != fileAbsoluteUri.Scheme) { return fileAbsolutePath; } // path can't be made relative.
-
-            Uri relativeUri = folderUri.MakeRelativeUri(fileAbsoluteUri);
-            String relativePath = Uri.UnescapeDataString(relativeUri.ToString());
-
-            if (fileAbsoluteUri.Scheme.Equals("file", StringComparison.CurrentCultureIgnoreCase))
-            {
-                relativePath = relativePath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            }
-
-            return relativePath;
+            return Path.GetRelativePath(folderPath, fileAbsolutePath);
         }
 
         private static string UnEscape(string content)

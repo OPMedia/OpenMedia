@@ -152,16 +152,13 @@ namespace Emby.Server.Implementations.Networking
                 .ToList();
         }
 
+        // 只排除 RFC 3927 链路本地段；"169." 前缀会把 169.0.0.1 / 169.255.1.1 一起丢掉。
+        private static readonly global::System.Net.IPNetwork _linkLocalNetwork =
+            global::System.Net.IPNetwork.Parse("169.254.0.0/16");
+
         private bool FilterIpAddress(IPAddress address)
         {
-            var addressString = address.ToString();
-
-            if (addressString.StartsWith("169.", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return true;
+            return !_linkLocalNetwork.Contains(address);
         }
 
         // RFC 1918 / RFC 4193 / RFC 5735 私有地址段，以及 IPv6 唯一本地地址和环回地址。

@@ -694,17 +694,11 @@ namespace Emby.Server.Implementations.HttpClientManager
         /// <returns>System.String.</returns>
         private string GetHostFromUrl(string url)
         {
-            var index = url.IndexOf("://", StringComparison.OrdinalIgnoreCase);
-
-            if (index != -1)
+            // 缓存键只需要 host：userinfo、端口、path/query 都不能进入键，
+            // 否则同一个主机因密码或端口不同被拆成多个 HttpClient，超时封禁也失效。
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrEmpty(uri.Host))
             {
-                url = url.Substring(index + 3);
-                var host = url.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-
-                if (!string.IsNullOrWhiteSpace(host))
-                {
-                    return host;
-                }
+                return uri.Host;
             }
 
             return url;

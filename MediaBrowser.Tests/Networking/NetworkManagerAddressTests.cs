@@ -276,5 +276,25 @@ namespace MediaBrowser.Tests.Networking
 
             Assert.IsFalse(manager.IsAddressInSubnets("10.1.2.3", new[] { "10.0.0.0/33" }));
         }
+
+        private static bool InvokeFilterIpAddress(NetworkManager manager, string address)
+        {
+            var method = typeof(NetworkManager).GetMethod("FilterIpAddress", BindingFlags.Instance | BindingFlags.NonPublic);
+            return (bool)method.Invoke(manager, new object[] { IPAddress.Parse(address) });
+        }
+
+        [DataTestMethod]
+        [DataRow("169.254.0.0", false)]
+        [DataRow("169.254.255.255", false)]
+        [DataRow("169.255.1.1", true)]
+        [DataRow("169.0.0.1", true)]
+        [DataRow("16.9.254.1", true)]
+        [DataRow("10.1.2.3", true)]
+        [DataRow("fe80::1", true)]
+        [DataRow("::ffff:169.254.1.1", false)]
+        public void FilterIpAddress_ExcludesOnlyLinkLocalCidr(string address, bool expected)
+        {
+            Assert.AreEqual(expected, InvokeFilterIpAddress(CreateManager(), address));
+        }
     }
 }
