@@ -39,6 +39,7 @@ using MediaBrowser.Controller.Channels;
 using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller;
 using MediaBrowser.Common.Net;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.LiveTv
 {
@@ -47,6 +48,9 @@ namespace Emby.Server.Implementations.LiveTv
     /// </summary>
     public class LiveTvManager : ILiveTvManager, IDisposable
     {
+        // ILiveTvManager members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly IServerConfigurationManager _config;
         private readonly ILogger _logger;
         private readonly IItemRepository _itemRepo;
@@ -955,7 +959,7 @@ namespace Emby.Server.Implementations.LiveTv
         {
             if (!(query.IsAiring ?? false))
             {
-                return GetPrograms(query, options, cancellationToken).Result;
+                return _joinableTaskFactory.Run(() => GetPrograms(query, options, cancellationToken));
             }
 
             RemoveFields(options);

@@ -47,6 +47,8 @@ using MediaBrowser.Model.Tasks;
 using Emby.Server.Implementations.Playlists;
 using MediaBrowser.Providers.MediaInfo;
 using MediaBrowser.Controller;
+using JoinableTaskContext = Microsoft.VisualStudio.Threading.JoinableTaskContext;
+using JoinableTaskFactory = Microsoft.VisualStudio.Threading.JoinableTaskFactory;
 
 namespace Emby.Server.Implementations.Library
 {
@@ -55,6 +57,9 @@ namespace Emby.Server.Implementations.Library
     /// </summary>
     public class LibraryManager : ILibraryManager
     {
+        // ILibraryManager members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         /// <summary>
         /// Gets or sets the postscan tasks.
         /// </summary>
@@ -338,8 +343,7 @@ namespace Emby.Server.Implementations.Library
                 {
                     try
                     {
-                        var task = BaseItem.ChannelManager.DeleteItem(item);
-                        Task.WaitAll(task);
+                        _joinableTaskFactory.Run(() => BaseItem.ChannelManager.DeleteItem(item));
                     }
                     catch (ArgumentException)
                     {

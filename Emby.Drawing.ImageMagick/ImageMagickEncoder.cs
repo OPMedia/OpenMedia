@@ -9,11 +9,15 @@ using System;
 using System.IO;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.System;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Drawing.ImageMagick
 {
     public class ImageMagickEncoder : IImageEncoder, IDisposable
     {
+        // IImageEncoder members are synchronous; JTF keeps this boundary deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly ILogger _logger;
         private readonly IApplicationPaths _appPaths;
         private readonly Func<IHttpClient> _httpClientFactory;
@@ -271,8 +275,7 @@ namespace Emby.Drawing.ImageMagick
                 {
                     var currentImageSize = new ImageSize(imageWidth, imageHeight);
 
-                    var task = new PlayedIndicatorDrawer(_appPaths, _httpClientFactory(), _fileSystem).DrawPlayedIndicator(image, currentImageSize);
-                    Task.WaitAll(task);
+                    _joinableTaskFactory.Run(() => new PlayedIndicatorDrawer(_appPaths, _httpClientFactory(), _fileSystem).DrawPlayedIndicator(image, currentImageSize));
                 }
                 else if (options.UnplayedCount.HasValue)
                 {

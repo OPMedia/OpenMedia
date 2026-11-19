@@ -633,9 +633,7 @@ namespace SharpCifs.Util.Sharpen
             //    : null;
 
             //get v4-address only
-            var entry = Task.Run(() => System.Net.Dns.GetHostEntryAsync(host))
-                            .GetAwaiter()
-                            .GetResult();
+            var entry = System.Net.Dns.GetHostEntry(host);
             return entry.AddressList
                         .Where(addr => addr.AddressFamily == AddressFamily.InterNetwork)
                         .ToArray();

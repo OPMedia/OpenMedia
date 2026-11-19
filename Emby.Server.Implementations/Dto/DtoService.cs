@@ -26,11 +26,15 @@ using System.Threading.Tasks;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Controller.Playlists;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Dto
 {
     public class DtoService : IDtoService
     {
+        // IDtoService members are synchronous; JTF keeps these boundaries deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly ILogger _logger;
         private readonly ILibraryManager _libraryManager;
         private readonly IUserDataManager _userDataRepository;
@@ -150,8 +154,7 @@ namespace Emby.Server.Implementations.Dto
 
             if (programTuples.Count > 0)
             {
-                var task = _livetvManager().AddInfoToProgramDto(programTuples, options.Fields, user);
-                Task.WaitAll(task);
+                _joinableTaskFactory.Run(() => _livetvManager().AddInfoToProgramDto(programTuples, options.Fields, user));
             }
 
             if (channelTuples.Count > 0)
@@ -175,8 +178,7 @@ namespace Emby.Server.Implementations.Dto
             else if (item is LiveTvProgram)
             {
                 var list = new List<Tuple<BaseItem, BaseItemDto>> { new Tuple<BaseItem, BaseItemDto>(item, dto) };
-                var task = _livetvManager().AddInfoToProgramDto(list, options.Fields, user);
-                Task.WaitAll(task);
+                _joinableTaskFactory.Run(() => _livetvManager().AddInfoToProgramDto(list, options.Fields, user));
             }
 
             var byName = item as IItemByName;
@@ -1458,9 +1460,8 @@ namespace Emby.Server.Implementations.Dto
                         return null;
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    //_logger.ErrorException("Failed to determine primary image aspect ratio for {0}", ex, imageInfo.Path);
                     return null;
                 }
             }

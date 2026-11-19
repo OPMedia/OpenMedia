@@ -23,11 +23,15 @@ using MediaBrowser.Model.Globalization;
 using System.IO;
 using System.Globalization;
 using MediaBrowser.Common.Configuration;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.Library
 {
     public class MediaSourceManager : IMediaSourceManager, IDisposable
     {
+        // IDisposable.Dispose is synchronous; JTF keeps stream cleanup deadlock-free.
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         private readonly IItemRepository _itemRepo;
         private readonly IUserManager _userManager;
         private readonly ILibraryManager _libraryManager;
@@ -627,7 +631,7 @@ namespace Emby.Server.Implementations.Library
 
                     //_logger.Debug("Found cached media info");
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                 }
             }
@@ -876,9 +880,7 @@ namespace Emby.Server.Implementations.Library
                 {
                     foreach (var key in _openStreams.Keys.ToList())
                     {
-                        var task = CloseLiveStream(key);
-
-                        Task.WaitAll(task);
+                        _joinableTaskFactory.Run(() => CloseLiveStream(key));
                     }
                 }
             }
