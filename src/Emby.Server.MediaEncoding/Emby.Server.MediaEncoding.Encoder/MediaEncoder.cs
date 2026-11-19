@@ -6,7 +6,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using DvdLib.Ifo;
 using Microsoft.VisualStudio.Threading;
 using Emby.Server.MediaEncoding.Probing;
 using MediaBrowser.Common;
@@ -1026,26 +1025,13 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 		//IL_000e: Unknown result type (might be due to invalid IL or missing references)
 		if ((int)videoType == 2)
 		{
-			Title val = new Dvd(path, FileSystem).Titles.OrderByDescending(GetRuntime).FirstOrDefault();
-			byte? b = null;
-			if (val != null)
-			{
-				b = val.VideoTitleSetNumber;
-			}
-			return GetPrimaryPlaylistVobFiles(path, null, b).Select(Path.GetFileName).ToArray();
+			return GetPrimaryPlaylistVobFiles(path, null, null).Select(Path.GetFileName).ToArray();
 		}
 		if ((int)videoType == 3)
 		{
 			return _blurayExaminer.GetDiscInfo(path).Files;
 		}
 		throw new ArgumentException();
-	}
-
-	private long GetRuntime(Title title)
-	{
-		return (from i in title.ProgramChains
-			select (TimeSpan)i.PlaybackTime into i
-			select i.Ticks).Sum();
 	}
 
 	public IEnumerable<string> GetPrimaryPlaylistVobFiles(string path, IIsoMount isoMount, uint? titleNumber)
@@ -1072,7 +1058,7 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 				}
 				return list2.Select((FileSystemMetadata i) => i.FullName);
 			}
-			_logger.Info("Could not determine vob file list for {0} using DvdLib. Will scan using file sizes.", new object[1] { path });
+			_logger.Info("Could not determine vob file list for {0} using title number. Will scan using file sizes.", new object[1] { path });
 		}
 		List<FileSystemMetadata> list4 = list.SkipWhile((FileSystemMetadata f) => f.Length < 314572800).ToList();
 		if (list4.Count == 0)
