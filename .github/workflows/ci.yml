@@ -47,6 +47,8 @@ env:
   PG_PASSWORD: "123456"
 
 jobs:
+  # 注意：perf-smoke 已移除 —— 它每次跑 4 分钟且不设门禁（失败也不拦），
+  # 真正的出包在 release.yml。需要压测时手动跑 tests/perf 下的脚本即可。
   # ------------------------------------------------------------
   # Job 1：Release 构建（含 VSTHRD 门禁）
   #   src/Emby.Server.PgData 已把 VSTHRD 设成 error，所以这个 job
@@ -71,7 +73,12 @@ jobs:
         run: dotnet restore ${{ env.SOLUTION }}
 
       - name: Build Release
+        # 凭据来自 GitHub Actions secrets（构建期注入，不进仓库）。
+        # 没配 secret 时为空串，provider 自动禁用，构建照样成功。
         run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore --nologo
+        env:
+          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
 
   # ------------------------------------------------------------
@@ -227,166 +234,3 @@ jobs:
   #   #   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag ci-smoke -Db openmedia_perf -User perf-user-001
   #   #   powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
   # ------------------------------------------------------------
-  perf-smoke:
-    name: perf-smoke (fixture + 负载, 无门禁)
-    # 注释里写着"不 fail、不 block 合入"，那就得让失败不染红整个 workflow；
-    # 数字照样进 job summary 给人看。
-    continue-on-error: true
-    # Windows runner：service container 不可用（本 job 的脚本是 PowerShell 5.1 + Windows 路径），
-    # 改用 runner 预装的 PostgreSQL（默认装了但服务是 Disabled，需先改 Manual 再启动）。
-    runs-on: windows-2025
-    needs: build
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: 启动预装 PostgreSQL（windows runner 无 service container）
-        shell: pwsh
-        # windows-2025 镜像实测：服务 postgresql-x64-17，ServiceStartType=**Disabled**，
-        # 超级用户 postgres 密码 **root**（不是 postgres）。三点任一不对就起不来。
-        run: |
-          $svc = Get-Service | Where-Object { $_.Name -like 'postgresql*' } | Select-Object -First 1
-          if (-not $svc) { throw 'windows runner 上没有预装 PostgreSQL 服务' }
-          "PG service: $($svc.Name) (startType=$($svc.StartType))"
-          if ($svc.StartType -eq 'Disabled') { Set-Service -Name $svc.Name -StartupType Manual }
-          if ($svc.Status -ne 'Running') {
-            Start-Service $svc.Name
-            $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(60))
-          }
-          $psql = (Get-ChildItem -Path (Join-Path $env:ProgramFiles 'PostgreSQL') -Filter 'psql.exe' -Recurse -ErrorAction SilentlyContinue |
-                   Sort-Object FullName -Descending | Select-Object -First 1).FullName
-          if (-not $psql) { throw '找不到 psql.exe' }
-          # 预装实例密码是 root；统一改成 123456（与工作流 env / 脚本默认一致）
-          $env:PGPASSWORD = 'root'
-          & $psql -h localhost -U postgres -c "ALTER USER postgres PASSWORD '123456';" | Out-Null
-          $env:PGPASSWORD = '123456'
-          & $psql -h localhost -U postgres -c "SELECT version();" | Select-Object -First 3
-          "PSQL_PATH=$psql" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Build Release (perf 只测 Release 口径, Debug 已作废)
-        run: dotnet build MediaBrowser.Server -c Release --nologo
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: 准备 openmedia 库（perf 脚本从它 pg_dump -s 克隆 schema）
-        shell: pwsh
-        # setup-compare-db.ps1 的口径是「克隆**实际库** schema」（两侧同库同数据），
-        # 所以源库 openmedia 必须先存在。CI 的 PG 是全新预装实例，没有这个库。
-        # 用仓库里同一份 DDL 建，口径与本机一致（本机 openmedia 也是用它初始化的）。
-        # 输出写进 job summary：失败时不用 admin 权限就能看到 psql 的原始报错。
-        run: |
-          $env:PGPASSWORD = "123456"
-          $sb = [Text.StringBuilder]::new()
-          [void]$sb.AppendLine("### 准备 openmedia 库")
-          $out = & $env:PSQL_PATH -h localhost -U postgres -c "CREATE DATABASE openmedia;" 2>&1
-          [void]$sb.AppendLine(($out | Out-String))
-          if ($LASTEXITCODE -ne 0) { $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8; throw "CREATE DATABASE openmedia 失败（exit=$LASTEXITCODE）" }
-          $out = & $env:PSQL_PATH -h localhost -U postgres -d openmedia -v ON_ERROR_STOP=1 -f emby_pgsql_dump_schema_optimized.sql 2>&1
-          [void]$sb.AppendLine(($out | Out-String))
-          $code = $LASTEXITCODE
-          [void]$sb.AppendLine("DDL apply exit=$code")
-          # 只有真的失败才逐行标 error；成功时这些是正常进度输出，
-          # 标成 error 会让 check-run 满屏红叉，反而掩盖真问题。
-          if ($code -ne 0) { ($out | Select-Object -Last 30) | ForEach-Object { "::error::$_" } }
-          $out = & $env:PSQL_PATH -h localhost -U postgres -d openmedia -c "SELECT count(*) AS tables FROM pg_tables WHERE schemaname='public';" 2>&1
-          [void]$sb.AppendLine(($out | Out-String))
-          $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          if ($code -ne 0) { throw "schema DDL 应用失败（exit=$code）" }
-
-      - name: 建独立对比库 + 灌 471 条目树形 fixture
-        shell: pwsh
-        # 同上：完整输出进 job summary，失败可诊断（不需要 admin 权限就能读 summary）
-        run: |
-          $env:PGPASSWORD = "123456"
-          $out = & powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1 `
-            -CompareDb openmedia_compare -PgHost localhost -PgPort 5432 `
-            -PgUser postgres -PgPassword "123456" -Psql $env:PSQL_PATH 2>&1
-          $code = $LASTEXITCODE
-          $sb = [Text.StringBuilder]::new()
-          [void]$sb.AppendLine("### setup-compare-db.ps1 输出")
-          [void]$sb.AppendLine(($out | Out-String))
-          [void]$sb.AppendLine("exit=$code")
-          $sb.ToString() | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          # 注解进 check-run（匿名可读，不需 admin 权限就能看到失败原因）
-          if ($code -ne 0) { ($out | Select-Object -Last 40) | ForEach-Object { "::error::$_" } }
-          if ($code -ne 0) { exit $code }
-
-      - name: 跑冒烟负载（L1/L1b/L3/L4 各 15s）
-        id: smoke
-        shell: pwsh
-        run: |
-          powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 `
-            -Tag ci-smoke -Db openmedia_compare -User ab-user-001 -Seconds 15
-
-      - name: P95 汇总到 job summary（不设阈值，不拦合入）
-        if: always()
-        shell: pwsh
-        run: |
-          $f = "tests\perf\results\ab-ci-smoke-latest.json"
-          if (-not (Test-Path $f)) {
-            "### perf-smoke: 没找到结果文件（负载脚本可能没跑起来）" >> $env:GITHUB_STEP_SUMMARY
-            exit 0
-          }
-          $d = Get-Content $f -Raw | ConvertFrom-Json
-          $sb = [Text.StringBuilder]::new()
-          [void]$sb.AppendLine("### perf-smoke P95（Release 口径，471 条目树形 fixture，无门禁）")
-          [void]$sb.AppendLine("")
-          [void]$sb.AppendLine("| 场景 | 请求数 | RPS | P50(ms) | P95(ms) | P99(ms) | 错误率 |")
-          [void]$sb.AppendLine("|---|---|---|---|---|---|---|")
-          foreach ($s in $d.scenarios) {
-            [void]$sb.AppendLine("| $($s.label) | $($s.requests) | $($s.rps) | $($s.p50Ms) | $($s.p95Ms) | $($s.p99Ms) | $($s.errorRate)% |")
-          }
-          [void]$sb.AppendLine("")
-          [void]$sb.AppendLine("注：本数字只验链路健康，**不是容量承诺**。容量口径见 docs/perf-baseline.md")
-          [void]$sb.AppendLine("（Release 复测节）；runner 为共享 CPU，跨 run 不可直接比大小。")
-          [void]$sb.AppendLine($sb.ToString()) | Out-Null
-          $sb.ToString() >> $env:GITHUB_STEP_SUMMARY
-
-      - name: 上传原始结果（artifact，供人工翻）
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: perf-smoke-results
-          path: tests/perf/results/ab-ci-smoke-*.json
-          if-no-files-found: warn
-
-# ============================================================
-# 本机等价复现清单（Reviewer 照这个逐条跑）
-#
-# 前置（一次性）：
-#   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
-#   # PG 18 已在 localhost:5432 跑（postgresql-x64-18，Running）
-#
-# Job 1 build（本机可跑，等价率 100%）：
-#   dotnet build MediaBrowser.sln -c Release --nologo
-#   期望：0 error。493 warning 主要是并行开发中的 VSTHRD103（Emby.Server.PgData 的
-#   VSTHRD 已设 error，所以那边的会直接 fail）。
-#
-# Job 2 test（本机可跑，等价率 100%）：
-#   dotnet test MediaBrowser.Tests -c Release --nologo
-#   期望：28/28 通过（BatchWrite 集成 / where 分支差分 / 查询门等用例依赖
-#   localhost:5432 的 openmedia 库；
-#   并行开发期若有人改坏共享 schema，可能暂时红——重跑而非改代码）。
-#
-# Job 3 web（本机可跑，等价率 100%）：
-#   cd web; pnpm install; pnpm type-check; pnpm build-only
-#
-# Job 4 perf-smoke（本机可跑但慢，等价率 100%——同库同数据同负载）：
-#   powershell -ExecutionPolicy Bypass -File tests\perf\setup-compare-db.ps1
-#   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag ci-smoke -Db openmedia_compare -User ab-user-001 -Seconds 15
-#   全量 195k 口径（本机 ~5.6 分钟灌库，容量承诺看这个）：
-#   powershell -ExecutionPolicy Bypass -File tests\perf\setup-perf-db.ps1 -Fixture tree-100k
-#   powershell -ExecutionPolicy Bypass -File tests\perf\run-ab-load.ps1 -Tag release -Db openmedia_perf -User perf-user-001 -Seconds 20
-#   powershell -ExecutionPolicy Bypass -File tests\perf\pg-stat-statements-top20.ps1
-#
-# docker workflow（本机**不可跑**，只能 GitHub runner）：
-#   本机无 docker。GitHub 上手动触发 docker workflow，或在 runner 上
-#   docker buildx build --platform linux/amd64,linux/arm64 -t openmedia:test .
-# ============================================================

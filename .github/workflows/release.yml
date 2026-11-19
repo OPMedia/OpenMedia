@@ -1,0 +1,215 @@
+# ============================================================
+# 发布流水线：六平台产物 + 多架构 Docker 镜像 + GitHub Release
+#
+# **不跑测试** —— 这是出包流水线，跑一次要十几分钟，测试留给 ci.yml。
+#   触发：push tag v* ，或手动 workflow_dispatch（手动时只出产物，不发 Release）
+#
+# 产物矩阵（每个都自带 .NET 运行时，解压即用）：
+#   win-x64 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64
+#   + docker: linux/amd64, linux/arm64
+#
+# API key 走构建期注入（见 BuildSecrets.targets）：值来自 GitHub secrets，
+# 不传就是空串，对应 provider 自动禁用，构建照样成功。
+# ============================================================
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  SOLUTION: MediaBrowser.sln
+
+jobs:
+  # ------------------------------------------------------------
+  # 前端产物：六平台产物都要带 webapp/，所以先建一次再分发
+  # ------------------------------------------------------------
+  web:
+    name: web 静态产物
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: web
+        run: pnpm build-only
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  # ------------------------------------------------------------
+  # 六平台自包含发布
+  # ------------------------------------------------------------
+  publish:
+    name: publish ${{ matrix.rid }}
+    needs: web
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: win-x64,     archive: zip }
+          - { rid: win-arm64,   archive: zip }
+          - { rid: linux-x64,   archive: tar.gz }
+          - { rid: linux-arm64, archive: tar.gz }
+          - { rid: osx-x64,     archive: tar.gz }
+          - { rid: osx-arm64,   archive: tar.gz }
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: 取前端产物
+        uses: actions/download-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: 版本号
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish ${{ matrix.rid }}
+        # 凭据构建期注入；不传 secret 时为空串，provider 自动禁用。
+        run: |
+          dotnet publish MediaBrowser.Server/MediaBrowser.Server.csproj \
+            -c Release -r ${{ matrix.rid }} --self-contained true \
+            -p:PublishReadyToRun=false \
+            -p:TvdbApiKey="$TVDB_API_KEY" \
+            -p:TmdbApiKey="$TMDB_API_KEY" \
+            -p:FanartApiKey="$FANART_API_KEY" \
+            -o "out/${{ matrix.rid }}"
+        env:
+          TVDB_API_KEY: ${{ secrets.TVDB_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          FANART_API_KEY: ${{ secrets.FANART_API_KEY }}
+
+      - name: 放入前端（服务端默认从 {ProgramSystemPath}/webapp 托管）
+        run: |
+          cp -r web/dist "out/${{ matrix.rid }}/webapp"
+          test -f "out/${{ matrix.rid }}/webapp/index.html"
+
+      - name: 打包 ${{ matrix.archive }}
+        run: |
+          cd out
+          NAME="openmedia-${{ steps.ver.outputs.value }}-${{ matrix.rid }}"
+          mv "${{ matrix.rid }}" "$NAME"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip -qr "$NAME.zip" "$NAME"
+          else
+            tar -czf "$NAME.tar.gz" "$NAME"
+          fi
+          ls -lh "$NAME".*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.rid }}
+          path: out/openmedia-*
+          if-no-files-found: error
+
+  # ------------------------------------------------------------
+  # 多架构镜像（linux/amd64 + linux/arm64）
+  #   tag 推送时推 ghcr.io；手动触发只构建不推
+  # ------------------------------------------------------------
+  docker:
+    name: docker (amd64+arm64)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ghcr.io
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          pass: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 镜像元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/openmedia
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=dev,enable=${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TVDB_API_KEY=${{ secrets.TVDB_API_KEY }}
+            TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+            FANART_API_KEY=${{ secrets.FANART_API_KEY }}
+
+  # ------------------------------------------------------------
+  # 汇总成 GitHub Release（仅 tag 触发）
+  # ------------------------------------------------------------
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          pattern: dist-*
+          merge-multiple: true
+
+      - name: 列产物
+        run: ls -lh artifacts
+
+      - name: 建 Release 并附上产物
+        run: |
+          gh release create "${GITHUB_REF_NAME}" artifacts/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "自动构建：win-x64/arm64、linux-x64/arm64、osx-x64/arm64（自包含，解压即用）+ 多架构镜像 ghcr.io/${{ github.repository_owner }}/openmedia:${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

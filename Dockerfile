@@ -80,8 +80,18 @@ RUN set -eux; \
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-build
 WORKDIR /src
 COPY . .
+
+# 凭据在构建期注入（见 BuildSecrets.targets）。不传就是空串，相关 provider 自动禁用；
+# 值来自 CI secrets，永远不进 git。
+ARG TVDB_API_KEY=""
+ARG TMDB_API_KEY=""
+ARG FANART_API_KEY=""
+
 RUN dotnet publish MediaBrowser.Server/MediaBrowser.Server.csproj \
-      -c Release -o /publish --nologo
+      -c Release -o /publish --nologo \
+      -p:TvdbApiKey="$TVDB_API_KEY" \
+      -p:TmdbApiKey="$TMDB_API_KEY" \
+      -p:FanartApiKey="$FANART_API_KEY"
 
 # ---- 阶段 4：运行时镜像 ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

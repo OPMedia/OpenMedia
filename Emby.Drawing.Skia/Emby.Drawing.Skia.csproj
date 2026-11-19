@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
   <WarningsAsErrors>$(WarningsAsErrors);VSTHRD002;VSTHRD003;VSTHRD100;VSTHRD103;VSTHRD110;CS4014</WarningsAsErrors>
@@ -12,6 +12,12 @@
 
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <!--
+      SkiaSharp 基础包只带 win/mac 的原生库，Linux 要单独引。
+      选 NoDependencies 变体：它自带静态 fontconfig，不依赖系统的 libfontconfig ——
+      Docker 运行时只装了 ca-certificates/curl/libgdiplus/tzdata，装不了 fontconfig 也不会崩。
+    -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1" />
   </ItemGroup>
 
   <ItemGroup>
