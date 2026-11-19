@@ -23,7 +23,6 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Model.Events;
 using MediaBrowser.Model.Serialization;
-using Priority_Queue;
 using MediaBrowser.Model.Extensions;
 using MediaBrowser.Controller.Subtitles;
 
@@ -1000,8 +999,8 @@ namespace MediaBrowser.Providers.Manager
             }
         }
 
-        private readonly SimplePriorityQueue<Tuple<Guid, MetadataRefreshOptions>> _refreshQueue =
-            new SimplePriorityQueue<Tuple<Guid, MetadataRefreshOptions>>();
+        private readonly StablePriorityQueue<Tuple<Guid, MetadataRefreshOptions>, int> _refreshQueue =
+            new StablePriorityQueue<Tuple<Guid, MetadataRefreshOptions>, int>();
 
         private readonly object _refreshQueueLock = new object();
         private bool _isProcessingRefreshQueue;
