@@ -10,6 +10,7 @@ using MediaBrowser.Model.Events;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using MediaBrowser.Model.Tasks;
 
 namespace Emby.Server.Implementations.EntryPoints
@@ -110,7 +111,8 @@ namespace Emby.Server.Implementations.EntryPoints
         /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
         void kernel_HasPendingRestartChanged(object sender, EventArgs e)
         {
-            _sessionManager.SendRestartRequiredNotification(CancellationToken.None);
+            // 事件处理器签名为 void；通知任务不阻塞事件源，显式丢弃并保留原有容错行为。
+            _ = _sessionManager.SendRestartRequiredNotification(CancellationToken.None);
         }
 
         /// <summary>
@@ -149,11 +151,17 @@ namespace Emby.Server.Implementations.EntryPoints
             SendMessageToUserSession(e.Argument, "UserConfigurationUpdated", dto);
         }
 
-        private async void SendMessageToAdminSessions<T>(string name, T data)
+        private void SendMessageToAdminSessions<T>(string name, T data)
+        {
+            // 事件通知从 void 事件处理器触发；异步发送在助手中完成并显式丢弃 Task。
+            _ = SendMessageToAdminSessionsAsync(name, data);
+        }
+
+        private async Task SendMessageToAdminSessionsAsync<T>(string name, T data)
         {
             try
             {
-                await _sessionManager.SendMessageToAdminSessions(name, data, CancellationToken.None);
+                await _sessionManager.SendMessageToAdminSessions(name, data, CancellationToken.None).ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
             {
@@ -165,11 +173,17 @@ namespace Emby.Server.Implementations.EntryPoints
             }
         }
 
-        private async void SendMessageToUserSession<T>(User user, string name, T data)
+        private void SendMessageToUserSession<T>(User user, string name, T data)
+        {
+            // 事件通知从 void 事件处理器触发；异步发送在助手中完成并显式丢弃 Task。
+            _ = SendMessageToUserSessionAsync(user, name, data);
+        }
+
+        private async Task SendMessageToUserSessionAsync<T>(User user, string name, T data)
         {
             try
             {
-                await _sessionManager.SendMessageToUserSessions(new List<Guid> { user.Id }, name, data, CancellationToken.None);
+                await _sessionManager.SendMessageToUserSessions(new List<Guid> { user.Id }, name, data, CancellationToken.None).ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
             {
