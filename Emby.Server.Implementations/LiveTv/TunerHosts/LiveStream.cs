@@ -71,20 +71,18 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts
             return Task.CompletedTask;
         }
 
-        public Task Close()
+        public async Task Close()
         {
             EnableStreamSharing = false;
 
             Logger.Info("Closing " + GetType().Name);
 
-            LiveStreamCancellationTokenSource.Cancel();
+            await LiveStreamCancellationTokenSource.CancelAsync().ConfigureAwait(false);
 
             if (OnClose != null)
             {
-                return CloseWithExternalFn();
+                await CloseWithExternalFn().ConfigureAwait(false);
             }
-
-            return Task.CompletedTask;
         }
 
         private async Task CloseWithExternalFn()
@@ -137,9 +135,9 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts
                 catch (FileNotFoundException)
                 {
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    //Logger.ErrorException("Error deleting file {0}", ex, path);
+                    // The path is retried below.
                     failedFiles.Add(path);
                 }
             }

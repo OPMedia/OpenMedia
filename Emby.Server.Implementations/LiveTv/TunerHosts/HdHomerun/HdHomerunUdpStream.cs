@@ -65,7 +65,7 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
             {
                 try
                 {
-                    tcpSocket.Connect(new IPEndPoint(remoteAddress, HdHomerunManager.HdHomeRunPort));
+                    await tcpSocket.ConnectAsync(new IPEndPoint(remoteAddress, HdHomerunManager.HdHomeRunPort)).ConfigureAwait(false);
                     localAddress = ((IPEndPoint)tcpSocket.LocalEndPoint).Address;
                     tcpSocket.Close();
                 }
@@ -101,7 +101,8 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 
             var taskCompletionSource = new TaskCompletionSource<bool>();
 
-            StartStreaming(udpClient, hdHomerunManager, remoteAddress, taskCompletionSource, LiveStreamCancellationTokenSource.Token);
+            // Fire-and-forget: Open awaits taskCompletionSource, StartStreaming owns the UDP client and temp file cleanup.
+            _ = StartStreaming(udpClient, hdHomerunManager, remoteAddress, taskCompletionSource, LiveStreamCancellationTokenSource.Token);
 
             //OpenedMediaSource.Protocol = MediaProtocol.File;
             //OpenedMediaSource.Path = tempFile;
@@ -150,7 +151,8 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 
         private void Resolve(TaskCompletionSource<bool> openTaskCompletionSource)
         {
-            Task.Run(() =>
+            // Complete off the UDP read loop so the Open continuation cannot block packet copying.
+            _ = Task.Run(() =>
             {
                 openTaskCompletionSource.TrySetResult(true);
             });
@@ -181,7 +183,7 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 
                         if (read > 0)
                         {
-                            fileStream.Write(buffer, RtpHeaderBytes, read);
+                            await fileStream.WriteAsync(buffer, RtpHeaderBytes, read).ConfigureAwait(false);
                         }
 
                         if (!resolved)

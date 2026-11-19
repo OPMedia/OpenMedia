@@ -99,7 +99,8 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts
 
             var now = DateTime.UtcNow;
 
-            StartStreaming(response, taskCompletionSource, LiveStreamCancellationTokenSource.Token);
+            // Fire-and-forget: Open awaits taskCompletionSource, StartStreaming owns the response and temp file cleanup.
+            _ = StartStreaming(response, taskCompletionSource, LiveStreamCancellationTokenSource.Token);
 
             //OpenedMediaSource.Protocol = MediaProtocol.File;
             //OpenedMediaSource.Path = tempFile;

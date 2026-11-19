@@ -9,6 +9,7 @@ using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Controller.LiveTv;
 using System.Net;
+using Microsoft.VisualStudio.Threading;
 
 namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 {
@@ -79,6 +80,8 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
 
     public class HdHomerunManager : IDisposable
     {
+        private static readonly JoinableTaskFactory _joinableTaskFactory = new JoinableTaskFactory(new JoinableTaskContext());
+
         public static int HdHomeRunPort = 65001;
         // Message constants
         private static byte GetSetName = 3;
@@ -109,8 +112,8 @@ namespace Emby.Server.Implementations.LiveTv.TunerHosts.HdHomerun
                 {
                     _currentTcpSocket = null;
 
-                    var task = StopStreaming(socket);
-                    Task.WaitAll(task);
+                    // IDisposable is a synchronous boundary: the stop message must be sent before the socket is disposed.
+                    _joinableTaskFactory.Run(() => StopStreaming(socket));
                 }
             }
         }

@@ -118,7 +118,7 @@ namespace Emby.Server.Implementations.LiveTv.Listings
             using (var response = await Post(httpOptions, true, info).ConfigureAwait(false))
             {
                 StreamReader reader = new StreamReader(response.Content);
-                string responseString = reader.ReadToEnd();
+                string responseString = await reader.ReadToEndAsync().ConfigureAwait(false);
                 var dailySchedules = _jsonSerializer.DeserializeFromString<List<ScheduleDirect.Day>>(responseString);
                 _logger.Debug("Found " + dailySchedules.Count + " programs on " + stationID + " ScheduleDirect");
 
@@ -145,7 +145,7 @@ namespace Emby.Server.Implementations.LiveTv.Listings
                 using (var innerResponse = await Post(httpOptions, true, info).ConfigureAwait(false))
                 {
                     StreamReader innerReader = new StreamReader(innerResponse.Content);
-                    responseString = innerReader.ReadToEnd();
+                    responseString = await innerReader.ReadToEndAsync().ConfigureAwait(false);
 
                     var programDetails =
                         _jsonSerializer.DeserializeFromString<List<ScheduleDirect.ProgramDetails>>(
