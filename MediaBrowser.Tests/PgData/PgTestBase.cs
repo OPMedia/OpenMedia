@@ -18,6 +18,12 @@ namespace MediaBrowser.Tests.PgData
     ///
     /// 每个用例在独立 schema（pgdata_test_xxx）中运行，结束即 DROP SCHEMA CASCADE，
     /// 不污染共享库、可并行、可重复。
+    ///
+    /// 需要跑 PgSchemaInitializer 的用例把 <see cref="UseDedicatedDatabase"/> 打开：
+    /// 初始化器用 to_regclass('public.media_items') 判断走全量分支还是跳过分支，
+    /// 且 FixItemExtradata 的主键列数/clean_value 检查也写死了 table_schema='public'。
+    /// 这类用例因此使用独立数据库（其 public 即测试 schema），否则测试 schema 里的
+    /// item_extradata 永远走不到 FixItemExtradata，clean_value 索引会报 UndefinedColumn。
     /// </summary>
     public abstract class PgTestBase
     {
@@ -30,10 +36,24 @@ namespace MediaBrowser.Tests.PgData
 
         protected string TestConnectionString { get; private set; }
 
+        private string TestDatabaseName { get; set; }
+
+        /// <summary>
+        /// 需要真实 PgSchemaInitializer 的用例打开：用独立数据库的 public 作为测试 schema。
+        /// </summary>
+        protected virtual bool UseDedicatedDatabase => false;
+
         [TestInitialize]
         public async Task SetUp()
         {
             AdminConnectionString = Environment.GetEnvironmentVariable("OPENMEDIA_TEST_PGCONN") ?? DefaultConn;
+
+            if (UseDedicatedDatabase)
+            {
+                await SetUpDedicatedDatabaseAsync().ConfigureAwait(false);
+                return;
+            }
+
             Schema = "pgtest_" + Guid.NewGuid().ToString("N").Substring(0, 12);
 
             try
@@ -79,9 +99,80 @@ namespace MediaBrowser.Tests.PgData
             TestConnectionString = builder.ConnectionString;
         }
 
+        /// <summary>
+        /// 独立数据库模式：库内 public 就是本用例的测试 schema。
+        /// 初始化器的 public 硬编码（门卫 + FixItemExtradata）因此与生产环境完全一致。
+        /// </summary>
+        private async Task SetUpDedicatedDatabaseAsync()
+        {
+            Schema = "public";
+            TestDatabaseName = "pgschema_" + Guid.NewGuid().ToString("N").Substring(0, 12);
+
+            try
+            {
+                await using (var admin = new NpgsqlConnection(AdminConnectionString))
+                {
+                    await admin.OpenAsync().ConfigureAwait(false);
+                    await using var cmd = new NpgsqlCommand("CREATE DATABASE " + TestDatabaseName, admin);
+                    await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+                }
+
+                var builder = new NpgsqlConnectionStringBuilder(AdminConnectionString)
+                {
+                    Database = TestDatabaseName
+                };
+                TestConnectionString = builder.ConnectionString;
+
+                await using (var conn = new NpgsqlConnection(TestConnectionString))
+                {
+                    await conn.OpenAsync().ConfigureAwait(false);
+                    await CreateSchemaObjectsAsync(conn).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex is PostgresException pe
+                    && (pe.SqlState == "42501" || pe.SqlState == "55006"))
+                {
+                    Assert.Inconclusive("当前角色无权创建测试数据库：" + pe.MessageText);
+                }
+
+                if (ex is NpgsqlException ne
+                    && (ne.InnerException is System.Net.Sockets.SocketException
+                        || ne.Message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase)
+                        || ne.Message.Contains("failed to connect", StringComparison.OrdinalIgnoreCase)
+                        || ne.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase)))
+                {
+                    Assert.Inconclusive("PostgreSQL 不可达：" + ex.Message);
+                }
+
+                throw new AssertFailedException("测试数据库初始化失败：" + ex);
+            }
+        }
+
         [TestCleanup]
         public async Task TearDown()
         {
+            if (!string.IsNullOrEmpty(TestDatabaseName))
+            {
+                var databaseName = TestDatabaseName;
+                TestDatabaseName = null;
+                try
+                {
+                    await using var admin = new NpgsqlConnection(AdminConnectionString);
+                    await admin.OpenAsync();
+                    await using var cmd = new NpgsqlCommand(
+                        "DROP DATABASE IF EXISTS " + databaseName + " WITH (FORCE)", admin);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                catch
+                {
+                    // 清理失败不影响测试结论
+                }
+
+                return;
+            }
+
             if (string.IsNullOrEmpty(Schema))
             {
                 return;
