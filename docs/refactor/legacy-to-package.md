@@ -194,3 +194,64 @@
 - 第二批：`UTF.Unknown`（9,093 行 + 2.1MB）、`NLangDetect` 去留、`DvdLib` 去留 —— 需要产品/法务拍板
 - 第三批：`PriorityQueue`（775）、`ItemLruCache`（154）、`MimeTypes`（256）、Polly
 - 独立工单：无盐 SHA1 密码（C）、`MovieDbProvider` 节流竞态（D）、`FilterIpAddress` 里残留的 `StartsWith("169.")`
+
+---
+
+## 9. 第二批：按 Jellyfin 的决定执行（已完成）
+
+用户拍板「参考 Jellyfin」。去他们仓库实测核对过，不是凭印象：
+
+| 事实 | 证据 |
+|---|---|
+| Jellyfin 用 `UTF.Unknown 2.7.0` | `Directory.Packages.props` |
+| Jellyfin 没有 `Emby.Server.Implementations/TextEncoding/` 目录 | GitHub contents API 返回 404 |
+| Jellyfin 没有 DvdLib | 顶层目录列表无 `Dvd*` |
+| Jellyfin 的 DVD 走 `GetPrimaryPlaylistVobFiles(path, null)` + ffprobe + 累加运行时 | `MediaBrowser.Providers/MediaInfo/FFProbeVideoInfo.cs:89-111` |
+
+### 执行结果
+
+| 项 | 前 | 后 | 净删 |
+|---|---|---|---:|
+| `UniversalDetector/`（字符集检测） | 9,093 行 / 33 文件 | `UTF.Unknown 2.8.0` | −9,093 |
+| `NLangDetect/`（语种检测） | 1,938 行 + 53 个 profile（2.1MB） | 删（Jellyfin 也没有） | −1,938 行 + 2.62MB |
+| `DvdLib/`（DVD IFO 解析） | 716 行 / 15 文件 | ffprobe + `.vob` 枚举 | −824 |
+
+测试 160 → **167**（新增 UTF.Unknown 名字解析 1 例 + DVD 选集 7 例）。
+
+### 保留了两处 Jellyfin 没有的东西（有意不跟）
+
+1. **`TextEncodingDetect.cs`（409 行）**：Jellyfin 把 UTF-16 无 BOM 支持整个删了。我们刚修好这块并加了测试，跟进去是退步。
+2. **`ITextEncoding` 接口**：Jellyfin 删了它，但本仓库有 4 个调用点，删接口是更大的重构，不在「换依赖」范围。
+
+### 在 Jellyfin 的算法上修了一个 bug
+
+Jellyfin 的 `GetPrimaryPlaylistVobFiles` 用文件名的**最后一个下划线段**做 title 键：
+
+```csharp
+.Select(vob => _fileSystem.GetFileNameWithoutExtension(vob).AsSpan().RightPart('_').ToString())
+```
+
+`VTS_01_1` 和 `VTS_02_1` 都得 `"1"` —— 两个不同 VTS 会撞成同一个 title，小 title 会被并进大 title 的结果。本实现改用**中间段的 VTS 号**（`VTS_01_2` → `01`），并把这个差异写成测试：
+
+`DvdVobSelectorTests.SmallTitle_IsNotMergedIntoBigTitle_UnlikeJellyfinKeys`
+
+顺带修掉旧实现的一个真实缺陷：它是**只按大小过滤**，所有 VOB 都小于阈值时（短片盘、高压缩）会把 `VIDEO_TS.VOB` 菜单算成正片。新实现按文件名排除 `VIDEO_TS.VOB` 与所有 `*_0.VOB`。
+
+选集逻辑抽成了纯函数 `DvdVobSelector`，可以脱离 ffprobe 和真实光盘断言 —— 这是删掉 DvdLib 之后唯一能拿到的验证。
+
+### 明确的已知退化
+
+`DvdLib` 删掉后，DVD 的「主标题」判定从 IFO 精确判断退化为按体积推断。具体边界：
+
+| 盘型 | 影响 |
+|---|---|
+| 单标题电影盘 | 时长仍准（首片 ffprobe + 其余累加），可能有秒级差异 |
+| 每集一个 VTS 的多集盘 | 不再按 IFO 选最长 title，可能选错目标集 |
+| 多集共用一个 VTS（多 PGC 共享 VOB） | **所有集被累加成一个长视频** |
+| `VIDEO_TS.IFO` 缺失的盘 | 失去遍历 `VTS_0X_0.IFO` 的兜底解析 |
+
+这是 Jellyfin 线上接受的同一套取舍。如果产品上要保 DVD 分集精度，就得把 DvdLib 拿回来。
+
+### 顺带确认的事实
+
+Jellyfin 的密码体系（`PasswordHash` + `ICryptoProvider.CreatePasswordHash` + PBKDF2 + 登录时惰性 rehash）**在我们的 2018 年 Emby 代码里不存在** —— 我们的 `CryptographyProvider` 只有 `GetMD5`/`ComputeSHA1`/`ComputeMD5`。修无盐 SHA1 是要移植这套体系，不是一个「换依赖」，属独立工单。

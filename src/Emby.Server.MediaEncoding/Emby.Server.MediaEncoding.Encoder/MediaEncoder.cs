@@ -1045,46 +1045,19 @@ public class MediaEncoder : IMediaEncoder, ITranscoderSupport, IDisposable
 			_logger.Error("No vobs found in dvd structure.", Array.Empty<object>());
 			return Array.Empty<string>();
 		}
-		if (titleNumber.HasValue)
+
+		// 选集规则见 DvdVobSelector：排除菜单 + 900 MiB 门槛 + 聚合大 title，与 Jellyfin 一致。
+		// 抽成纯函数后可以脱离真实光盘做断言。
+		var selected = DvdVobSelector.Select(
+			list.Select(i => new DvdVobSelector.VobEntry(i.FullName, i.Length)),
+			titleNumber);
+
+		if (selected.Count == 0)
 		{
-			string prefix = $"VTS_0{titleNumber.Value.ToString(UsCulture)}_";
-			List<FileSystemMetadata> list2 = list.Where((FileSystemMetadata i) => i.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
-			if (list2.Count > 0)
-			{
-				List<FileSystemMetadata> list3 = list2.SkipWhile((FileSystemMetadata f) => f.Length < 314572800).ToList();
-				if (list3.Count != 0)
-				{
-					return list3.Select((FileSystemMetadata i) => i.FullName);
-				}
-				return list2.Select((FileSystemMetadata i) => i.FullName);
-			}
-			_logger.Info("Could not determine vob file list for {0} using title number. Will scan using file sizes.", new object[1] { path });
+			_logger.Warn("Vob selection produced zero entries for {0}.", new object[1] { text });
 		}
-		List<FileSystemMetadata> list4 = list.SkipWhile((FileSystemMetadata f) => f.Length < 314572800).ToList();
-		if (list4.Count == 0)
-		{
-			_logger.Warn("Vob size filter resulted in zero matches. Taking all vobs.", Array.Empty<object>());
-			list4 = list;
-		}
-		if (list4.Count > 0)
-		{
-			string[] array = FileSystem.GetFileNameWithoutExtension(list4[0]).Split('_');
-			if (array.Length == 3)
-			{
-				string title = array[1];
-				list4 = list4.TakeWhile((FileSystemMetadata f) =>
-				{
-					string[] array2 = FileSystem.GetFileNameWithoutExtension(f).Split('_');
-					return array2.Length == 3 && string.Equals(title, array2[1], StringComparison.OrdinalIgnoreCase);
-				}).ToList();
-				if (list4.Count == 0)
-				{
-					_logger.Warn("Vob filename filter resulted in zero matches. Taking all vobs.", Array.Empty<object>());
-					list4 = list;
-				}
-			}
-		}
-		return list4.Select((FileSystemMetadata i) => i.FullName);
+
+		return selected;
 	}
 
 	public void Dispose()
