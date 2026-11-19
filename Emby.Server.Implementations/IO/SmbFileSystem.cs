@@ -16,8 +16,7 @@ using OperatingSystem = MediaBrowser.Model.System.OperatingSystem;
 namespace Emby.Server.Implementations.IO
 {
     /// <summary>
-    /// Provides the same file system surface as the former SharpCifsFileSystem, backed by
-    /// SMBLibrary's SMB2/SMB3 client instead of the SMB1-only SharpCifs client.
+    /// Provides the SMB file system surface backed by SMBLibrary's SMB2/SMB3 client.
     /// </summary>
     public class SmbFileSystem
     {
