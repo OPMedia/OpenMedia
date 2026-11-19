@@ -91,31 +91,37 @@ namespace Emby.Server.Implementations.IO
             return lockedPaths.Any(i => _fileSystem.AreEqual(i, path) || _fileSystem.ContainsSubPath(i, path));
         }
 
-        public async void ReportFileSystemChangeComplete(string path, bool refreshPath)
+        public void ReportFileSystemChangeComplete(string path, bool refreshPath)
         {
             if (string.IsNullOrEmpty(path))
             {
                 throw new ArgumentNullException("path");
             }
 
-            // This is an arbitraty amount of time, but delay it because file system writes often trigger events long after the file was actually written to.
-            // Seeing long delays in some situations, especially over the network, sometimes up to 45 seconds
-            // But if we make this delay too high, we risk missing legitimate changes, such as user adding a new file, or hand-editing metadata
-            await Task.Delay(45000).ConfigureAwait(false);
+            // ILibraryMonitor requires a void signature; observe the work through the helper's own error handling.
+            _ = ReportFileSystemChangeCompleteInternal(path, refreshPath);
+        }
 
-            string val;
-            _tempIgnoredPaths.TryRemove(path, out val);
-
-            if (refreshPath)
+        private async Task ReportFileSystemChangeCompleteInternal(string path, bool refreshPath)
+        {
+            try
             {
-                try
+                // This is an arbitraty amount of time, but delay it because file system writes often trigger events long after the file was actually written to.
+                // Seeing long delays in some situations, especially over the network, sometimes up to 45 seconds
+                // But if we make this delay too high, we risk missing legitimate changes, such as user adding a new file, or hand-editing metadata
+                await Task.Delay(45000).ConfigureAwait(false);
+
+                string val;
+                _tempIgnoredPaths.TryRemove(path, out val);
+
+                if (refreshPath)
                 {
                     ReportFileSystemChanged(path);
                 }
-                catch (Exception ex)
-                {
-                    Logger.ErrorException("Error in ReportFileSystemChanged for {0}", ex, path);
-                }
+            }
+            catch (Exception ex)
+            {
+                Logger.ErrorException("Error in ReportFileSystemChanged for {0}", ex, path);
             }
         }
 
@@ -317,7 +323,8 @@ namespace Emby.Server.Implementations.IO
             }
 
             // Creating a FileSystemWatcher over the LAN can take hundreds of milliseconds, so wrap it in a Task to do them all in parallel
-            Task.Run(() =>
+            // The watcher is registered and errors are logged inside the delegate, so no task result needs observing.
+            _ = Task.Run(() =>
             {
                 try
                 {

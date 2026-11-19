@@ -175,7 +175,7 @@ namespace Emby.Server.Implementations.IO
                 path = System.IO.Path.GetFullPath(path);
                 return path;
             }
-            catch (ArgumentException ex)
+            catch (ArgumentException)
             {
                 return filePath;
             }

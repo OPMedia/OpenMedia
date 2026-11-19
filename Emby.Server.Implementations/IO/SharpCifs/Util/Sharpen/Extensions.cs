@@ -603,7 +603,7 @@ namespace SharpCifs.Util.Sharpen
             {
                 return IPAddress.Parse(host);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return null;
             }            

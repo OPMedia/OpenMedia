@@ -12,7 +12,7 @@ namespace Emby.Server.Implementations.IO
         {
             byte[] buffer = new byte[bufferSize];
             int read;
-            while ((read = source.Read(buffer, 0, buffer.Length)) != 0)
+            while ((read = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) != 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -33,7 +33,7 @@ namespace Emby.Server.Implementations.IO
             if (emptyReadLimit <= 0)
             {
                 int read;
-                while ((read = source.Read(buffer, 0, buffer.Length)) != 0)
+                while ((read = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) != 0)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
@@ -49,7 +49,7 @@ namespace Emby.Server.Implementations.IO
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var bytesRead = source.Read(buffer, 0, buffer.Length);
+                var bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
 
                 if (bytesRead == 0)
                 {
