@@ -160,6 +160,8 @@ public class StreamBuilder
 			return TranscodeReason.VideoLevelNotSupported;
 		case ProfileConditionValue.VideoProfile:
 			return TranscodeReason.VideoProfileNotSupported;
+		case ProfileConditionValue.VideoRangeType:
+			return TranscodeReason.VideoRangeTypeNotSupported;
 		case ProfileConditionValue.VideoTimestamp:
 			return null;
 		case ProfileConditionValue.Width:
@@ -831,6 +833,7 @@ public class StreamBuilder
 			}
 		}
 		ConditionProcessor conditionProcessor = new ConditionProcessor();
+		VideoRangeType videoRangeType = GetVideoRangeType(videoStream);
 		int? width = videoStream?.Width;
 		int? height = videoStream?.Height;
 		int? videoBitDepth = videoStream?.BitDepth;
@@ -854,7 +857,7 @@ public class StreamBuilder
 		int? streamCount2 = mediaSource.GetStreamCount(MediaStreamType.Video);
 		foreach (ProfileCondition item7 in list)
 		{
-			if (!conditionProcessor.IsVideoConditionSatisfied(item7, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc))
+			if (!conditionProcessor.IsVideoConditionSatisfied(item7, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc, videoRangeType))
 			{
 				LogConditionFailure(profile, "VideoContainerProfile", item7, mediaSource);
 				TranscodeReason? transcodeReasonForFailedCondition = GetTranscodeReasonForFailedCondition(item7);
@@ -875,7 +878,7 @@ public class StreamBuilder
 			ProfileCondition[] conditions = codecProfile.ApplyConditions;
 			foreach (ProfileCondition condition in conditions)
 			{
-				if (!conditionProcessor.IsVideoConditionSatisfied(condition, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc))
+				if (!conditionProcessor.IsVideoConditionSatisfied(condition, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc, videoRangeType))
 				{
 					flag = false;
 					break;
@@ -892,7 +895,7 @@ public class StreamBuilder
 		}
 		foreach (ProfileCondition item8 in list)
 		{
-			if (!conditionProcessor.IsVideoConditionSatisfied(item8, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc))
+			if (!conditionProcessor.IsVideoConditionSatisfied(item8, width, height, videoBitDepth, videoBitrate, videoProfile, videoLevel, videoFramerate, packetLength, timestamp, isAnamorphic, isInterlaced, refFrames, streamCount2, streamCount, videoCodecTag, isAvc, videoRangeType))
 			{
 				LogConditionFailure(profile, "VideoCodecProfile", item8, mediaSource);
 				TranscodeReason? transcodeReasonForFailedCondition2 = GetTranscodeReasonForFailedCondition(item8);
@@ -947,6 +950,28 @@ public class StreamBuilder
 			return new Tuple<PlayMethod?, List<TranscodeReason>>(PlayMethod.DirectStream, new List<TranscodeReason>());
 		}
 		return new Tuple<PlayMethod?, List<TranscodeReason>>(null, new List<TranscodeReason> { TranscodeReason.ContainerBitrateExceedsLimit });
+	}
+
+	private static VideoRangeType GetVideoRangeType(MediaStream videoStream)
+	{
+		if (videoStream == null)
+		{
+			return VideoRangeType.Unknown;
+		}
+		if (videoStream.VideoRangeType != VideoRangeType.Unknown)
+		{
+			return videoStream.VideoRangeType;
+		}
+		// 老媒介项可能只有颜色元数据，没有归一化的 VideoRangeType。
+		if (string.Equals(videoStream.ColorTransfer, "smpte2084", StringComparison.OrdinalIgnoreCase))
+		{
+			return VideoRangeType.HDR10;
+		}
+		if (string.Equals(videoStream.ColorTransfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase))
+		{
+			return VideoRangeType.HLG;
+		}
+		return VideoRangeType.SDR;
 	}
 
 	private void LogConditionFailure(DeviceProfile profile, string type, ProfileCondition condition, MediaSourceInfo mediaSource)
